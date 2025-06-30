@@ -6,18 +6,21 @@ import { $el } from "../../../scripts/ui.js";
 const MARGIN = 8;
 
 function get_position_style(ctx, scroll_width, widget_width, y, node_width, node_height) {
-    const elRect = ctx.canvas.getBoundingClientRect();
-    const transform = new DOMMatrix()
-        .scaleSelf(elRect.width / ctx.canvas.width, elRect.height / ctx.canvas.height)
-        .multiplySelf(ctx.getTransform())
-        .translateSelf(MARGIN, MARGIN + y);
+			const visible = app.canvas.ds.scale > 0.5;
+			const margin = 10;
+			const elRect = ctx.canvas.getBoundingClientRect();
+			const transform = new DOMMatrix()
+				.scaleSelf(elRect.width / ctx.canvas.width, elRect.height / ctx.canvas.height)
+				.multiplySelf(ctx.getTransform())
+				.translateSelf(margin, margin + y);
 
-    const x = Math.max(0, Math.round(ctx.getTransform().a*(node_width - scroll_width - 2*MARGIN)/2));
+
+    const x = 50; // Math.max(0, Math.round(ctx.getTransform().a*(node_width - scroll_width - 2*MARGIN)/2));
     return {
         transformOrigin: '0 0',
         transform: transform,
         left: `${x}px`, 
-        top: `0px`,
+        top: `50px`,
         position: "absolute",
         maxWidth: `${widget_width - MARGIN*2}px`,
         maxHeight: `${node_height - MARGIN*2 - y}px`,
@@ -25,6 +28,13 @@ function get_position_style(ctx, scroll_width, widget_width, y, node_width, node
         height: `auto`,
         overflow: `auto`,
     }
+}
+
+function get_node_name_by_id(id) {
+    const node = app.graph._nodes_by_id[id];
+    if (!node) return `id:${id}`;
+    const name = node.title || node.name || node.type || "";
+    return `${name} (${id})`;
 }
 
 class Timer {
@@ -75,23 +85,24 @@ class Timer {
         const table = $el("table",{
                 "textAlign":"right",
                 "border":"1px solid",
+		"className":"cg-timer-table",
                 //"overflow": "auto",
             },[
             $el("tr",[
-                $el("th", {"textContent":"Node"}),
-                $el("th", {"textContent":"Runs"}),
-                $el("th", {"textContent":"Per\u00A0run"}),
-                $el("th", {"textContent":"Per\u00A0flow"}),
+                $el("th", {className: "node", "textContent":"Node"}),
+                $el("th", {className: "runs", "textContent":"Runs"}),
+                $el("th", {className: "per-run", "textContent":"Per\u00A0run"}),
+                $el("th", {className: "per-flow", "textContent":"Per\u00A0flow"}),
             ])
         ]);
         Timer.all_times.forEach((node_data) => {node_data[4] = node_data[2] / Timer.runs_since_clear})
         Timer.all_times.sort((a,b)=>{ return b[4]-a[4]; })
         Timer.all_times.forEach((node_data) => {
             table.append($el("tr",[
-                $el("td", {style:{"textAlign":"right"},"textContent":node_data[0]}),
-                $el("td", {style:{"textAlign":"right"},"textContent":node_data[1].toString()}),
-                $el("td", {style:{"textAlign":"right"},"textContent":Timer._format(node_data[3])}),
-                $el("td", {style:{"textAlign":"right"},"textContent":Timer._format(node_data[4])}),
+		$el("td", {className: "node", textContent: get_node_name_by_id(node_data[0])}),
+                $el("td", {className: "runs","textContent":node_data[1].toString()}),
+                $el("td", {className: "per-run","textContent":Timer._format(node_data[3])}),
+                $el("td", {className: "per-flow","textContent":Timer._format(node_data[4])}),
             ]))
         });
         return table;
@@ -102,6 +113,7 @@ app.registerExtension({
 	name: "cg.quicknodes.timer",
     setup() {
         api.addEventListener("executing", Timer.tick);
+	console.log('cg.quicknodes.timer registered');
     },
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
         if (nodeType.comfyClass=="Timer") {
