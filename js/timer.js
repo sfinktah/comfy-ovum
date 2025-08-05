@@ -70,6 +70,9 @@ class Timer {
     static saveToLocalStorage() {
         try {
             localStorage.setItem(LOCALSTORAGE_KEY, JSON.stringify(Timer.all_times));
+            localStorage.setItem(LOCALSTORAGE_KEY + '.settings', JSON.stringify({
+                last_n_runs: Timer.last_n_runs
+            }));
         } catch (e) {
             console.warn('Failed to save timer history:', e);
         }
@@ -80,6 +83,15 @@ class Timer {
             const data = localStorage.getItem(LOCALSTORAGE_KEY);
             if (data) {
                 Timer.all_times = JSON.parse(data);
+            }
+
+            // Load settings
+            const settingsData = localStorage.getItem(LOCALSTORAGE_KEY + '.settings');
+            if (settingsData) {
+                const settings = JSON.parse(settingsData);
+                if (settings.last_n_runs && typeof settings.last_n_runs === 'number') {
+                    Timer.last_n_runs = settings.last_n_runs;
+                }
             }
         } catch (e) {
             console.warn('Failed to load timer history:', e);
@@ -92,6 +104,15 @@ class Timer {
         Timer.current_run_id = null;
         Timer.runs_since_clear = 0;
         if (Timer.onChange) Timer.onChange();
+    }
+
+    static setLastNRuns(value) {
+        const newValue = parseInt(value);
+        if (!isNaN(newValue) && newValue > 0) {
+            Timer.last_n_runs = newValue;
+            if (Timer.onChange) Timer.onChange();
+        }
+        return Timer.last_n_runs;
     }
 
     static start() {
@@ -128,6 +149,10 @@ class Timer {
         }
 
         return count > 0 ? totalTime / count : 0;
+    }
+
+    static getRunTime(id, runId) {
+        return Timer.run_history[runId]?.nodes[id]?.totalTime || 0;
     }
 
     static add_timing(id, dt) {
@@ -417,20 +442,35 @@ class Timer {
             style: {fontSize: "80%"}
         }, ["Regex"]);
 
-        // Table header
+        // Table header with individual columns for each of the last n runs
+        const tableHeader = [$el("th", {className: "node", "textContent": "Node"}),
+            $el("th", {className: "runs", "textContent": "Runs"}),
+            $el("th", {className: "per-run", "textContent": "Per run"}),
+            $el("th", {className: "per-flow", "textContent": "Per flow"}),
+            $el('th', {className: "current-run", "textContent": "Current run"})
+        ];
+
+        // Add individual columns for each of the last n runs
+        const runIds = Object.keys(Timer.run_history).sort().reverse().slice(0, Timer.last_n_runs);
+        const actualRuns = Math.min(runIds.length, Timer.last_n_runs);
+        for (let i = 0; i < actualRuns; i++) {
+            const runId = runIds[i];
+            const runNumber = i + 1;
+            tableHeader.push($el('th', {className: "run-" + runNumber, "textContent": `Run ${runNumber}`}));
+        }
+
+        // If we have fewer actual runs than the setting, add placeholder columns
+        for (let i = actualRuns; i < Timer.last_n_runs; i++) {
+            const runNumber = i + 1;
+            tableHeader.push($el('th', {className: "run-" + runNumber, "textContent": `Run ${runNumber}`}));
+        }
+
         const table = $el("table", {
             "textAlign": "right",
             "border": "1px solid",
             "className": "cg-timer-table"
         }, [
-            $el("tr", [
-                $el("th", {className: "node", "textContent": "Node"}),
-                $el("th", {className: "runs", "textContent": "Runs"}),
-                $el("th", {className: "per-run", "textContent": "Per run"}),
-                $el("th", {className: "per-flow", "textContent": "Per flow"}),
-                $el('th', {className: "current-run", "textContent": "Current run"}),
-                $el('th', {className: "last-runs", "textContent": `Last ${Timer.last_n_runs} runs`}),
-            ])
+            $el("tr", tableHeader)
         ]);
 
         // Compute per-flow
@@ -461,14 +501,32 @@ class Timer {
         Timer.all_times.forEach((node_data) => {
             if (!filterFunc(node_data)) return;
             const t = node_data[0];
-            table.append($el("tr", [
+
+            const rowCells = [
                 $el("td", {className: "node", textContent: get_node_name_by_id(node_data[0])}),
                 $el("td", {className: "runs", "textContent": node_data[1].toString()}),
                 $el("td", {className: "per-run", "textContent": Timer._format(node_data[3])}),
                 $el("td", {className: "per-flow", "textContent": Timer._format(node_data[4])}),
-                $el('td', {className: "current-run", "textContent": Timer._format(Timer.getCurrentRunTime(t))}),
-                $el('td', {className: "last-runs", "textContent": Timer._format(Timer.getLastNRunsAvg(t))}),
-            ]));
+                $el('td', {className: "current-run", "textContent": Timer._format(Timer.getCurrentRunTime(t))})
+            ];
+
+            // Add individual cells for each of the last n runs
+            const runIds = Object.keys(Timer.run_history).sort().reverse().slice(0, Timer.last_n_runs);
+            const actualRuns = Math.min(runIds.length, Timer.last_n_runs);
+
+            // Add cells for actual runs
+            for (let i = 0; i < actualRuns; i++) {
+                const runId = runIds[i];
+                const runTime = runId && Timer.run_history[runId]?.nodes[t]?.totalTime || 0;
+                rowCells.push($el('td', {className: "run-" + (i + 1), "textContent": Timer._format(runTime)}));
+            }
+
+            // Add empty cells for missing runs
+            for (let i = actualRuns; i < Timer.last_n_runs; i++) {
+                rowCells.push($el('td', {className: "run-" + (i + 1), "textContent": "-"}));
+            }
+
+            table.append($el("tr", rowCells));
         });
 
         // Return just the table if scope is "table"
@@ -524,6 +582,11 @@ app.registerExtension({
                     Timer.saveToLocalStorage();
                 });
 
+                // Add a number input to control how many last runs to display
+                this.addWidget("number", "Last runs to show", Timer.last_n_runs, (v) => {
+                    return Timer.setLastNRuns(v);
+                }, { min: 1, max: 20, step: 1, precision: 0 });
+
                 const widget = {
                     type: "HTML",
                     name: "flying",
@@ -576,9 +639,3 @@ app.registerExtension({
 
 })
 
-
-/*
-
-index.js:14 Unhandled message: {"type": "progress_state", "data": {"prompt_id": "0a55c3c8-9840-4ef3-8c20-aad8c3bcc2ee", "nodes": {"192": {"value": 1, "max": 1, "state": "finished", "node_id": "192", "prompt_id": "0a55c3c8-9840-4ef3-8c20-aad8c3bcc2ee", "display_node_id": "192", "parent_node_id": null, "real_node_id": "192"}, "119": {"value": 1, "max": 1, "state": "finished", "node_id": "119", "prompt_id": "0a55c3c8-9840-4ef3-8c20-aad8c3bcc2ee", "display_node_id": "119", "parent_node_id": null, "real_node_id": "119"}, "205": {"value": 1, "max": 1, "state": "finished", "node_id": "205", "prompt_id": "0a55c3c8-9840-4ef3-8c20-aad8c3bcc2ee", "display_node_id": "205", "parent_node_id": null, "real_node_id": "205"}, "120": {"value": 1, "max": 1, "state": "finished", "node_id": "120", "prompt_id": "0a55c3c8-9840-4ef3-8c20-aad8c3bcc2ee", "display_node_id": "120", "parent_node_id": null, "real_node_id": "120"}, "208": {"value": 1, "max": 1, "state": "finished", "node_id": "208", "prompt_id": "0a55c3c8-9840-4ef3-8c20-aad8c3bcc2ee", "display_node_id": "208", "parent_node_id": null, "real_node_id": "208"}, "200": {"value": 1.0, "max": 1.0, "state": "finished", "node_id": "200", "prompt_id": "0a55c3c8-9840-4ef3-8c20-aad8c3bcc2ee", "display_node_id": "200", "parent_node_id": null, "real_node_id": "200"}, "198": {"value": 1.0, "max": 1.0, "state": "finished", "node_id": "198", "prompt_id": "0a55c3c8-9840-4ef3-8c20-aad8c3bcc2ee", "display_node_id": "198", "parent_node_id": null, "real_node_id": "198"}, "204": {"value": 1.0, "max": 1.0, "state": "finished", "node_id": "204", "prompt_id": "0a55c3c8-9840-4ef3-8c20-aad8c3bcc2ee", "display_node_id": "204", "parent_node_id": null, "real_node_id": "204"}, "196": {"value": 1.0, "max": 1.0, "state": "finished", "node_id": "196", "prompt_id": "0a55c3c8-9840-4ef3-8c20-aad8c3bcc2ee", "display_node_id": "196", "parent_node_id": null, "real_node_id": "196"}, "194": {"value": 1.0, "max": 1.0, "state": "finished", "node_id": "194", "prompt_id": "0a55c3c8-9840-4ef3-8c20-aad8c3bcc2ee", "display_node_id": "194", "parent_node_id": null, "real_node_id": "194"}, "22": {"value": 607, "max": 607, "state": "finished", "node_id": "22", "prompt_id": "0a55c3c8-9840-4ef3-8c20-aad8c3bcc2ee", "display_node_id": "22", "parent_node_id": null, "real_node_id": "22"}, "27": {"value": 3, "max": 6, "state": "running", "node_id": "27", "prompt_id": "0a55c3c8-9840-4ef3-8c20-aad8c3bcc2ee", "display_node_id": "27", "parent_node_id": null, "real_node_id": "27"}}}} Error: Unknown message type progress_state
-Unhandled message: {"type": "crystools.monitor", "data": {"cpu_utilization": 20.7, "ram_total": 68523573248, "ram_used": 64373084160, "ram_used_percent": 93.9, "hdd_total": -1, "hdd_used": -1, "hdd_used_percent": -1, "device_type": "cuda", "gpus": [{"gpu_utilization": 14, "gpu_temperature": 45, "vram_total": 25753026560, "vram_used": 6836715520, "vram_used_percent": 26.547231270358306}]}} Error: Unknown message type crystools.monitor at WebSocket.<anonymous> (api.ts:479:23)
- */
