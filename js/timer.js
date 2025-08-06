@@ -124,6 +124,9 @@ class Timer {
     }
 
     static _format(number, dp = 2) {
+        if (isNaN(number) || number === 0.0) {
+            return " ";
+        }
         return `${(number / 1000).toFixed(dp)} s`
     }
 
@@ -453,17 +456,17 @@ class Timer {
         // Add individual columns for each of the last n runs
         const runIds = Object.keys(Timer.run_history).sort().reverse().slice(0, Timer.last_n_runs);
         const actualRuns = Math.min(runIds.length, Timer.last_n_runs);
-        for (let i = 0; i < actualRuns; i++) {
-            const runId = runIds[i];
-            const runNumber = i + 1;
+        let runNumber = 1;
+        for (let i = actualRuns - 1; i > 0; i--) {
             tableHeader.push($el('th', {className: "run-" + runNumber, "textContent": `Run ${runNumber}`}));
+            runNumber += 1;
         }
 
         // If we have fewer actual runs than the setting, add placeholder columns
-        for (let i = actualRuns; i < Timer.last_n_runs; i++) {
-            const runNumber = i + 1;
-            tableHeader.push($el('th', {className: "run-" + runNumber, "textContent": `Run ${runNumber}`}));
-        }
+        // for (let i = actualRuns; i < Timer.last_n_runs; i++) {
+        //     const runNumber = i + 1;
+        //     tableHeader.push($el('th', {className: "run-" + runNumber, "textContent": `Run ${runNumber}`}));
+        // }
 
         const table = $el("table", {
             "textAlign": "right",
@@ -515,7 +518,7 @@ class Timer {
             const actualRuns = Math.min(runIds.length, Timer.last_n_runs);
 
             // Add cells for actual runs
-            for (let i = 0; i < actualRuns; i++) {
+            for (let i = actualRuns - 1; i > 0; i--) {
                 const runId = runIds[i];
                 const runTime = runId && Timer.run_history[runId]?.nodes[t]?.totalTime || 0;
                 rowCells.push($el('td', {className: "run-" + (i + 1), "textContent": Timer._format(runTime)}));
@@ -585,7 +588,7 @@ app.registerExtension({
                 // Add a number input to control how many last runs to display
                 this.addWidget("number", "Last runs to show", Timer.last_n_runs, (v) => {
                     return Timer.setLastNRuns(v);
-                }, { min: 1, max: 20, step: 1, precision: 0 });
+                }, { min: 1, max: 20, step2: 1, precision: 0 });
 
                 const widget = {
                     type: "HTML",
