@@ -1,6 +1,6 @@
 import { app } from '../../scripts/app.js'
 import {api} from "../../scripts/api.js";
-//import { ComfyWidgets } from "../../../scripts/widgets.js";
+import { ComfyWidgets } from "../../scripts/widgets.js";
 import {$el} from "../../scripts/ui.js";
 
 const MARGIN = 8;
@@ -35,7 +35,7 @@ function get_position_style(ctx, scroll_width, widget_width, y, node_width, node
 
 function removeEmojis(name) {
     const nameNoEmojis = name.replace(
-        /([\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{1F900}-\u{1F9FF}]|[\u{1FA70}-\u{1FAFF}])/gu,
+        /([\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{1F900}-\u{1F9FF}]|[\u{1FA70}-\u{1FAFF}]|[\u{1F100}-\u{1F1FF}]|[\u{2460}-\u{24FF}])/gu,
         ''
     );
 
@@ -168,13 +168,16 @@ class Timer {
         Timer.run_history[Timer.current_run_id] = { nodes: {}, startTime: t };
         Timer.startTime = t;
         Timer.lastChangeTime = t;
+        if (Object.keys(Timer.run_history).length > 20) {
+            delete Timer.run_history[Object.keys(Timer.run_history)[0]]
+        }
     }
 
     static _format(number, dp = 2) {
         if (isNaN(number) || number === 0.0) {
             return " ";
         }
-        return `${(number / 1000).toFixed(dp)} s`
+        return `${(number / 1000).toFixed(dp)}`
     }
 
     static getCurrentRunTime(id) {
@@ -624,7 +627,6 @@ app.registerExtension({
             nodeType.prototype.onNodeCreated = function () {
                 orig_nodeCreated?.apply(this, arguments);
 
-
                 this.addWidget("button", "clear", "", Timer.clear);
 
                 // Add Save button
@@ -640,7 +642,11 @@ app.registerExtension({
                 // Add a number input to control how many last runs to display
                 this.addWidget("number", "Last runs to show", Timer.last_n_runs, (v) => {
                     return Timer.setLastNRuns(v);
-                }, { min: 1, max: 20, step2: 1, precision: 0 });
+                }, { min: 1, max: 20, step: 10, precision: 0 });
+
+                this.ageHandle = this.addWidget("number", "Age", 28, function () {
+                    console.log("age modified", this)
+                }, {min: 0, max: 100, step: 10, precision: 0})
 
                 const widget = {
                     type: "HTML",
