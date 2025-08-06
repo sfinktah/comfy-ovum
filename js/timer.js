@@ -78,6 +78,25 @@ class Timer {
         }
     }
 
+    static saveToStorage() {
+        try {
+            // Save to localStorage first
+            Timer.saveToLocalStorage();
+
+            // Save data to external storage using API
+            api.storeUserData('timer_run_history', {
+                all_times: Timer.all_times,
+                run_history: Timer.run_history,
+                last_n_runs: Timer.last_n_runs,
+                runs_since_clear: Timer.runs_since_clear
+            }).catch(err => {
+                console.warn('Failed to save timer data to storage:', err);
+            });
+        } catch (e) {
+            console.warn('Failed to save timer data to storage:', e);
+        }
+    }
+
     static loadFromLocalStorage() {
         try {
             const data = localStorage.getItem(LOCALSTORAGE_KEY);
@@ -95,6 +114,34 @@ class Timer {
             }
         } catch (e) {
             console.warn('Failed to load timer history:', e);
+        }
+    }
+
+    static loadFromStorage() {
+        try {
+            // First load from localStorage as fallback
+                Timer.loadFromStorage();
+
+            // Try to load data from storage API
+            api.getUserData('timer_run_history').then(data => {
+                if (data && data.all_times) {
+                    Timer.all_times = data.all_times;
+                }
+                if (data && data.run_history) {
+                    Timer.run_history = data.run_history;
+                }
+                if (data && data.last_n_runs) {
+                    Timer.last_n_runs = data.last_n_runs;
+                }
+                if (data && data.runs_since_clear !== undefined) {
+                    Timer.runs_since_clear = data.runs_since_clear;
+                }
+                if (Timer.onChange) Timer.onChange();
+            }).catch(err => {
+                console.warn('Failed to load timer data from storage:', err);
+            });
+        } catch (e) {
+            console.warn('Failed to load timer data from storage:', e);
         }
     }
 
@@ -583,6 +630,11 @@ app.registerExtension({
                 // Add Save button
                 this.addWidget("button", "save", "", () => {
                     Timer.saveToLocalStorage();
+                });
+
+                // Add Storage button
+                this.addWidget("button", "store", "", () => {
+                    Timer.saveToStorage();
                 });
 
                 // Add a number input to control how many last runs to display
