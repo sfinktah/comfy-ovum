@@ -101,7 +101,19 @@ class Timer {
         try {
             const data = localStorage.getItem(LOCALSTORAGE_KEY);
             if (data) {
-                Timer.all_times = JSON.parse(data);
+                const parsedData = JSON.parse(data);
+                // Handle migration from array format to object format
+                if (parsedData.length > 0 && Array.isArray(parsedData[0])) {
+                    Timer.all_times = parsedData.map(item => ({
+                        id: item[0],
+                        runs: item[1],
+                        totalTime: item[2],
+                        avgPerRun: item[3],
+                        avgPerFlow: item[4] || 0
+                    }));
+                } else {
+                    Timer.all_times = parsedData;
+                }
             }
 
             // Load settings
@@ -125,7 +137,18 @@ class Timer {
             // Try to load data from storage API
             api.getUserData('timer_run_history').then(data => {
                 if (data && data.all_times) {
-                    Timer.all_times = data.all_times;
+                    // Handle migration from array format to object format
+                    if (data.all_times.length > 0 && Array.isArray(data.all_times[0])) {
+                        Timer.all_times = data.all_times.map(item => ({
+                            id: item[0],
+                            runs: item[1],
+                            totalTime: item[2],
+                            avgPerRun: item[3],
+                            avgPerFlow: item[4] || 0
+                        }));
+                    } else {
+                        Timer.all_times = data.all_times;
+                    }
                 }
                 if (data && data.run_history) {
                     Timer.run_history = data.run_history;
@@ -262,15 +285,21 @@ class Timer {
 
     static add_timing(id, dt) {
         // Update aggregated timing data
-        var this_node_data = Timer.all_times.find((node_data) => node_data[0] == id);
+        var this_node_data = Timer.all_times.find((node_data) => node_data.id === id);
         if (!this_node_data) {
-            this_node_data = [id, 0, 0, 0, 0];
+            this_node_data = {
+                id: id,
+                runs: 0,
+                totalTime: 0,
+                avgPerRun: 0,
+                avgPerFlow: 0
+            };
             Timer.all_times.push(this_node_data);
         }
-        this_node_data[1] += 1;
-        if (!Timer.runs_since_clear || this_node_data[1] > Timer.runs_since_clear) Timer.runs_since_clear = this_node_data[1]
-        this_node_data[2] += dt;
-        this_node_data[3] = this_node_data[2] / this_node_data[1];
+        this_node_data.runs += 1;
+        if (!Timer.runs_since_clear || this_node_data.runs > Timer.runs_since_clear) Timer.runs_since_clear = this_node_data.runs
+        this_node_data.totalTime += dt;
+        this_node_data.avgPerRun = this_node_data.totalTime / this_node_data.runs;
 
         // Store timing for the current run
         if (Timer.current_run_id) {
@@ -603,10 +632,10 @@ class Timer {
 
         // Compute per-flow
         Timer.all_times.forEach((node_data) => {
-            node_data[4] = node_data[2] / Timer.runs_since_clear;
+            node_data.avgPerFlow = node_data.totalTime / Timer.runs_since_clear;
         });
         // Sort descending by per-flow
-        Timer.all_times.sort((a, b) => b[4] - a[4]);
+        Timer.all_times.sort((a, b) => b.avgPerFlow - a.avgPerFlow);
 
         // Build filter
         let filterFunc = () => true;
@@ -615,26 +644,26 @@ class Timer {
                 let re;
                 try {
                     re = new RegExp(Timer.searchTerm, "i");
-                    filterFunc = (node_data) => re.test(get_node_name_by_id(node_data[0]));
+                    filterFunc = (node_data) => re.test(get_node_name_by_id(node_data.id));
                 } catch {
                     filterFunc = () => true; // Don't filter if regex is broken
                 }
             } else {
                 const searchLower = Timer.searchTerm.toLowerCase();
                 filterFunc = (node_data) =>
-                    get_node_name_by_id(node_data[0]).toLowerCase().includes(searchLower);
+                    get_node_name_by_id(node_data.id).toLowerCase().includes(searchLower);
             }
         }
 
         Timer.all_times.forEach((node_data) => {
             if (!filterFunc(node_data)) return;
-            const t = node_data[0];
+            const t = node_data.id;
 
             const rowCells = [
-                $el("td", {className: "node", textContent: get_node_name_by_id(node_data[0])}),
-                $el("td", {className: "runs", "textContent": node_data[1].toString()}),
-                $el("td", {className: "per-run", "textContent": Timer._format(node_data[3])}),
-                $el("td", {className: "per-flow", "textContent": Timer._format(node_data[4])}),
+                $el("td", {className: "node", textContent: get_node_name_by_id(node_data.id)}),
+                $el("td", {className: "runs", "textContent": node_data.runs.toString()}),
+                $el("td", {className: "per-run", "textContent": Timer._format(node_data.avgPerRun)}),
+                $el("td", {className: "per-flow", "textContent": Timer._format(node_data.avgPerFlow)}),
                 $el('td', {className: "current-run", "textContent": Timer._format(Timer.getCurrentRunTime(t))})
             ];
 
@@ -776,7 +805,7 @@ app.registerExtension({
                     }
                     //this.onResize?.(this.size);
                 }
-                setTimeout(Timer.onChange, 5000);
+                setTimeout(Timer.onChange, 1000);
 
                 // Mount the element inside the node
                 // this.addCustomWidget(htmlWidget);
