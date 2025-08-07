@@ -1,0 +1,41 @@
+table.cg-timer-table {
+    border-collapse: collapse;
+    width: 100%;
+    font-family: sans-serif;
+    font-size: 12px;
+    background-color: #1e1e1e; /* or white if you're using light mode */
+    color: #e0e0e0;
+    margin: 0;
+    padding: 0;
+    table-layout: auto;
+    border: none;
+    box-shadow: 0 0 4px rgba(0,0,0,0.1);
+}
+
+.cg-timer-table th,
+.cg-timer-table td {
+    border: none;
+    padding: 6px 10px;
+    text-align: right;
+    vertical-align: middle;
+}
+
+.cg-timer-table th:first-child,
+.cg-timer-table td:first-child {
+    text-align: left;
+}
+
+.cg-timer-table th {
+    background-color: #2a2a2a;
+    font-weight: normal;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.cg-timer-table tr:nth-child(even) {
+    background-color: #262626;
+}
+
+.cg-timer-table tr:hover {
+    background-color: #333333;
+}

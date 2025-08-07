@@ -1,10 +1,16 @@
-function print_r(obj, options = {}, _indent = '', _seen = new WeakSet()) {
-    const { showInherited = false, stripFunctionBody = false } = options;
+export function print_r(obj, options = {}, _indent = '', _seen = new WeakSet()) {
+    const {showInherited = false, stripFunctionBody = false} = options;
     const indentStep = '    ';
     const nextIndent = _indent + indentStep;
 
     if (obj === null) return 'null';
     if (typeof obj === 'undefined') return 'undefined';
+
+    // Check for circular reference BEFORE any processing
+    if (typeof obj === 'object' && obj !== null) {
+        if (_seen.has(obj)) return '*RECURSION*';
+        _seen.add(obj);
+    }
 
     // Function handling
     if (typeof obj === 'function') {
@@ -16,7 +22,7 @@ function print_r(obj, options = {}, _indent = '', _seen = new WeakSet()) {
                 if (match) {
                     const name = match[1] || '(anonymous)';
                     const parent = match[2] ? ` extends ${match[2]}` : '';
-                    return formatMultilineString(`class ${name}${parent}`, _ident);
+                    return formatMultilineString(`class ${name}${parent}`, _indent);
                 }
                 return 'class (?)';
             } else {
@@ -31,8 +37,9 @@ function print_r(obj, options = {}, _indent = '', _seen = new WeakSet()) {
         return formatMultilineString(obj.toString(), _indent);
     }
 
-    if (_seen.has(obj)) return '*RECURSION*';
-    _seen.add(obj);
+    // The circular reference check is now at the top of the function
+    // This line is now redundant: if (_seen.has(obj)) return '*RECURSION*';
+    // And this line is now redundant: _seen.add(obj);
 
     const isArray = Array.isArray(obj);
     let classLine = '';
@@ -43,9 +50,7 @@ function print_r(obj, options = {}, _indent = '', _seen = new WeakSet()) {
         if (ctor && ctor !== Object) {
             const className = ctor.name || 'AnonymousClass';
             const parentProto = Object.getPrototypeOf(ctor.prototype);
-            const parentName = parentProto && parentProto.constructor
-                ? parentProto.constructor.name
-                : null;
+            const parentName = parentProto && parentProto.constructor ? parentProto.constructor.name : null;
 
             classLine = `${_indent}${className}`;
             if (parentName && parentName !== 'Object') {
@@ -73,24 +78,22 @@ function print_r(obj, options = {}, _indent = '', _seen = new WeakSet()) {
         }
 
         let valStr;
-if (val !== null && typeof val === 'object') {
-    valStr = '\n' + print_r(val, options, nextIndent, _seen);
-    output += `${nextIndent}[${key}] =>${valStr}\n`;
+        if (val !== null && typeof val === 'object') {
+            valStr = '\n' + print_r(val, options, nextIndent, _seen);
+            output += `${nextIndent}[${key}] => ` + valStr.substring(0, 65535) + `\n`;
 
-} else if (typeof val === 'function') {
-    if (stripFunctionBody) {
-        valStr = formatFunctionSignature(val);
-    } else {
-        valStr = formatMultilineString(val.toString(), nextIndent);
-    }
-    output += `${nextIndent}[${key}] => ${valStr}\n`;
+        } else if (typeof val === 'function') {
+            if (stripFunctionBody) {
+                valStr = formatFunctionSignature(val);
+            } else {
+                valStr = formatMultilineString(val.toString(), nextIndent);
+            }
+            output += `${nextIndent}[${key}] => ${valStr}\n`;
 
-} else {
-    valStr = formatMultilineString(val?.toString?.() ?? '', nextIndent);
-    output += `${nextIndent}[${key}] => ${valStr}\n`;
-}
-
-
+        } else {
+            valStr = formatMultilineString(val?.toString?.() ?? '', nextIndent);
+            output += `${nextIndent}[${key}] => ${valStr}\n`;
+        }
     }
 
     output += _indent + ')';
@@ -110,12 +113,12 @@ function formatFunctionSignature(fn) {
     // 1)  Handle classes first
     if (src.startsWith('class')) {
         const m = src.match(/^class\s+([\w$]*)\s*(?:extends\s+([\w$]+))?/);
-        const name   = m?.[1] || '(anonymous)';
+        const name = m?.[1] || '(anonymous)';
         const parent = m?.[2] ? ` extends ${m[2]}` : '';
         return `class ${name}${parent}`;
     }
 
-    // 2)  Scan for the first '{' that isn’t inside (…) or a string
+    // 2)  Scan for the first '{' that isn't inside (…) or a string
     let inStr = false, strChar = '', escape = false;
     let parenDepth = 0;
 
@@ -124,20 +127,36 @@ function formatFunctionSignature(fn) {
 
         // inside "…" / '…' / `…`
         if (inStr) {
-            if (escape) { escape = false; continue; }
-            if (c === '\\') { escape = true; continue; }
-            if (c === strChar) { inStr = false; }
+            if (escape) {
+                escape = false;
+                continue;
+            }
+            if (c === '\\') {
+                escape = true;
+                continue;
+            }
+            if (c === strChar) {
+                inStr = false;
+            }
             continue;
         }
 
         // enter string literal
         if (c === '"' || c === "'" || c === '`') {
-            inStr = true; strChar = c; continue;
+            inStr = true;
+            strChar = c;
+            continue;
         }
 
-        // track parentheses so we know when we’re back at top level
-        if (c === '(') { parenDepth++; continue; }
-        if (c === ')') { if (parenDepth) parenDepth--; continue; }
+        // track parentheses so we know when we're back at top level
+        if (c === '(') {
+            parenDepth++;
+            continue;
+        }
+        if (c === ')') {
+            if (parenDepth) parenDepth--;
+            continue;
+        }
 
         // first body brace at top level → cut here
         if (c === '{' && parenDepth === 0) {
@@ -148,7 +167,6 @@ function formatFunctionSignature(fn) {
     // fallback (no body found, rare)
     return src;
 }
-
 
 
 function getAllKeys(obj) {
@@ -162,4 +180,3 @@ function getAllKeys(obj) {
     }
     return Array.from(keys);
 }
-// console.log(print_r(temp1, { showInherited: true, stripFunctionBody: true }));

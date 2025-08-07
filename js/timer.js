@@ -1,7 +1,11 @@
-import { app } from '../../scripts/app.js'
-import {api} from "../../scripts/api.js";
+/** @typedef {import('@comfyorg/comfyui-frontend-types').ComfyApp} ComfyApp */
+
+import { api } from "../../scripts/api.js";
+/** @type {ComfyApp} */
+import { app } from "../../scripts/app.js";
+import { $el } from "../../scripts/ui.js";
 import { ComfyWidgets } from "../../scripts/widgets.js";
-import {$el} from "../../scripts/ui.js";
+import { print_r } from "./print_r.js";
 
 const MARGIN = 8;
 
@@ -142,6 +146,23 @@ class Timer {
             });
         } catch (e) {
             console.warn('Failed to load timer data from storage:', e);
+        }
+    }
+
+    static clearStorage() {
+        try {
+            // Clear from localStorage
+            localStorage.removeItem(LOCALSTORAGE_KEY);
+            localStorage.removeItem(LOCALSTORAGE_KEY + '.settings');
+
+            // Clear from external storage API
+            api.deleteUserData('timer_run_history').catch(err => {
+                console.warn('Failed to clear timer data from storage:', err);
+            });
+
+            console.log('Timer data cleared from storage');
+        } catch (e) {
+            console.warn('Failed to clear timer data from storage:', e);
         }
     }
 
@@ -519,8 +540,6 @@ class Timer {
         // }
 
         const table = $el("table", {
-            "textAlign": "right",
-            "border": "1px solid",
             "className": "cg-timer-table"
         }, [
             $el("tr", tableHeader)
@@ -608,6 +627,13 @@ class Timer {
 app.registerExtension({
     name: "cg.quicknodes.timer",
     setup: function () {
+        // Load the external CSS stylesheet
+        const styleLink = document.createElement('link');
+        styleLink.rel = 'stylesheet';
+        styleLink.href = 'extensions/cg-quicknodes/js/timer.css';
+        styleLink.id = 'cg-timer-stylesheet';
+        document.head.appendChild(styleLink);
+
         Timer.loadFromLocalStorage(); // <--- Load history on startup
         window.Timer = Timer;
         api.addEventListener("executing", Timer.executing);
@@ -627,6 +653,7 @@ app.registerExtension({
             nodeType.prototype.onNodeCreated = function () {
                 orig_nodeCreated?.apply(this, arguments);
 
+                console.log('cg.quicknodes.timer.onNodeCreated', this);
                 this.addWidget("button", "clear", "", Timer.clear);
 
                 // Add Save button
@@ -637,6 +664,11 @@ app.registerExtension({
                 // Add Storage button
                 this.addWidget("button", "store", "", () => {
                     Timer.saveToStorage();
+                });
+
+                // Add Clear Storage button
+                this.addWidget("button", "clear storage", "", () => {
+                    Timer.clearStorage();
                 });
 
                 // Add a number input to control how many last runs to display
