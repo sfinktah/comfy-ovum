@@ -6,6 +6,7 @@ import { app } from "../../scripts/app.js";
 import { $el } from "../../scripts/ui.js";
 import { ComfyWidgets } from "../../scripts/widgets.js";
 import { print_r } from "./print_r.js";
+// Timer styles will be dynamically imported in the setup function
 
 const MARGIN = 8;
 
@@ -684,12 +685,12 @@ class Timer {
 app.registerExtension({
     name: "cg.quicknodes.timer",
     setup: function () {
-        // Alternative approach using the fileURL method:
-        const styleLink = document.createElement('link');
-        styleLink.rel = 'stylesheet';
-        styleLink.href = api.fileURL('extensions/cg-quicknodes/timer.css');
-        styleLink.id = 'cg-timer-stylesheet';
-        document.head.appendChild(styleLink);
+        // Import styles from module and inject them directly into the DOM
+        import("./timer-styles.js").then(({ injectTimerStyles }) => {
+            injectTimerStyles();
+        }).catch(err => {
+            console.error("Failed to load timer styles:", err);
+        });
 
         Timer.loadFromLocalStorage(); // <--- Load history on startup
         window.Timer = Timer;
