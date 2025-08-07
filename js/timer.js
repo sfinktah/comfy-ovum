@@ -62,6 +62,8 @@ class Timer {
     static onChange = null;
     static searchTerm = '';
     static searchRegex = false;
+    static nodeRunningStartTime = null; // Track when the current node started running
+    static runningTimerInterval = null; // Interval ID for updating the running timer
 
 
     static saveToLocalStorage() {
@@ -195,10 +197,26 @@ class Timer {
     }
 
     static getCurrentRunTime(id) {
-        if (!Timer.current_run_id || !Timer.run_history[Timer.current_run_id] || !Timer.run_history[Timer.current_run_id].nodes[id]) {
+        if (!Timer.current_run_id || !Timer.run_history[Timer.current_run_id]) {
             return 0;
         }
-        return Timer.run_history[Timer.current_run_id].nodes[id].totalTime;
+
+        const nodeData = Timer.run_history[Timer.current_run_id].nodes[id];
+        if (!nodeData) {
+            // If this is the currently running node, show running time
+            if (id === Timer.currentNodeId && Timer.nodeRunningStartTime) {
+                const currentTime = LiteGraph.getTime();
+                return currentTime - Timer.nodeRunningStartTime;
+            }
+            return 0;
+        }
+
+        // If this node is currently running, return the running time instead of total time
+        if (id === Timer.currentNodeId && nodeData.runningTime !== undefined) {
+            return nodeData.runningTime;
+        }
+
+        return nodeData.totalTime || 0;
     }
 
     static getLastNRunsAvg(id, n = null) {
@@ -220,6 +238,25 @@ class Timer {
 
     static getRunTime(id, runId) {
         return Timer.run_history[runId]?.nodes[id]?.totalTime || 0;
+    }
+
+    static updateRunningNodeTime() {
+        if (!Timer.currentNodeId || !Timer.nodeRunningStartTime) return;
+
+        const currentTime = LiteGraph.getTime();
+        const elapsedTime = currentTime - Timer.nodeRunningStartTime;
+
+        // Update the current run's node time temporarily for display purposes
+        if (Timer.current_run_id && Timer.run_history[Timer.current_run_id]) {
+            if (!Timer.run_history[Timer.current_run_id].nodes[Timer.currentNodeId]) {
+                Timer.run_history[Timer.current_run_id].nodes[Timer.currentNodeId] = { count: 0, totalTime: 0 };
+            }
+            // Update the running time (this will be overwritten with the final time when node completes)
+            Timer.run_history[Timer.current_run_id].nodes[Timer.currentNodeId].runningTime = elapsedTime;
+
+            // Trigger UI update
+            if (Timer.onChange) Timer.onChange();
+        }
     }
 
     static add_timing(id, dt) {
@@ -387,12 +424,26 @@ class Timer {
         const t = LiteGraph.getTime();
         const unix_t = Math.floor(t / 1000);
 
+        // Clear any existing running timer interval
+        if (Timer.runningTimerInterval) {
+            clearInterval(Timer.runningTimerInterval);
+            Timer.runningTimerInterval = null;
+        }
+
         Timer.add_timing(Timer.currentNodeId ? Timer.currentNodeId : "startup", t - Timer.lastChangeTime)
 
         Timer.lastChangeTime = t;
         Timer.currentNodeId = e.detail;
+        Timer.nodeRunningStartTime = t; // Set the start time for the running node
 
         if (!Timer.currentNodeId) Timer.add_timing("total", t - Timer.startTime)
+
+        // Start a timer to update the display while node is running
+        if (Timer.currentNodeId) {
+            Timer.runningTimerInterval = setInterval(() => {
+                Timer.updateRunningNodeTime();
+            }, 100); // Update every 100ms
+        }
 
         if (Timer.onChange) Timer.onChange();
     }
@@ -403,6 +454,13 @@ class Timer {
 
     static executionSuccess(e) {
         const t = LiteGraph.getTime();
+
+        // Clear the running timer interval
+        if (Timer.runningTimerInterval) {
+            clearInterval(Timer.runningTimerInterval);
+            Timer.runningTimerInterval = null;
+        }
+
         if (Timer.current_run_id && Timer.run_history[Timer.current_run_id]) {
             Timer.run_history[Timer.current_run_id].endTime = t;
             Timer.run_history[Timer.current_run_id].totalTime = t - Timer.run_history[Timer.current_run_id].startTime;
@@ -414,6 +472,11 @@ class Timer {
                 delete Timer.run_history[oldestRunId];
             }
         }
+
+        // Reset node running start time
+        Timer.nodeRunningStartTime = null;
+
+        if (Timer.onChange) Timer.onChange();
     }
 
     static html(scope) {
