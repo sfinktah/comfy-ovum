@@ -1,6 +1,6 @@
 .cg-timer-table {
     border-collapse: collapse;
-    width: 100%;
+    width: auto;
     font-family: sans-serif;
     font-size: 12px;
     background-color: #1e1e1e; /* or white if you're using light mode */
@@ -64,7 +64,6 @@
 
 /* Table styling */
 .cg-timer-table {
-    width: 100%;
     border-collapse: collapse;
     font-size: 11px;
     table-layout: fixed;
@@ -96,7 +95,6 @@
     background: #2a2a2a;
     border: 1px solid #555;
     border-radius: 4px;
-    width: 100%;
     border-collapse: collapse;
     font-size: 12px;
     color: #eee;
@@ -208,7 +206,6 @@
 
 /* Table styling */
 .cg-timer-table {
-    width: 100%;
     border-collapse: collapse;
     font-size: 11px;
     table-layout: fixed;
@@ -237,7 +234,6 @@
 }
 /* Timer Node Styling */
 .cg-timer-table {
-    width: 100%;
     border-collapse: collapse;
     font-size: 12px;
     color: #eee;
