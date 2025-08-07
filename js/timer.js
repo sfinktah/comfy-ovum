@@ -805,7 +805,7 @@ app.registerExtension({
                     }
                     //this.onResize?.(this.size);
                 }
-                setTimeout(Timer.onChange, 1000);
+                setTimeout(Timer.onChange, 5000);
 
                 // Mount the element inside the node
                 // this.addCustomWidget(htmlWidget);
