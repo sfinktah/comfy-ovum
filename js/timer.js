@@ -219,10 +219,11 @@ class Timer {
     }
 
     static getCurrentRunTime(id) {
-        if (!Timer.current_run_id || !Timer.run_history[Timer.current_run_id]) {
+        const currentRun = Timer.run_history[Timer.current_run_id];
+        if (!currentRun?.nodes[id]?.totalTime) {
             return 0;
         }
-        return Timer.run_history[Timer.current_run_id].nodes[id].totalTime;
+        return currentRun.nodes[id].totalTime;
     }
 
     static getLastNRunsAvg(id, n = null) {
