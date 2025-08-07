@@ -21,19 +21,12 @@ function get_position_style(ctx, scroll_width, widget_width, y, node_width, node
         .multiplySelf(ctx.getTransform())
         .translateSelf(margin, margin + y);
 
-
-    const x = 50; // Math.max(0, Math.round(ctx.getTransform().a*(node_width - scroll_width - 2*MARGIN)/2));
     return {
         transformOrigin: '0 0',
         transform: transform,
-        left: `50px`,
-        top: `50px`,
         position: "absolute",
         maxWidth: `${widget_width - MARGIN * 2}px`,
         maxHeight: `${node_height - MARGIN * 2 - y}px`,
-        width: `auto`,
-        height: `auto`,
-        overflow: `auto`,
     }
 }
 
@@ -390,7 +383,6 @@ class Timer {
     static executing(e) {
         if (e.detail == Timer?.currentNodeId) return;
         const node_name = get_node_name_by_id(e.type)
-        console.log(`cg-quicknodes: ${(e.type)} ${node_name}`, e);
 
         const t = LiteGraph.getTime();
         const unix_t = Math.floor(t / 1000);
@@ -619,7 +611,9 @@ class Timer {
                 regexLabel,
             ]),
                 copyButton,
-            table
+            $el("div", {
+                className: "cg-timer-table-wrapper",
+            }, [ table ])
         ]);
     }
 }
@@ -627,10 +621,10 @@ class Timer {
 app.registerExtension({
     name: "cg.quicknodes.timer",
     setup: function () {
-        // Load the external CSS stylesheet
+        // Alternative approach using the fileURL method:
         const styleLink = document.createElement('link');
         styleLink.rel = 'stylesheet';
-        styleLink.href = 'extensions/cg-quicknodes/js/timer.css';
+        styleLink.href = api.fileURL('extensions/cg-quicknodes/timer.css');
         styleLink.id = 'cg-timer-stylesheet';
         document.head.appendChild(styleLink);
 
@@ -653,7 +647,8 @@ app.registerExtension({
             nodeType.prototype.onNodeCreated = function () {
                 orig_nodeCreated?.apply(this, arguments);
 
-                console.log('cg.quicknodes.timer.onNodeCreated', this);
+                // ComfyNode
+                // console.log('cg.quicknodes.timer.onNodeCreated', this);
                 this.addWidget("button", "clear", "", Timer.clear);
 
                 // Add Save button
@@ -676,30 +671,39 @@ app.registerExtension({
                     return Timer.setLastNRuns(v);
                 }, { min: 1, max: 20, step: 10, precision: 0 });
 
-                this.ageHandle = this.addWidget("number", "Age", 28, function () {
-                    console.log("age modified", this)
-                }, {min: 0, max: 100, step: 10, precision: 0})
-
+                // Create a properly styled HTML widget that stays aligned with the node
                 const widget = {
                     type: "HTML",
                     name: "flying",
                     draw: function (ctx, node, widget_width, y, widget_height) {
                         Object.assign(this.inputEl.style, get_position_style(ctx, this.inputEl.scrollWidth, widget_width, y, node.size[0], node.size[1]));
                     },
+                    onRemoved: function() {
+                        // Clean up
+                        if (this.inputEl) this.inputEl.remove();
+                    }
                 };
-                widget.inputEl = $el("div", [$el("span"),]);
 
+                // Create container with proper styling
+                widget.inputEl = $el("div", {
+                    className: "cg-timer-container",
+                }, [$el("span", "Loading...")]);
+
+                // Add to DOM at the right place - directly to body but will be positioned correctly
                 document.body.appendChild(widget.inputEl);
 
                 this.addCustomWidget(widget);
+
+                // Make sure widget is cleaned up when node is removed
                 this.onRemoved = function () {
                     widget.inputEl.remove();
                 };
+
                 this.serialize_widgets = false;
 
                 Timer.onChange = function () {
                     // .cg-timer-table
-                    
+
                     const existingTable = widget.inputEl.querySelector('.cg-timer-table');
                     if (existingTable) {
                         existingTable.parentNode.replaceChild(Timer.html('table'), existingTable);
@@ -708,6 +712,7 @@ app.registerExtension({
                     }
                     //this.onResize?.(this.size);
                 }
+                setTimeout(Timer.onChange, 100);
 
                 // Mount the element inside the node
                 // this.addCustomWidget(htmlWidget);
