@@ -551,8 +551,14 @@ class Timer {
         const runIds = Object.keys(Timer.run_history).sort().reverse().slice(0, Timer.last_n_runs);
         const actualRuns = Math.min(runIds.length, Timer.last_n_runs);
         let runNumber = 1;
-        for (let i = actualRuns - 1; i > 0; i--) {
-            tableHeader.push($el('th', {className: "run-" + runNumber, "textContent": `Run ${runNumber}`}));
+        for (let i = actualRuns - 1; i >= 0; i--) {
+            tableHeader.push($el('th', {className: "run-n", "textContent": `Run ${runNumber}`}));
+            runNumber += 1;
+        }
+
+        // Add empty cells for missing runs
+        for (let i = actualRuns; i < Timer.last_n_runs; i++) {
+            tableHeader.push($el('th', {className: "run-n", "textContent": `Run ${runNumber}`}));
             runNumber += 1;
         }
 
@@ -610,15 +616,15 @@ class Timer {
             const actualRuns = Math.min(runIds.length, Timer.last_n_runs);
 
             // Add cells for actual runs
-            for (let i = actualRuns - 1; i > 0; i--) {
+            for (let i = actualRuns - 1; i >= 0; i--) {
                 const runId = runIds[i];
                 const runTime = runId && Timer.run_history[runId]?.nodes[t]?.totalTime || 0;
-                rowCells.push($el('td', {className: "run-" + (i + 1), "textContent": Timer._format(runTime)}));
+                rowCells.push($el('td', {className: "run-n", "textContent": Timer._format(runTime)}));
             }
 
             // Add empty cells for missing runs
             for (let i = actualRuns; i < Timer.last_n_runs; i++) {
-                rowCells.push($el('td', {className: "run-" + (i + 1), "textContent": "-"}));
+                rowCells.push($el('td', {className: "run-n", "textContent": "-"}));
             }
 
             table.append($el("tr", rowCells));

@@ -42,7 +42,6 @@ export const timerStyles = `
     font-size: 12px;
     color: #eee;
     overflow: auto;
-    max-height: 400px;
     padding: 8px;
     box-sizing: border-box;
     z-index: 10;
@@ -113,18 +112,9 @@ export const timerStyles = `
 }
 
 .cg-timer-table .node {
-    width: 40%;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-}
-
-.cg-timer-table .runs,
-.cg-timer-table .per-run,
-.cg-timer-table .per-flow,
-.cg-timer-table .current-run {
-    width: 15%;
-    text-align: right;
 }
 
 .cg-timer-container button {
@@ -147,6 +137,44 @@ export const timerStyles = `
     overflow: auto;
     height: 100%;
 }
+
+.cg-timer-container {
+    width: 100%;
+}
+
+.cg-timer-table-wrapper {
+    overflow: auto;
+    height: 100%;
+    width: 100%;
+}
+
+.cg-timer-table {
+    width: 100%;
+}
+
+.cg-timer-table td {
+    padding: 3px 6px;
+    border-bottom: 1px solid #444;
+    color: #ccc;
+}
+
+.cg-timer-table .node {
+    min-width: 200px;
+    width: auto;
+}
+
+.cg-timer-table .runs, 
+.cg-timer-table .per-run, 
+.cg-timer-table .per-flow, 
+.cg-timer-table .current-run,
+.cg-timer-table .run-n
+{
+    min-width: 100px;
+    width: auto;
+    text-align: right;
+}
+
+
 `;
 
 /**
