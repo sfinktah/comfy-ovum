@@ -63,6 +63,7 @@ class Timer {
     static onChange = null;
     static searchTerm = '';
     static searchRegex = false;
+    static run_notes = {}; // Store notes for each run
 
 
     static saveToLocalStorage() {
@@ -71,6 +72,7 @@ class Timer {
             localStorage.setItem(LOCALSTORAGE_KEY + '.settings', JSON.stringify({
                 last_n_runs: Timer.last_n_runs
             }));
+            localStorage.setItem(LOCALSTORAGE_KEY + '.run_notes', JSON.stringify(Timer.run_notes));
         } catch (e) {
             console.warn('Failed to save timer history:', e);
         }
@@ -86,7 +88,8 @@ class Timer {
                 all_times: Timer.all_times,
                 run_history: Timer.run_history,
                 last_n_runs: Timer.last_n_runs,
-                runs_since_clear: Timer.runs_since_clear
+                runs_since_clear: Timer.runs_since_clear,
+                run_notes: Timer.run_notes
             }).catch(err => {
                 console.warn('Failed to save timer data to storage:', err);
             });
@@ -121,6 +124,12 @@ class Timer {
                 if (settings.last_n_runs && typeof settings.last_n_runs === 'number') {
                     Timer.last_n_runs = settings.last_n_runs;
                 }
+            }
+
+            // Load run notes
+            const notesData = localStorage.getItem(LOCALSTORAGE_KEY + '.run_notes');
+            if (notesData) {
+                Timer.run_notes = JSON.parse(notesData);
             }
         } catch (e) {
             console.warn('Failed to load timer history:', e);
@@ -157,6 +166,9 @@ class Timer {
                 if (data && data.runs_since_clear !== undefined) {
                     Timer.runs_since_clear = data.runs_since_clear;
                 }
+                if (data && data.run_notes) {
+                    Timer.run_notes = data.run_notes;
+                }
                 if (Timer.onChange) Timer.onChange();
             }).catch(err => {
                 console.warn('Failed to load timer data from storage:', err);
@@ -188,6 +200,7 @@ class Timer {
         Timer.run_history = {};
         Timer.current_run_id = null;
         Timer.runs_since_clear = 0;
+        Timer.run_notes = {};
         if (Timer.onChange) Timer.onChange();
     }
 
@@ -438,11 +451,28 @@ class Timer {
             Timer.run_history[Timer.current_run_id].endTime = t;
             Timer.run_history[Timer.current_run_id].totalTime = t - Timer.run_history[Timer.current_run_id].startTime;
 
+            // Save any notes from the textarea for this run
+            const timerNodes = app.graph._nodes.filter(node => node.type === "Timer");
+            if (timerNodes.length > 0) {
+                const timerNode = timerNodes[0]; // Use the first timer node found
+                const noteWidget = timerNode.widgets.find(w => w.name === "Run notes");
+                if (noteWidget && noteWidget.value) {
+                    Timer.run_notes[Timer.current_run_id] = noteWidget.value;
+                    // Reset the text area for next run
+                    noteWidget.value = "";
+                    timerNode.setDirtyCanvas(true);
+                }
+            }
+
             // Clean up old runs if we have too many
             const runIds = Object.keys(Timer.run_history);
             if (runIds.length > 20) { // Keep max 20 runs in history
                 const oldestRunId = runIds.sort()[0];
                 delete Timer.run_history[oldestRunId];
+                // Also delete corresponding notes
+                if (Timer.run_notes[oldestRunId]) {
+                    delete Timer.run_notes[oldestRunId];
+                }
             }
         }
     }
@@ -506,6 +536,26 @@ class Timer {
                     }).join('\t');
                     tableText += rowText + '\n';
                 });
+
+                // Add run notes if we have any
+                if (Object.keys(Timer.run_notes).length > 0) {
+                    tableText += '\n### Run Notes\n';
+                    const runIds = Object.keys(Timer.run_history).sort().reverse().slice(0, Timer.last_n_runs);
+                    let runNumber = 1;
+                    for (let i = runIds.length - 1; i >= 0; i--) {
+                        const runId = runIds[i];
+                        if (Timer.run_notes[runId]) {
+                            const noteLines = Timer.run_notes[runId].split('\n');
+                            if (noteLines.length > 0) {
+                                tableText += `RUN ${runNumber}: ${noteLines[0]}\n`;
+                                for (let j = 1; j < noteLines.length; j++) {
+                                    tableText += `       ${noteLines[j]}\n`;
+                                }
+                            }
+                        }
+                        runNumber++;
+                    }
+                }
 
                 // Copy to clipboard
                 navigator.clipboard.writeText(tableText)
@@ -707,6 +757,15 @@ app.registerExtension({
                 this.addWidget("number", "Last runs to show", Timer.last_n_runs, (v) => {
                     return Timer.setLastNRuns(v);
                 }, { min: 1, max: 20, step: 10, precision: 0 });
+
+                // Add the multiline run notes textarea
+                const textareaWidget = this.addWidget("text", "Run notes", "", (v) => {
+                    // Save the note to the current run if available
+                    if (Timer.current_run_id) {
+                        Timer.run_notes[Timer.current_run_id] = v;
+                    }
+                    return v;
+                }, { multiline: true });  // Enable multiline for textarea
 
                 // Create a properly styled HTML widget that stays aligned with the node
                 const widget = {
