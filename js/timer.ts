@@ -77,8 +77,6 @@ class Timer {
     static onChange: null | (() => void) = null;
     static searchTerm = '';
     static searchRegex = false;
-    static nodeRunningStartTime: number | null = null; // Track when the current node started running
-    static runningTimerInterval: number | null = null; // Interval ID for updating the running timer
 
     static saveToLocalStorage(): void {
         try {
@@ -224,26 +222,11 @@ class Timer {
     }
 
     static getCurrentRunTime(id: string): number {
-        if (!Timer.current_run_id || !Timer.run_history[Timer.current_run_id]) {
+        const currentRun = Timer.run_history[Timer.current_run_id];
+        if (!currentRun?.nodes[id]?.totalTime) {
             return 0;
         }
-
-        const nodeData = Timer.run_history[Timer.current_run_id].nodes[id];
-        if (!nodeData) {
-            // If this is the currently running node, show running time
-            if (id === (Timer as any).currentNodeId && Timer.nodeRunningStartTime) {
-                const currentTime = (window as any).LiteGraph.getTime();
-                return currentTime - Timer.nodeRunningStartTime;
-            }
-            return 0;
-        }
-
-        // If this node is currently running, return the running time instead of total time
-        if (id === (Timer as any).currentNodeId && nodeData.runningTime !== undefined) {
-            return nodeData.runningTime;
-        }
-
-        return nodeData.totalTime || 0;
+        return currentRun.nodes[id].totalTime;
     }
 
     static getLastNRunsAvg(id: string, n: number | null = null): number {
@@ -267,24 +250,6 @@ class Timer {
         return Timer.run_history[runId]?.nodes[id]?.totalTime || 0;
     }
 
-    static updateRunningNodeTime(): void {
-        if (!(Timer as any).currentNodeId || !Timer.nodeRunningStartTime) return;
-
-        const currentTime = (window as any).LiteGraph.getTime();
-        const elapsedTime = currentTime - Timer.nodeRunningStartTime;
-
-        // Update the current run's node time temporarily for display purposes
-        if (Timer.current_run_id && Timer.run_history[Timer.current_run_id]) {
-            if (!Timer.run_history[Timer.current_run_id].nodes[(Timer as any).currentNodeId]) {
-                Timer.run_history[Timer.current_run_id].nodes[(Timer as any).currentNodeId] = { count: 0, totalTime: 0 };
-            }
-            // Update the running time (this will be overwritten with the final time when node completes)
-            Timer.run_history[Timer.current_run_id].nodes[(Timer as any).currentNodeId].runningTime = elapsedTime;
-
-            // Trigger UI update
-            if (Timer.onChange) Timer.onChange();
-        }
-    }
 
     static add_timing(id, dt) {
         // Update aggregated timing data
@@ -457,26 +422,12 @@ class Timer {
         const t = LiteGraph.getTime();
         const unix_t = Math.floor(t / 1000);
 
-        // Clear any existing running timer interval
-        if (Timer.runningTimerInterval) {
-            clearInterval(Timer.runningTimerInterval);
-            Timer.runningTimerInterval = null;
-        }
-
         Timer.add_timing(Timer.currentNodeId ? Timer.currentNodeId : "startup", t - Timer.lastChangeTime)
 
         Timer.lastChangeTime = t;
         Timer.currentNodeId = e.detail;
-        Timer.nodeRunningStartTime = t; // Set the start time for the running node
 
         if (!Timer.currentNodeId) Timer.add_timing("total", t - Timer.startTime)
-
-        // Start a timer to update the display while node is running
-        if (Timer.currentNodeId) {
-            Timer.runningTimerInterval = setInterval(() => {
-                Timer.updateRunningNodeTime();
-            }, 100); // Update every 100ms
-        }
 
         if (Timer.onChange) Timer.onChange();
     }
@@ -527,26 +478,8 @@ class Timer {
         return Timer.run_history[runId]?.nodes[id]?.totalTime || 0;
     }
 
-    static updateRunningNodeTime() {
-        if (!Timer.currentNodeId || !Timer.nodeRunningStartTime) return;
 
-        const currentTime = LiteGraph.getTime();
-        const elapsedTime = currentTime - Timer.nodeRunningStartTime;
-
-        // Update the current run's node time temporarily for display purposes
-        if (Timer.current_run_id && Timer.run_history[Timer.current_run_id]) {
-            if (!Timer.run_history[Timer.current_run_id].nodes[Timer.currentNodeId]) {
-                Timer.run_history[Timer.current_run_id].nodes[Timer.currentNodeId] = { count: 0, totalTime: 0 };
-            }
-            // Update the running time (this will be overwritten with the final time when node completes)
-            Timer.run_history[Timer.current_run_id].nodes[Timer.currentNodeId].runningTime = elapsedTime;
-
-            // Trigger UI update
-            if (Timer.onChange) Timer.onChange();
-        }
-    }
-
-            static add_timing(id: string, dt: number): void {
+    static add_timing(id: string, dt: number): void {
         // Update aggregated timing data
         var this_node_data = Timer.all_times.find((node_data) => node_data.id === id);
         if (!this_node_data) {
@@ -577,92 +510,18 @@ class Timer {
         }
     }
 
-    /**
-     * Custom tick handler function
-     * @param {any} x - Event object
-     */
-    static tick(x: any): void {
-        if (x.detail == (Timer as any).currentNodeId) return;
-        console.log(`cg-quicknodes: ${(x.type)} ${(x.detail)}`, x);
+    // Removed tick method as it's not used in timer.js
 
-        const t = (window as any).LiteGraph.getTime();
+    // Removed progress method as it's not used in timer.js
 
-        Timer.add_timing((Timer as any).currentNodeId ? (Timer as any).currentNodeId : "startup", t - (Timer as any).lastChangeTime)
+    // Removed setSearchTerm and setSearchRegex methods as they're not used in timer.js
 
-        (Timer as any).lastChangeTime = t;
-        (Timer as any).currentNodeId = x.detail;
-
-        // Start tracking running time for the new node
-        Timer.nodeRunningStartTime = t;
-
-        // Setup interval to update running time
-        if (Timer.runningTimerInterval) {
-            clearInterval(Timer.runningTimerInterval);
-        }
-        Timer.runningTimerInterval = window.setInterval(Timer.updateRunningNodeTime, 100);
-
-        if (!(Timer as any).currentNodeId) {
-            Timer.add_timing("total", t - (Timer as any).startTime);
-            // Clear the running timer interval when workflow completes
-            if (Timer.runningTimerInterval) {
-                clearInterval(Timer.runningTimerInterval);
-                Timer.runningTimerInterval = null;
-            }
-
-            // Save data after each complete run
-            Timer.saveToStorage();
-        }
-
-        if (Timer.onChange) Timer.onChange();
-    }
-
-    /**
-     * Progress event handler
-     * @param {any} x - Event object
-     */
-    static progress(x: any): void {
-        // Not implemented in the TypeScript version
-    }
-
-    /**
-     * Set search term for filtering
-     * @param {string} term - Search term
-     */
-    static setSearchTerm(term: string): void {
-        Timer.searchTerm = term;
-        if (Timer.onChange) Timer.onChange();
-    }
-
-    /**
-     * Toggle regex search
-     * @param {boolean} useRegex - Whether to use regex
-     */
-    static setSearchRegex(useRegex: boolean): void {
-        Timer.searchRegex = useRegex;
-        if (Timer.onChange) Timer.onChange();
-    }
-
-    /**
-     * Handler for execution start event
-     * @param {any} e - Event object
-     */
     static executionStart(e: any): void {
-        // Implementation for execution start
+
     }
 
-    /**
-     * Handler for execution success event
-     * @param {any} e - Event object
-     */
     static executionSuccess(e: any): void {
         const t = (window as any).LiteGraph.getTime();
-
-        // Clear the running timer interval
-        if (Timer.runningTimerInterval) {
-            clearInterval(Timer.runningTimerInterval);
-            Timer.runningTimerInterval = null;
-        }
-
         if (Timer.current_run_id && Timer.run_history[Timer.current_run_id]) {
             Timer.run_history[Timer.current_run_id].endTime = t;
             Timer.run_history[Timer.current_run_id].totalTime = t - Timer.run_history[Timer.current_run_id].startTime;
@@ -674,11 +533,6 @@ class Timer {
                 delete Timer.run_history[oldestRunId];
             }
         }
-
-        // Reset node running start time
-        Timer.nodeRunningStartTime = null;
-
-        if (Timer.onChange) Timer.onChange();
     }
 
             static html(scope: string | undefined): HTMLElement {
@@ -893,7 +747,7 @@ app.registerExtension({
             console.error("Failed to load timer styles:", err);
         });
 
-        Timer.loadFromLocalStorage(); // <--- Load history on startup
+        Timer.loadFromStorage(); // <--- Load history on startup
         (window as any).Timer = Timer;
         api.addEventListener("executing", Timer.executing);
         api.addEventListener("execution_start", Timer.executionStart);
