@@ -772,33 +772,56 @@ app.registerExtension({
                     return v;
                 }, { multiline: true });  // Enable multiline for textarea
 
+                const cuckooWidgetName = "cuckooWidget";
+                const node = node ?? this
+                // var w = node.widgets?.find((w) => w.name === text_widget_name);
+                // if (w === undefined) {
+                let widget;
+                if (true) {
+                    widget = ComfyWidgets["STRING"](node, cuckooWidgetName, ["STRING", { multiline: true }], app).widget;
+                    widget.inputEl.readOnly = false;
+                    widget.inputEl.style.opacity = 0.6;
+                    widget.inputEl.style.fontSize = "12pt";
+                }
+                widget.value = "message";
+                if (this.title?.includes("+")) {
+                    widget.inputEl.style.fontSize = "300%"
+                }
+                // What does this even do?
+                // node.onResize?.(node.size)
+
                 // Create a properly styled HTML widget that stays aligned with the node
-                const widget = {
-                    type: "HTML",
-                    name: "flying",
-                    draw: function (ctx, node, widget_width, y, widget_height) {
-                        Object.assign(this.inputEl.style, get_position_style(ctx, this.inputEl.scrollWidth, widget_width, y, node.size[0], node.size[1]));
-                    },
-                    onRemoved: function() {
-                        // Clean up
-                        if (this.inputEl) this.inputEl.remove();
-                    }
-                };
+                if (0) {
+                    const widget = {
+                        type: "HTML",
+                        name: "flying",
+                        draw: function (ctx, node, widget_width, y, widget_height) {
+                            Object.assign(this.inputEl.style, get_position_style(ctx, this.inputEl.scrollWidth, widget_width, y, node.size[0], node.size[1]));
+                        },
+                        onRemoved: function () {
+                            // Clean up
+                            if (this.inputEl) this.inputEl.remove();
+                        }
+                    };
 
-                // Create container with proper styling
-                widget.inputEl = $el("div", {
-                    className: "cg-timer-container",
-                }, [$el("span", "Loading...")]);
+                    // Create container with proper styling
+                    widget.inputEl = $el("div", {
+                        className: "cg-timer-container",
+                    }, [$el("span", "Loading...")]);
 
-                // Add to DOM at the right place - directly to body but will be positioned correctly
-                document.body.appendChild(widget.inputEl);
+                    // Add to DOM at the right place - directly to body but will be positioned correctly
+                    document.body.appendChild(widget.inputEl);
 
-                this.addCustomWidget(widget);
+                    this.addCustomWidget(widget);
 
-                // Make sure widget is cleaned up when node is removed
-                this.onRemoved = function () {
-                    widget.inputEl.remove();
-                };
+                    // Make sure widget is cleaned up when node is removed
+                    this.onRemoved = function () {
+                        widget.inputEl.remove();
+                    };
+                }
+                else {
+                    widget.inputEl.appendChild($el("table", {className: "cg-timer-table"}));
+                }
 
                 this.serialize_widgets = false;
 
