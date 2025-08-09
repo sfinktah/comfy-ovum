@@ -44,7 +44,6 @@ export const timerStyles = `
     overflow: auto;
     padding: 8px;
     box-sizing: border-box;
-    z-index: 10;
     left: 64px;
     top: 57px;
     overflow: hidden;

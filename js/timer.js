@@ -49,6 +49,11 @@ function get_node_name_by_id(id) {
     return removeEmojis(name) + ' (' + id + ')';
 }
 
+function doesNodeBelongToUs(id) {
+    const node = app.graph._nodes_by_id[id];
+    if (!node) return false;
+}
+
 function stripTrailingId(title) {
     // Remove trailing ' (123)' from the title
     return title.replace(/ \(\d+\)$/, '');
