@@ -72,7 +72,7 @@ function forwardWheelToCanvas(widgetEl, canvasEl) {
 
         const forwarded = new WheelEvent('wheel', {
             deltaX: e.deltaX,
-            deltaY: e.deltaY,
+            deltaY: -e.deltaY, // Invert the deltaY to fix the wheel direction
             deltaZ: e.deltaZ,
             deltaMode: e.deltaMode,
             clientX: e.clientX,
@@ -797,10 +797,6 @@ app.registerExtension({
                 
                 this.addWidget("button", "clear", "", Timer.clear);
 
-                // Add Save button
-                this.addWidget("button", "save", "", () => {
-                    Timer.saveToLocalStorage();
-                });
 
                 // Add Storage button
                 this.addWidget("button", "store", "", () => {
