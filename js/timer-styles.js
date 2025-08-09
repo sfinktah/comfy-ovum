@@ -37,7 +37,7 @@ export const timerStyles = `
     letter-spacing: 0.05em;
 }
 
-.cg-timer-container {
+.cg-timer-container-unused-now {
     font-family: monospace;
     font-size: 12px;
     color: #eee;
@@ -51,6 +51,7 @@ export const timerStyles = `
 
 .cg-timer-widget {
     width: 100%;
+    overflow: auto;
 }
 
 .cg-timer-search {
@@ -132,17 +133,11 @@ export const timerStyles = `
     background: #555;
 }
 
-.cg-timer-table-wrapper {
-    overflow: auto;
-    height: 100%;
-}
-
 .cg-timer-container {
     width: 100%;
 }
 
 .cg-timer-table-wrapper {
-    overflow: auto;
     height: 100%;
     width: 100%;
 }

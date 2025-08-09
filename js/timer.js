@@ -297,6 +297,21 @@ class Timer {
     }
 
     /**
+     * @typedef {Object} ComfyNode
+     * @property {string} type
+     * @property {string} name
+     * @property {string} title
+     * @property {Array<any>} widgets
+     * @property {Array<number>} size
+     * @property {function} addWidget
+     * @property {function} addCustomWidget
+     * @property {function} addDOMWidget
+     * @property {function} onRemoved
+     * @property {HTMLElement} widget_area
+     * @property {boolean} serialize_widgets
+     */
+
+    /**
      * @typedef {Object} WebSocketLike
      * @property {string} url
      * @property {number} readyState
@@ -736,11 +751,16 @@ app.registerExtension({
             }
 
             const orig_nodeCreated = nodeType.prototype.onNodeCreated;
+            /**
+             * @this {ComfyNode}
+             */
             nodeType.prototype.onNodeCreated = function () {
+                console.log('beforeRegisterNodeDef.onNodeCreated', this);
                 orig_nodeCreated?.apply(this, arguments);
 
                 // ComfyNode
                 // console.log('cg.quicknodes.timer.onNodeCreated', this);
+                
                 this.addWidget("button", "clear", "", Timer.clear);
 
                 // Add Save button
@@ -773,19 +793,26 @@ app.registerExtension({
                 }, { multiline: true });  // Enable multiline for textarea
 
                 const cuckooWidgetName = "cuckooWidget";
-                const node = node ?? this
-                // var w = node.widgets?.find((w) => w.name === text_widget_name);
+                // var w = this.widgets?.find((w) => w.name === text_widget_name);
                 // if (w === undefined) {
-                let widget;
-                if (true) {
-                    widget = ComfyWidgets["STRING"](node, cuckooWidgetName, ["STRING", { multiline: true }], app).widget;
+
+                /**
+                 * @var {BaseDOMWidgetImpl} widget
+                 */
+                let widget; // DOMWidgetImpl (extends BaseDOMWidgetImpl)
+                /**
+                 * @var {BaseDOMWidgetImpl} widget
+                 */
+                let widget2;
+                if (false) {
+                    widget = ComfyWidgets["STRING"](this, cuckooWidgetName, ["STRING", { multiline: true }], app).widget;
                     widget.inputEl.readOnly = false;
                     widget.inputEl.style.opacity = 0.6;
                     widget.inputEl.style.fontSize = "12pt";
-                }
-                widget.value = "message";
-                if (this.title?.includes("+")) {
-                    widget.inputEl.style.fontSize = "300%"
+                    widget.value = "message";
+                    if (this.title?.includes("+")) {
+                        widget.inputEl.style.fontSize = "300%"
+                    }
                 }
                 // What does this even do?
                 // node.onResize?.(node.size)
@@ -820,7 +847,36 @@ app.registerExtension({
                     };
                 }
                 else {
-                    widget.inputEl.appendChild($el("table", {className: "cg-timer-table"}));
+                    // export function addMultilineWidget(node, name, opts, callback) {
+                    // const inputEl = document.createElement('textarea')
+                    // inputEl.className = 'comfy-multiline-input'
+                    // inputEl.value = 'Loading...'
+                    // inputEl.placeholder = name
+                    // inputEl.style.display = "none"
+                    const inputEl = Timer.html();
+
+                    widget2 = this.addDOMWidget(name, 'textmultiline', inputEl, {
+                        getValue() {
+                            return inputEl.value
+                        },
+                        setValue(v) {
+                            inputEl.value = v
+                        },
+                    })
+                    widget2.inputEl = inputEl
+
+                    inputEl.addEventListener('input', () => {
+                        callback?.(widget.value)
+                        widget2.callback?.(widget.value)
+                    })
+                    widget2.onRemove = () => {
+                        inputEl.remove()
+                    }
+
+                    // return { minWidth: 400, minHeight: 200, widget: widget2 }
+                    // }
+                    // Create container with proper styling
+                    // widget2.inputEl.appendChild($el("div", {className: "cg-timer-table-wrapper"}, [$el("table", {className: "cg-timer-table"})]));
                 }
 
                 this.serialize_widgets = false;
@@ -828,11 +884,11 @@ app.registerExtension({
                 Timer.onChange = function () {
                     // .cg-timer-table
 
-                    const existingTable = widget.inputEl.querySelector('.cg-timer-table');
+                    const existingTable = widget2.inputEl.querySelector('.cg-timer-table');
                     if (existingTable) {
                         existingTable.parentNode.replaceChild(Timer.html('table'), existingTable);
                     } else {
-                        widget.inputEl.replaceChild(Timer.html(), widget.inputEl.firstChild);
+                        widget2.inputEl.replaceChild(Timer.html(), widget2.inputEl.firstChild);
                     }
                     //this.onResize?.(this.size);
                 }
