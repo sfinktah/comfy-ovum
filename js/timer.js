@@ -59,6 +59,40 @@ function stripTrailingId(title) {
     return title.replace(/ \(\d+\)$/, '');
 }
 
+function forwardWheelToCanvas(widgetEl, canvasEl) {
+    if (!widgetEl || !canvasEl) return;
+
+    widgetEl.addEventListener('wheel', (e) => {
+        // Only intercept and forward when Ctrl is held
+        if (!e.ctrlKey) return;
+
+        // Stop the widget from consuming the scroll and forward it
+        e.preventDefault();
+        e.stopPropagation();
+
+        const forwarded = new WheelEvent('wheel', {
+            deltaX: e.deltaX,
+            deltaY: e.deltaY,
+            deltaZ: e.deltaZ,
+            deltaMode: e.deltaMode,
+            clientX: e.clientX,
+            clientY: e.clientY,
+            screenX: e.screenX,
+            screenY: e.screenY,
+            ctrlKey: e.ctrlKey,
+            shiftKey: e.shiftKey,
+            altKey: e.altKey,
+            metaKey: e.metaKey,
+            buttons: e.buttons,
+            bubbles: true,
+            cancelable: true,
+            composed: true,
+        });
+
+        canvasEl.dispatchEvent(forwarded);
+    }, { passive: false });
+}
+
 class Timer {
     static all_times = [];
     static run_history = {}; // Store timings for each run
@@ -792,125 +826,48 @@ app.registerExtension({
                     return v;
                 }, { multiline: true });  // Enable multiline for textarea
 
-                const cuckooWidgetName = "cuckooWidget";
-                // var w = this.widgets?.find((w) => w.name === text_widget_name);
-                // if (w === undefined) {
 
                 /**
                  * @var {BaseDOMWidgetImpl} widget
                  */
-                let widget; // DOMWidgetImpl (extends BaseDOMWidgetImpl)
-                /**
-                 * @var {BaseDOMWidgetImpl} widget
-                 */
-                let widget2;
-                if (false) {
-                    widget = ComfyWidgets["STRING"](this, cuckooWidgetName, ["STRING", { multiline: true }], app).widget;
-                    widget.inputEl.readOnly = false;
-                    widget.inputEl.style.opacity = 0.6;
-                    widget.inputEl.style.fontSize = "12pt";
-                    widget.value = "message";
-                    if (this.title?.includes("+")) {
-                        widget.inputEl.style.fontSize = "300%"
-                    }
-                }
-                // What does this even do?
-                // node.onResize?.(node.size)
+                let widget;
 
-                // Create a properly styled HTML widget that stays aligned with the node
-                if (0) {
-                    const widget = {
-                        type: "HTML",
-                        name: "flying",
-                        draw: function (ctx, node, widget_width, y, widget_height) {
-                            Object.assign(this.inputEl.style, get_position_style(ctx, this.inputEl.scrollWidth, widget_width, y, node.size[0], node.size[1]));
-                        },
-                        onRemoved: function () {
-                            // Clean up
-                            if (this.inputEl) this.inputEl.remove();
-                        }
-                    };
+                const inputEl = Timer.html();
 
-                    // Create container with proper styling
-                    widget.inputEl = $el("div", {
-                        className: "cg-timer-container",
-                    }, [$el("span", "Loading...")]);
+                widget = this.addDOMWidget(name, 'textmultiline', inputEl, {
+                    getValue() {
+                        return inputEl.value
+                    },
+                    setValue(v) {
+                        inputEl.value = v
+                    },
+                })
+                widget.inputEl = inputEl
 
-                    // Add to DOM at the right place - directly to body but will be positioned correctly
-                    document.body.appendChild(widget.inputEl);
-
-                    this.addCustomWidget(widget);
-
-                    // Make sure widget is cleaned up when node is removed
-                    this.onRemoved = function () {
-                        widget.inputEl.remove();
-                    };
-                }
-                else {
-                    // export function addMultilineWidget(node, name, opts, callback) {
-                    // const inputEl = document.createElement('textarea')
-                    // inputEl.className = 'comfy-multiline-input'
-                    // inputEl.value = 'Loading...'
-                    // inputEl.placeholder = name
-                    // inputEl.style.display = "none"
-                    const inputEl = Timer.html();
-
-                    widget2 = this.addDOMWidget(name, 'textmultiline', inputEl, {
-                        getValue() {
-                            return inputEl.value
-                        },
-                        setValue(v) {
-                            inputEl.value = v
-                        },
-                    })
-                    widget2.inputEl = inputEl
-
-                    inputEl.addEventListener('input', () => {
-                        callback?.(widget.value)
-                        widget2.callback?.(widget.value)
-                    })
-                    widget2.onRemove = () => {
-                        inputEl.remove()
-                    }
-
-                    // return { minWidth: 400, minHeight: 200, widget: widget2 }
-                    // }
-                    // Create container with proper styling
-                    // widget2.inputEl.appendChild($el("div", {className: "cg-timer-table-wrapper"}, [$el("table", {className: "cg-timer-table"})]));
+                inputEl.addEventListener('input', () => {
+                    callback?.(widget.value)
+                    widget.callback?.(widget.value)
+                })
+                widget.onRemove = () => {
+                    inputEl.remove()
                 }
 
                 this.serialize_widgets = false;
 
                 Timer.onChange = function () {
-                    // .cg-timer-table
-
-                    const existingTable = widget2.inputEl.querySelector('.cg-timer-table');
+                    const existingTable = widget.inputEl.querySelector('.cg-timer-table');
                     if (existingTable) {
                         existingTable.parentNode.replaceChild(Timer.html('table'), existingTable);
                     } else {
-                        widget2.inputEl.replaceChild(Timer.html(), widget2.inputEl.firstChild);
+                        widget.inputEl.replaceChild(Timer.html(), widget.inputEl.firstChild);
                     }
                     //this.onResize?.(this.size);
                 }
-                setTimeout(Timer.onChange, 100);
-
-                // Mount the element inside the node
-                // this.addCustomWidget(htmlWidget);
-
-                // // Add to widget area inside node
-                // if (this.widget_area) {
-                //     this.widget_area.appendChild(htmlWidget.htmlEl);
-                // } else {
-                //     // fallback: attach to node's main DOM element if available (depends on ComfyUI version)
-                //     if (this.el) this.el.appendChild(htmlWidget.htmlEl);
-                //     else document.body.appendChild(htmlWidget.htmlEl); // fallback (shouldn't be needed)
-                // }
-                //
-                // // Clean up when node is removed
-                // this.onRemoved = function () {
-                //     htmlWidget.htmlEl.remove();
-                // };
-                // this.serialize_widgets = false; // don't auto-save widget state
+                setTimeout(() => {
+                    Timer.onChange();
+                    // Forward wheel events to canvas when Ctrl is pressed
+                    forwardWheelToCanvas(widget.inputEl, app.canvas.canvas);
+                }, 100);
             };
         }
     },
