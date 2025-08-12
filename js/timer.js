@@ -7,29 +7,11 @@ import { $el } from "../../scripts/ui.js";
 import { ComfyWidgets } from "../../scripts/widgets.js";
 import { print_r } from "./print_r.js";
 // Timer styles will be dynamically imported in the setup function
+// import _ from "./lodash";
 
 const MARGIN = 8;
 
 const LOCALSTORAGE_KEY = 'cg.quicknodes.timer.history';
-
-function get_position_style(ctx, scroll_width, widget_width, y, node_width, node_height) {
-    const visible = app.canvas.ds.scale > 0.5;
-    const margin = 0;
-    const elRect = ctx.canvas.getBoundingClientRect();
-    // console.log(elRect);
-    const transform = new DOMMatrix()
-        .scaleSelf(elRect.width / ctx.canvas.width, elRect.height / ctx.canvas.height)
-        .multiplySelf(ctx.getTransform())
-        .translateSelf(margin, margin + y);
-
-    return {
-        transformOrigin: '0 0',
-        transform: transform,
-        position: "absolute",
-        maxWidth: `${widget_width - MARGIN * 2}px`,
-        maxHeight: `${node_height - MARGIN * 2 - y}px`,
-    }
-}
 
 function removeEmojis(name) {
     const nameNoEmojis = name.replace(
@@ -103,6 +85,7 @@ class Timer {
     static searchTerm = '';
     static searchRegex = false;
     static run_notes = {}; // Store notes for each run
+    static systemInfo = null; // Store system information when connection opens
 
 
     static saveToLocalStorage() {
@@ -479,18 +462,25 @@ class Timer {
      * @param {ComfyTickEvent} e
      */
     static executing(e) {
-        if (e.detail == Timer?.currentNodeId) return;
-        const node_name = get_node_name_by_id(e.type)
+        let detail = e.detail;
+
+        if (typeof detail === "string") {
+            const match = detail.match(/^\d+:(\d+)$/);
+            detail = match ? match[1] : detail;
+        }
+
+        if (detail === Timer?.currentNodeId) return;
+        const node_name = get_node_name_by_id(detail);
 
         const t = LiteGraph.getTime();
         const unix_t = Math.floor(t / 1000);
 
-        Timer.add_timing(Timer.currentNodeId ? Timer.currentNodeId : "startup", t - Timer.lastChangeTime)
+        Timer.add_timing(Timer.currentNodeId ? Timer.currentNodeId : "startup", t - Timer.lastChangeTime);
 
         Timer.lastChangeTime = t;
-        Timer.currentNodeId = e.detail;
+        Timer.currentNodeId = detail;
 
-        if (!Timer.currentNodeId) Timer.add_timing("total", t - Timer.startTime)
+        if (!Timer.currentNodeId) Timer.add_timing("total", t - Timer.startTime);
 
         if (Timer.onChange) Timer.onChange();
     }
@@ -768,6 +758,35 @@ app.registerExtension({
         }).catch(err => {
             console.error("Failed to load timer styles:", err);
         });
+
+        // Collect system information when socket opens
+        function onSocketOpen() {
+            console.info("[ComfyUI] websocket opened/reconnected");
+            // Record system information when connection opens
+            app.api.getSystemStats().then(x => {
+                Timer.systemInfo = {
+                    argv: x.system?.argv?.slice(1).join(' ') || '',
+                    pytorch: x.system?.pytorch_version || '',
+                    gpu: x.devices?.[0]?.name || ''
+                };
+                console.log("System Info Collected:", Timer.systemInfo);
+            }).catch(err => {
+                console.warn("Failed to collect system information:", err);
+            });
+        }
+
+        // Handle socket close events
+        function onSocketClose(event) {
+            console.warn("[ComfyUI] websocket closed", event.code, event.reason);
+            Timer.systemInfo = {...Timer.systemInfo, connectionClosed: true, closeCode: event.code, closeReason: event.reason};
+        }
+
+        // Set up socket event listeners
+        if (api.socket && api.socket.readyState === WebSocket.OPEN) {
+            // If socket is already open, collect stats immediately
+            onSocketOpen();
+        }
+        api.addEventListener('reconnected', onSocketOpen);
 
         Timer.loadFromLocalStorage(); // <--- Load history on startup
         window.Timer = Timer;
