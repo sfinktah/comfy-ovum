@@ -1,11 +1,9 @@
 /** @typedef {import('@comfyorg/comfyui-frontend-types').ComfyApp} ComfyApp */
 
-import { api } from "../../scripts/api.js";
+import {api} from "../../scripts/api.js";
 /** @type {ComfyApp} */
-import { app } from "../../scripts/app.js";
-import { $el } from "../../scripts/ui.js";
-import { ComfyWidgets } from "../../scripts/widgets.js";
-import { print_r } from "./print_r.js";
+import {app} from "../../scripts/app.js";
+import {$el} from "../../scripts/ui.js";
 // Timer styles will be dynamically imported in the setup function
 // import _ from "./lodash";
 
@@ -13,17 +11,74 @@ const MARGIN = 8;
 
 const LOCALSTORAGE_KEY = 'cg.quicknodes.timer.history';
 
-function removeEmojis(name) {
-    const nameNoEmojis = name.replace(
-        /([\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{1F900}-\u{1F9FF}]|[\u{1FA70}-\u{1FAFF}]|[\u{1F100}-\u{1F1FF}]|[\u{2460}-\u{24FF}])/gu,
-        ''
-    );
+// Canonical graph helpers to avoid duplicating version/compat checks
+function graphGetNodeById(id) {
+    const g = app?.graph;
+    if (!g) return null;
+    if (typeof g.getNodeById === "function") return g.getNodeById(id);
+    if (g._nodes_by_id) return g._nodes_by_id[id] ?? null;
+    const nodes = g._nodes || g.nodes;
+    return Array.isArray(nodes) ? (nodes.find(n => n?.id === id) ?? null) : null;
+}
 
-    return nameNoEmojis;
+function findNodesByTypeName(type) {
+    const g = app?.graph;
+    if (!g) return [];
+    if (typeof g.findNodesByType === "function") return g.findNodesByType(type);
+    if (typeof g.findNodesByClass === "function") return g.findNodesByClass(type);
+    const nodes = g._nodes || g.nodes || [];
+    return nodes.filter(n => n?.type === type || n?.comfyClass === type || n?.name === type);
+}
+
+const findTimerNodes = () => findNodesByTypeName("Timer");
+
+function chainCallback(object, property, callback) {
+    if (object == undefined) {
+        //This should not happen.
+        console.error("Tried to add callback to non-existant object")
+        return;
+    }
+    if (property in object) {
+        const callback_orig = object[property];
+        object[property] = function () {
+            const r = callback_orig?.apply(this, arguments);
+            callback.apply(this, arguments);
+            return r;
+        };
+    } else {
+        object[property] = callback;
+    }
+}
+
+function removeEmojis(input) {
+    // Coerce to string safely; keep prior behavior of returning a string
+    if (typeof input !== "string") {
+        return input == null ? "" : String(input);
+    }
+
+    try {
+        // Use modern Unicode properties to remove emoji and pictographs
+        // - Extended_Pictographic and Emoji_Presentation broadly cover modern emoji
+        // - Remove U+FE0F (variation selector-16) that often appears in sequences
+        // Also handle keycap and skin-tone sequences.
+        const stripped = input
+            .replace(/[\p{Extended_Pictographic}\p{Emoji_Presentation}\uFE0F]/gu, "")
+            .replace(/\p{Emoji_Modifier_Base}\p{Emoji_Modifier}/gu, "")
+            .replace(/[\u20E3]/g, "");
+
+        // Normalize in case of any combining remnants
+        return stripped.normalize();
+    } catch {
+        // Fallback for environments without Unicode property escapes
+        return input.replace(
+            /([\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{1F900}-\u{1F9FF}]|[\u{1FA70}-\u{1FAFF}]|[\u{1F100}-\u{1F1FF}]|[\u{2460}-\u{24FF}]|\uFE0F)/gu,
+            ""
+        );
+    }
 }
 
 function get_node_name_by_id(id) {
-    const node = app.graph._nodes_by_id[id];
+    const node = graphGetNodeById(id);
     if (!node) return `id:${id}`;
     const name = node.title || node.name || node.type || "";
 
@@ -32,7 +87,7 @@ function get_node_name_by_id(id) {
 }
 
 function doesNodeBelongToUs(id) {
-    const node = app.graph._nodes_by_id[id];
+    const node = graphGetNodeById(id);
     if (!node) return false;
 }
 
@@ -159,6 +214,7 @@ class Timer {
     static hidden = []; // e.g., ['display:runs','copy:per-flow','both:current-run','per-run'] (bare means both)
     static ctrlDown = false; // Track Control key state for deletion UI
     static maxRuns = 40; // Maximum saved & displayed runs
+    static queuedNotesByPromptId = {}; // prompt_id -> queued note string (captured at queue time)
 
     static isHidden(key, where) {
         // where: 'display' | 'copy'
@@ -341,12 +397,77 @@ class Timer {
         return `${(number / 1000).toFixed(dp)}`
     }
 
+    // Convert any input value into a safe string for notes
+    static toNoteString(val) {
+        if (val === undefined || val === null) return "";
+        const t = typeof val;
+        if (t === "string") return val;
+        if (t === "number" || t === "boolean" || t === "bigint") return String(val);
+        try {
+            if (t === "object") {
+                const seen = new WeakSet();
+                return JSON.stringify(val, (key, value) => {
+                    if (typeof value === "object" && value !== null) {
+                        if (seen.has(value)) return "[Circular]";
+                        seen.add(value);
+                    }
+                    return value;
+                });
+            }
+        } catch (err) {
+            try {
+                return String(val);
+            } catch {
+                return "";
+            }
+        }
+        return String(val);
+    }
+
     static getCurrentRunTime(id) {
         const currentRun = Timer.run_history[Timer.current_run_id];
         if (!currentRun?.nodes[id]?.totalTime) {
             return 0;
         }
         return currentRun.nodes[id].totalTime;
+    }
+
+    // Attempt to extract the Timer node's queued note from a prompt payload
+    static extractQueuedNoteFromPrompt(promptPayload) {
+        try {
+            if (!promptPayload) return undefined;
+            // Heuristic: scan for any object with class_type === "Timer" and inputs containing our field
+            const targetInputKey = "Run notes (for queued run)";
+
+            const visited = new WeakSet();
+            const stack = [promptPayload];
+
+            while (stack.length) {
+                const cur = stack.pop();
+                if (!cur || typeof cur !== "object") continue;
+                if (visited.has(cur)) continue;
+                visited.add(cur);
+
+                // Node-like object check
+                if (cur.class_type === "Timer" && cur.inputs && typeof cur.inputs === "object") {
+                    if (Object.prototype.hasOwnProperty.call(cur.inputs, targetInputKey)) {
+                        return cur.inputs[targetInputKey];
+                    }
+                }
+
+                // If it's a plain object or array, traverse
+                if (Array.isArray(cur)) {
+                    for (const v of cur) stack.push(v);
+                } else {
+                    for (const k of Object.keys(cur)) {
+                        stack.push(cur[k]);
+                    }
+                }
+            }
+        } catch (err) {
+            console.warn("[Timer] extractQueuedNoteFromPrompt failed:", err);
+        }
+        return undefined;
     }
 
     static getLastNRunsAvg(id, n = null) {
@@ -591,58 +712,126 @@ class Timer {
     static executionStart(e) {
         // When a job starts, copy the queued run notes into the JS "Notes from queue" field
         try {
-            const timerNodes = app.graph._nodes.filter(node => node.type === "Timer");
+            const timerNodes = findTimerNodes();
+            console.debug("[Timer] executionStart: found timer nodes:", timerNodes?.length);
             if (timerNodes.length > 0) {
                 const timerNode = timerNodes[0];
+                console.debug("[Timer] Using timer node id/title:", timerNode?.id, timerNode?.title);
 
-                // If "input connection" is linked, read the upstream string
-                let connectedText = "";
+                // Try to read from a linked "input connection"
+                let connectedRaw = undefined;
                 try {
                     const inputSlot = timerNode.inputs?.find(inp => inp && (inp.name === "input connection" || inp.label === "input connection"));
+                    console.debug("[Timer] inputSlot for 'input connection':", inputSlot);
                     if (inputSlot?.link != null) {
                         const link = app.graph.links?.[inputSlot.link];
+                        console.debug("[Timer] link object:", link);
                         if (link) {
-                            const originNode = app.graph._nodes_by_id?.[link.origin_id];
+                            const originNode = (typeof app.graph.getNodeById === "function")
+                                ? app.graph.getNodeById(link.origin_id)
+                                : (app.graph._nodes_by_id ? app.graph._nodes_by_id[link.origin_id] : null);
+                            console.debug("[Timer] origin node from link:", originNode?.id, originNode?.title);
                             if (originNode) {
-                                // Heuristic: prefer a widget that holds a string, else first widget, else a common property
-                                if (Array.isArray(originNode.widgets) && originNode.widgets.length) {
-                                    const candidate =
-                                        originNode.widgets.find(w => typeof w?.value === "string") ||
-                                        originNode.widgets.find(w => (w?.type === "text" || w?.type === "string")) ||
-                                        originNode.widgets[0];
-                                    if (candidate && candidate.value != null) {
-                                        connectedText = String(candidate.value);
+                                // 1) Try output slot (if it exposes a value)
+                                if (Array.isArray(originNode.outputs) && link.origin_slot != null) {
+                                    const outSlot = originNode.outputs[link.origin_slot];
+                                    console.debug("[Timer] origin outSlot:", outSlot);
+                                    if (outSlot && "value" in outSlot && outSlot.value !== undefined) {
+                                        connectedRaw = outSlot.value;
+                                        console.debug("[Timer] Using output slot value:", connectedRaw);
                                     }
                                 }
-                                if (!connectedText && typeof originNode.properties?.value === "string") {
-                                    connectedText = originNode.properties.value;
+                                // 2) Try widgets (prefer any with a concrete value)
+                                if (connectedRaw === undefined && Array.isArray(originNode.widgets) && originNode.widgets.length) {
+                                    const widgetCandidates = originNode.widgets.filter(w => w && ("value" in w));
+                                    const preferred = widgetCandidates.find(w => typeof w.value === "string")
+                                        || widgetCandidates.find(w => (w?.type === "text" || w?.type === "string"))
+                                        || widgetCandidates[0];
+                                    if (preferred && preferred.value !== undefined) {
+                                        connectedRaw = preferred.value;
+                                        console.debug("[Timer] Using widget value from origin:", connectedRaw, "widget:", preferred?.name || preferred?.label || preferred?.type);
+                                    }
+                                }
+                                // 3) Try common properties
+                                if (connectedRaw === undefined && originNode?.properties) {
+                                    const p = originNode.properties;
+                                    if (typeof p.value !== "undefined") {
+                                        connectedRaw = p.value;
+                                        console.debug("[Timer] Using origin properties.value:", connectedRaw);
+                                    } else if (typeof p.text === "string") {
+                                        connectedRaw = p.text;
+                                        console.debug("[Timer] Using origin properties.text:", connectedRaw);
+                                    }
                                 }
                             }
                         }
+                    } else {
+                        console.debug("[Timer] No link in 'input connection'.");
                     }
                 } catch (e2) {
-                    console.warn("Failed to read connected input text:", e2);
+                    console.warn("[Timer] Failed to read connected input:", e2);
                 }
 
-                // Python-created widget for queued input (literal fallback)
+                // Prefer: connected input, then queued snapshot by prompt_id, then widget fallback
+                const promptId =
+                    e?.detail?.prompt_id ??
+                    e?.detail?.data?.prompt_id ??
+                    e?.detail?.promptId ??
+                    e?.prompt_id ??
+                    null;
+                if (promptId) {
+                    console.debug("[Timer] executionStart promptId:", promptId);
+                } else {
+                    console.debug("[Timer] executionStart: no promptId found on event detail:", e?.detail || e);
+                }
+
+                const queuedSnapshot = promptId ? Timer.queuedNotesByPromptId[promptId] : undefined;
+                if (promptId && queuedSnapshot !== undefined) {
+                    console.debug("[Timer] Found stored queued note for prompt:", promptId, "=>", queuedSnapshot);
+                    // Optionally clean up to avoid growth
+                    delete Timer.queuedNotesByPromptId[promptId];
+                }
+
+                // Python-created widget for queued input (literal fallback; note this reflects current UI)
                 const queuedInputWidget = timerNode.widgets?.find(w => w.name === "Run notes (for queued run)");
-                const queuedText = (connectedText && connectedText.length) ? connectedText : (queuedInputWidget?.value ?? "");
+                console.debug("[Timer] queuedInputWidget:", queuedInputWidget);
+                const widgetRaw = queuedInputWidget?.value;
+                console.debug("[Timer] widgetRaw value (current UI):", widgetRaw);
+
+                let queuedText = "";
+                if (connectedRaw !== undefined && connectedRaw !== null) {
+                    queuedText = Timer.toNoteString(connectedRaw);
+                    console.debug("[Timer] queuedText from connectedRaw (converted):", queuedText);
+                } else if (queuedSnapshot !== undefined) {
+                    queuedText = Timer.toNoteString(queuedSnapshot);
+                    console.debug("[Timer] queuedText from stored queued snapshot (converted):", queuedText);
+                } else if (widgetRaw !== undefined) {
+                    queuedText = Timer.toNoteString(widgetRaw);
+                    console.debug("[Timer] queuedText from widgetRaw (converted, fallback):", queuedText);
+                } else {
+                    console.debug("[Timer] No connected, no stored queued snapshot, and no widget value for queued notes.");
+                }
 
                 // Set JS field "Notes from queue"
                 const queueJsWidget = timerNode.widgets?.find(w => w.name === "Notes from queue");
                 if (queueJsWidget) {
                     queueJsWidget.value = queuedText || "";
+                    console.debug("[Timer] Set 'Notes from queue' widget to:", queueJsWidget.value);
                 }
                 // Ensure we have a run id
                 if (!Timer.current_run_id) {
                     Timer.current_run_id = Date.now().toString();
+                    console.debug("[Timer] Created new current_run_id:", Timer.current_run_id);
                 }
                 if (queuedText && Timer.current_run_id) {
                     const existing = Timer.run_notes[Timer.current_run_id] || "";
                     const combined = existing ? `${queuedText}\n${existing}` : queuedText;
                     Timer.run_notes[Timer.current_run_id] = combined;
+                    console.debug("[Timer] Updated run_notes for run:", Timer.current_run_id, "combined:", combined);
                 }
                 timerNode.setDirtyCanvas?.(true);
+            } else {
+                console.debug("[Timer] No timer nodes found in graph.");
             }
         } catch (err) {
             console.warn("Failed to propagate queued notes:", err);
@@ -656,7 +845,7 @@ class Timer {
             Timer.run_history[Timer.current_run_id].totalTime = t - Timer.run_history[Timer.current_run_id].startTime;
 
             // Save any notes from the textarea for this run
-            const timerNodes = app.graph._nodes.filter(node => node.type === "Timer");
+            const timerNodes = findTimerNodes();
             if (timerNodes.length > 0) {
                 const timerNode = timerNodes[0]; // Use the first timer node found
                 const activeWidget = timerNode.widgets.find(w => w.name === "Run notes (for active run)");
@@ -1014,6 +1203,35 @@ app.registerExtension({
         // Preload tooltip library (Tippy.js via CDN)
         ensureTooltipLib().catch(() => {});
 
+        // Wrap queuePrompt to capture queued notes at queue time
+        try {
+            const origQueuePrompt = api.queuePrompt?.bind(api);
+            if (typeof origQueuePrompt === "function") {
+                api.queuePrompt = async function(...args) {
+                    try {
+                        // Last arg is typically the prompt payload
+                        const payload = args[args.length - 1];
+                        const queuedRaw = Timer.extractQueuedNoteFromPrompt(payload);
+                        const result = await origQueuePrompt(...args);
+                        const promptId = result?.prompt_id ?? result?.promptId ?? result?.number ?? result?.data?.prompt_id;
+                        if (promptId && queuedRaw !== undefined) {
+                            const text = Timer.toNoteString(queuedRaw);
+                            Timer.queuedNotesByPromptId[promptId] = text;
+                            console.debug("[Timer] Captured queued note for prompt", promptId, ":", text);
+                        } else {
+                            console.debug("[Timer] queuePrompt: no promptId or no queuedRaw found.", { queuedRaw, result });
+                        }
+                        return result;
+                    } catch (err) {
+                        console.warn("[Timer] queuePrompt wrapper error:", err);
+                        return origQueuePrompt(...args);
+                    }
+                }
+            }
+        } catch (wrapErr) {
+            console.warn("[Timer] Failed to wrap queuePrompt:", wrapErr);
+        }
+
         // Collect system information when socket opens
         function onSocketOpen() {
             console.info("[ComfyUI] websocket opened/reconnected");
@@ -1062,23 +1280,29 @@ app.registerExtension({
     },
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
         if (nodeType.comfyClass === "Timer") {
-            const orig_executionStart = nodeType.prototype.onExecutionStart;
-            nodeType.prototype.onExecutionStart = function () {
-                orig_executionStart?.apply(this, arguments);
+            chainCallback(nodeType.prototype, "onExecutionStart", function () {
                 Timer.start();
-            }
+            });
 
-            const orig_nodeCreated = nodeType.prototype.onNodeCreated;
-            /**
-             * @this {ComfyNode}
-             */
-            nodeType.prototype.onNodeCreated = function () {
+            chainCallback(nodeType.prototype, "onExecuted", function (message) {
+                console.debug("[Timer] onExecuted", message);
+                let bg_image = message["bg_image"];
+                if (bg_image) {
+                    console.log("[Timer] onExecuted: bg_image", bg_image);
+                    this.properties.currentRunning = {data : bg_image };
+                }
+            });
+
+            chainCallback(nodeType.prototype, "onNodeCreated", function () {
                 console.log('beforeRegisterNodeDef.onNodeCreated', this);
-                orig_nodeCreated?.apply(this, arguments);
+                const node = this;
+
+                // Ensure built-in widgets (like 'Run notes (for queued run)') render above the dynamic inputs
+                // this.widgets_up = true;
 
                 // ComfyNode
                 // console.log('cg.quicknodes.timer.onNodeCreated', this);
-                
+
                 this.addWidget("button", "clear", "", Timer.clear);
 
 
@@ -1113,6 +1337,144 @@ app.registerExtension({
                 Timer.activeNotesWidget = textareaWidget;
                 Timer.notesFromQueueWidget = notesFromQueueWidget;
 
+                // ---- Dynamic inputs: arg1, arg2, ... ----
+                const ensureDynamicInputs = (isConnecting = true) => {
+                    console.log('ensureDynamicInputs', node);
+                    try {
+                        // this.inputs = this.inputs || [];
+                        // Ensure we have at least "input 1"
+                        // this === node
+                        // console.log('this == node?', this === node);
+                        const dynamicInputs = this.inputs.filter(input => input.name.startsWith("arg"));
+                        const dynamicInputIndexes = [];
+                        for (let i = 0; i < this.inputs.length; i++) {
+                            if (!this.inputs[i].isWidgetInputSlot) {
+                                dynamicInputIndexes.push(i);
+                            }
+                        }
+                        let dynamicInputLength = dynamicInputs.length;
+                        if (dynamicInputLength === 1) {
+                            if (dynamicInputs[0].name == dynamicInputs[0].localized_name && dynamicInputs[0].name.startsWith("arg")) {
+                                dynamicInputs[0].localized_name = "py-input " + dynamicInputs[0].name.substr(3);
+                            }
+                        }
+                        if (!dynamicInputs.length) {
+                            const nextIndex = dynamicInputLength + 1;
+                            console.debug(`[Timer] Adding initial dynamic input: arg${nextIndex}`);
+
+                            // properties include label, link, name, type, shape, widget, boundingRect
+                            /** @type {INodeInputSlot} */
+                            const nodeInputSlot = this.addInput(`arg${nextIndex}`, "*", { localized_name: "in-input " + nextIndex });
+                            dynamicInputs.push(nodeInputSlot);
+                            dynamicInputIndexes.push(dynamicInputLength);
+                            ++dynamicInputLength;
+
+                            // setDirtyCanvas is called by LGraphNode.addInput
+                            // this.canvas.setDirty(true, true);
+                            // node.graph.setDirtyCanvas(true);
+                        }
+
+                        // If last input has a link, add a new trailing input
+                        let last = this.inputs[dynamicInputIndexes[dynamicInputLength - 1]];
+                        const lastHasLink = (last.link != null);
+                        if (lastHasLink) {
+                            const nextIndex = dynamicInputLength + 1;
+                            console.debug("[Timer] Last input has link; adding input", nextIndex);
+                            const nodeInputSlot = this.addInput(`arg${nextIndex}`, "*", { localized_name: "nu-input " + nextIndex });
+                            // setDirtyCanvas is called by LGraphNode.addInput
+                            // this.canvas.setDirty(true, true);
+                            // node.graph.setDirtyCanvas(true);
+                        }
+                        else {
+                            console.debug("[Timer] Last input does not have link; seeing if it's cleanup time");
+                            if (!isConnecting) {
+                                let secondLast;
+                                for (;;) {
+                                    if (dynamicInputLength > 1)
+                                        secondLast = this.inputs[dynamicInputIndexes[dynamicInputLength - 2]]
+                                    else
+                                        secondlast = null;
+                                    if (secondLast && last && secondLast.link == null && last.link == null) {
+                                        console.debug("[Timer] Removing last input", last.name);
+                                        this.removeInput(dynamicInputIndexes[dynamicInputLength - 1]);
+                                        dynamicInputIndexes.pop();
+                                        --dynamicInputLength;
+                                        last = secondLast;
+                                    } else {
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+
+                    } catch (err) {
+                        console.warn("[Timer] ensureDynamicInputs failed:", err);
+                    }
+                };
+
+                // Initialize dynamic inputs
+                ensureDynamicInputs();
+
+                // Hook connections change to handle rename and auto-append inputs
+                chainCallback(this, "onConnectionsChange", function (slotType, slot, isConnecting, linkInfo, output) {
+                    try {
+                        console.debug("[Timer] onConnectionsChange", {
+                            slotType: slotType,
+                            slot: slot,
+                            isChangeConnect: isConnecting,
+                            linkInfo: linkInfo,
+                            output: output,
+                            nodeId: this.id
+                        });
+                        if (slotType == LiteGraph.INPUT) {
+                            // disconnecting
+                            if (!isConnecting) {
+                                if (this.inputs[slot].name.startsWith("arg")) {
+                                    this.inputs[slot].type = '*';
+                                    this.inputs[slot].localized_name = "re-input " + this.inputs[slot].name.substring(3);
+                                    // revertInputBaseName(slot);
+                                    // this.title = "Set"
+                                }
+                            }
+                            //On Connect
+                            if (linkInfo && node.graph && isConnecting) {
+                                const fromNode = graphGetNodeById(linkInfo.origin_id);
+                                // app.graph.getNodeById
+
+                                if (fromNode && fromNode.outputs && fromNode.outputs[linkInfo.origin_slot]) {
+                                    const type = fromNode.outputs[linkInfo.origin_slot].type;
+                                    // slot.name = newName;
+                                    // Set the slot type to match the connected type
+                                    // this.setDirtyCanvas?.(true, true);
+
+                                    if (this.inputs[slot].name.startsWith("arg")) {
+                                        this.inputs[slot].localized_name = type + " " + this.inputs[slot].name.substring(3);
+                                        this.inputs[slot].type = type;
+                                    }
+                                } else {
+                                    showAlert("node input undefined.")
+                                }
+                            }
+                            ensureDynamicInputs(isConnecting);
+                        }
+                    } catch (err) {
+                        console.warn("[Timer] onConnectionsChange handler error:", err);
+                    }
+
+                    // Only care about input side
+                    // if (slotType === LiteGraph.INPUT) {
+                    //     if (isChangeConnect) {
+                    //         const tStr = getConnectedTypeString(linkInfo) || "any";
+                    //         renameInputWithType(slot, tStr);
+                    //     } else {
+                    //         // On disconnect, revert to base name
+                    //         revertInputBaseName(slot);
+                    //     }
+                    //     // Always ensure trailing free input exists
+                    //
+                    // }
+                });
+                // ---- End dynamic inputs ----
 
                 /**
                  * @var {BaseDOMWidgetImpl} widget
@@ -1132,7 +1494,7 @@ app.registerExtension({
                 widget.inputEl = inputEl
 
                 inputEl.addEventListener('input', () => {
-                    callback?.(widget.value)
+                    // callback?.(widget.value)
                     widget.callback?.(widget.value)
                 })
                 widget.onRemove = () => {
@@ -1157,7 +1519,7 @@ app.registerExtension({
                     // Forward wheel events to canvas when Ctrl is pressed
                     forwardWheelToCanvas(widget.inputEl, app.canvas.canvas);
                 }, 100);
-            };
+            });
         }
     },
 
