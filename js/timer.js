@@ -75,6 +75,76 @@ function forwardWheelToCanvas(widgetEl, canvasEl) {
     }, { passive: false });
 }
 
+// Tooltip library loader (Tippy.js via CDN) and thin wrapper
+let __tippyLoader = null;
+function ensureTooltipLib() {
+    if (window.tippy) return Promise.resolve();
+    if (__tippyLoader) return __tippyLoader;
+
+    __tippyLoader = new Promise((resolve, reject) => {
+        try {
+            // Load CSS
+            const cssHref = "https://unpkg.com/tippy.js@6/dist/tippy.css";
+            if (!document.querySelector(`link[href="${cssHref}"]`)) {
+                const link = document.createElement('link');
+                link.rel = 'stylesheet';
+                link.href = cssHref;
+                document.head.appendChild(link);
+            }
+
+            // Load Popper
+            const popperSrc = "https://unpkg.com/@popperjs/core@2/dist/umd/popper.min.js";
+            const tippySrc = "https://unpkg.com/tippy.js@6/dist/tippy.umd.min.js";
+
+            function loadScript(src) {
+                return new Promise((res, rej) => {
+                    if (document.querySelector(`script[src="${src}"]`)) return res();
+                    const s = document.createElement('script');
+                    s.src = src;
+                    s.async = true;
+                    s.onload = () => res();
+                    s.onerror = (e) => rej(new Error(`Failed to load ${src}`));
+                    document.head.appendChild(s);
+                });
+            }
+
+            loadScript(popperSrc)
+                .then(() => loadScript(tippySrc))
+                .then(() => resolve())
+                .catch(reject);
+        } catch (e) {
+            reject(e);
+        }
+    });
+
+    return __tippyLoader;
+}
+
+// Wrapper that uses the loaded tippy library; content is resolved on show
+function attachTooltip(el, textOrFn, delay = 1000) {
+    ensureTooltipLib().then(() => {
+        if (!el || !window.tippy) return;
+        window.tippy(el, {
+            content: '',
+            delay: [delay, 0],
+            allowHTML: true,
+            theme: 'light-border',
+            interactive: false,
+            placement: 'bottom-start',
+            onShow(instance) {
+                try {
+                    const content = (typeof textOrFn === 'function') ? textOrFn() : textOrFn;
+                    instance.setContent(content || '');
+                } catch (e) {
+                    instance.setContent('');
+                }
+            }
+        });
+    }).catch(err => {
+        console.warn('Tooltip library failed to load:', err);
+    });
+}
+
 class Timer {
     static all_times = [];
     static run_history = {}; // Store timings for each run
@@ -87,6 +157,8 @@ class Timer {
     static run_notes = {}; // Store notes for each run
     static systemInfo = null; // Store system information when connection opens
     static hidden = []; // e.g., ['display:runs','copy:per-flow','both:current-run','per-run'] (bare means both)
+    static ctrlDown = false; // Track Control key state for deletion UI
+    static maxRuns = 40; // Maximum saved & displayed runs
 
     static isHidden(key, where) {
         // where: 'display' | 'copy'
@@ -172,7 +244,7 @@ class Timer {
     static loadFromStorage() {
         try {
             // First load from localStorage as fallback
-                Timer.loadFromStorage();
+            Timer.loadFromLocalStorage();
 
             // Try to load data from storage API
             api.getUserData('timer_run_history').then(data => {
@@ -240,7 +312,7 @@ class Timer {
     static setLastNRuns(value) {
         const newValue = parseInt(value);
         if (!isNaN(newValue) && newValue > 0) {
-            Timer.last_n_runs = newValue;
+            Timer.last_n_runs = Math.min(newValue, Timer.maxRuns);
             if (Timer.onChange) Timer.onChange();
         }
         return Timer.last_n_runs;
@@ -252,8 +324,13 @@ class Timer {
         Timer.run_history[Timer.current_run_id] = { nodes: {}, startTime: t, systemStartTime: Date.now() };
         Timer.startTime = t;
         Timer.lastChangeTime = t;
-        if (Object.keys(Timer.run_history).length > 20) {
-            delete Timer.run_history[Object.keys(Timer.run_history)[0]]
+
+        // Persist complete history at start
+        Timer.saveToStorage();
+
+        // Prune to maximum runs
+        if (Object.keys(Timer.run_history).length > Timer.maxRuns) {
+            delete Timer.run_history[Object.keys(Timer.run_history)[0]];
         }
     }
 
@@ -512,7 +589,33 @@ class Timer {
     }
 
     static executionStart(e) {
-
+        // When a job starts, copy the queued run notes into the JS "Notes from queue" field
+        try {
+            const timerNodes = app.graph._nodes.filter(node => node.type === "Timer");
+            if (timerNodes.length > 0) {
+                const timerNode = timerNodes[0];
+                // Python-created widget for queued input
+                const queuedInputWidget = timerNode.widgets?.find(w => w.name === "Run notes (for queued run)");
+                const queuedText = queuedInputWidget?.value ?? "";
+                // Set JS field "Notes from queue"
+                const queueJsWidget = timerNode.widgets?.find(w => w.name === "Notes from queue");
+                if (queueJsWidget) {
+                    queueJsWidget.value = queuedText || "";
+                }
+                // Ensure we have a run id
+                if (!Timer.current_run_id) {
+                    Timer.current_run_id = Date.now().toString();
+                }
+                if (queuedText && Timer.current_run_id) {
+                    const existing = Timer.run_notes[Timer.current_run_id] || "";
+                    const combined = existing ? `${queuedText}\n${existing}` : queuedText;
+                    Timer.run_notes[Timer.current_run_id] = combined;
+                }
+                timerNode.setDirtyCanvas?.(true);
+            }
+        } catch (err) {
+            console.warn("Failed to propagate queued notes:", err);
+        }
     }
 
     static executionSuccess(e) {
@@ -525,18 +628,25 @@ class Timer {
             const timerNodes = app.graph._nodes.filter(node => node.type === "Timer");
             if (timerNodes.length > 0) {
                 const timerNode = timerNodes[0]; // Use the first timer node found
-                const noteWidget = timerNode.widgets.find(w => w.name === "Run notes");
-                if (noteWidget && noteWidget.value) {
-                    Timer.run_notes[Timer.current_run_id] = noteWidget.value;
-                    // Reset the text area for next run
-                    noteWidget.value = "";
-                    timerNode.setDirtyCanvas(true);
+                const activeWidget = timerNode.widgets.find(w => w.name === "Run notes (for active run)");
+                const queueWidget = timerNode.widgets.find(w => w.name === "Notes from queue");
+                const activeText = (activeWidget?.value || "").toString().trim();
+                const queueText = (queueWidget?.value || "").toString().trim();
+                const combined = [queueText, activeText].filter(Boolean).join('\n');
+
+                if (combined) {
+                    Timer.run_notes[Timer.current_run_id] = combined;
                 }
+
+                // Reset the text areas for next run
+                if (activeWidget) activeWidget.value = "";
+                if (queueWidget) queueWidget.value = "";
+                timerNode.setDirtyCanvas(true);
             }
 
             // Clean up old runs if we have too many
             const runIds = Object.keys(Timer.run_history);
-            if (runIds.length > 20) { // Keep max 20 runs in history
+            if (runIds.length > Timer.maxRuns) { // Keep max runs in history
                 const oldestRunId = runIds.sort()[0];
                 delete Timer.run_history[oldestRunId];
                 // Also delete corresponding notes
@@ -544,6 +654,9 @@ class Timer {
                     delete Timer.run_notes[oldestRunId];
                 }
             }
+
+            // Persist complete history after completion
+            Timer.saveToStorage();
         }
     }
 
@@ -693,7 +806,29 @@ class Timer {
         const actualRuns = Math.min(runIds.length, Timer.last_n_runs);
         let runNumber = 1;
         for (let i = actualRuns - 1; i >= 0; i--) {
-            tableHeader.push($el('th', {className: "run-n", "textContent": `Run ${runNumber}`}));
+            const runId = runIds[i];
+            const th = $el('th', {
+                className: "run-n",
+                textContent: `Run ${runNumber}`,
+                onmouseenter: ev => {
+                    ev.currentTarget.style.cursor = (ev.ctrlKey || Timer.ctrlDown) ? 'not-allowed' : '';
+                },
+                onmousemove: ev => {
+                    ev.currentTarget.style.cursor = (ev.ctrlKey || Timer.ctrlDown) ? 'not-allowed' : '';
+                },
+                onclick: ev => {
+                    if (!ev.ctrlKey) return;
+                    if (Timer.run_history[runId]) delete Timer.run_history[runId];
+                    if (Timer.run_notes[runId]) delete Timer.run_notes[runId];
+                    if (Timer.onChange) Timer.onChange();
+                }
+            });
+
+            // Tooltip showing run notes after 1 second hover
+            const notesText = Timer.run_notes[runId] || "No run notes";
+            attachTooltip(th, () => notesText, 1000);
+
+            tableHeader.push(th);
             runNumber += 1;
         }
 
@@ -776,7 +911,39 @@ class Timer {
             return table;
         }
 
-        // Top-level div with search UI and table
+        // Build list of all run notes
+        const allRunIds = Object.keys(Timer.run_history).sort(); // chronological by id
+        const notesListEl = $el("div", { className: "cg-timer-notes-list" });
+        let rn = 1;
+        for (let i = 0; i < allRunIds.length; i++) {
+            const runId = allRunIds[i];
+            const header = $el("div", {
+                className: "cg-run-note-header",
+                textContent: `RUN ${rn}`,
+                onmouseenter: ev => {
+                    ev.currentTarget.style.cursor = (ev.ctrlKey || Timer.ctrlDown) ? 'not-allowed' : '';
+                },
+                onmousemove: ev => {
+                    ev.currentTarget.style.cursor = (ev.ctrlKey || Timer.ctrlDown) ? 'not-allowed' : '';
+                },
+                onclick: ev => {
+                    if (!ev.ctrlKey) return;
+                    if (Timer.run_history[runId]) delete Timer.run_history[runId];
+                    if (Timer.run_notes[runId]) delete Timer.run_notes[runId];
+                    if (Timer.onChange) Timer.onChange();
+                }
+            });
+            const noteText = Timer.run_notes[runId] || "";
+            const body = $el("div", {
+                className: "cg-run-note-body",
+                textContent: noteText,
+                style: { whiteSpace: "pre-wrap", marginBottom: "8px" }
+            });
+            notesListEl.append(header, body);
+            rn++;
+        }
+
+        // Top-level div with search UI, table, and run notes list
         return $el("div", {
             className: "cg-timer-widget",
         }, [
@@ -788,10 +955,17 @@ class Timer {
                 regexCheckbox,
                 regexLabel,
             ]),
-                copyButton,
+            copyButton,
             $el("div", {
                 className: "cg-timer-table-wrapper",
-            }, [ table ])
+            }, [ table ]),
+            $el("div", {
+                className: "cg-timer-notes-list-wrapper",
+                style: { marginTop: "10px" }
+            }, [
+                $el("h4", { textContent: "Run Notes" }),
+                notesListEl
+            ])
         ]);
     }
 }
@@ -805,6 +979,9 @@ app.registerExtension({
         }).catch(err => {
             console.error("Failed to load timer styles:", err);
         });
+
+        // Preload tooltip library (Tippy.js via CDN)
+        ensureTooltipLib().catch(() => {});
 
         // Collect system information when socket opens
         function onSocketOpen() {
@@ -836,10 +1013,20 @@ app.registerExtension({
         api.addEventListener('reconnected', onSocketOpen);
 
         Timer.loadFromLocalStorage(); // <--- Load history on startup
+        Timer.loadFromStorage(); // <--- Restore complete history from DB
         window.Timer = Timer;
         api.addEventListener("executing", Timer.executing);
         api.addEventListener("execution_start", Timer.executionStart);
         api.addEventListener("execution_success", Timer.executionSuccess)
+
+        // Track Control key for deletion UI cursor feedback
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Control') Timer.ctrlDown = true;
+        });
+        document.addEventListener('keyup', (e) => {
+            if (e.key === 'Control') Timer.ctrlDown = false;
+        });
+
         console.log('cg.quicknodes.timer registered');
     },
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
@@ -877,16 +1064,23 @@ app.registerExtension({
                 // Add a number input to control how many last runs to display
                 this.addWidget("number", "Last runs to show", Timer.last_n_runs, (v) => {
                     return Timer.setLastNRuns(v);
-                }, { min: 1, max: 20, step: 10, precision: 0 });
+                }, { min: 1, max: Timer.maxRuns, step: 1, precision: 0 });
 
-                // Add the multiline run notes textarea
-                const textareaWidget = this.addWidget("text", "Run notes", "", (v) => {
+                // Add the multiline run notes textarea (active run)
+                const textareaWidget = this.addWidget("text", "Run notes (for active run)", "", (v) => {
                     // Save the note to the current run if available
                     if (Timer.current_run_id) {
                         Timer.run_notes[Timer.current_run_id] = v;
                     }
                     return v;
                 }, { multiline: true });  // Enable multiline for textarea
+
+                // Add Notes from queue textarea (populated when job starts)
+                const notesFromQueueWidget = this.addWidget("text", "Notes from queue", "", (v) => v, { multiline: true });
+
+                // Store references for later use
+                Timer.activeNotesWidget = textareaWidget;
+                Timer.notesFromQueueWidget = notesFromQueueWidget;
 
 
                 /**
@@ -917,11 +1111,13 @@ app.registerExtension({
                 this.serialize_widgets = false;
 
                 Timer.onChange = function () {
-                    const existingTable = widget.inputEl.querySelector('.cg-timer-table');
-                    if (existingTable) {
-                        existingTable.parentNode.replaceChild(Timer.html('table'), existingTable);
+                    // Rebuild entire content so both table and notes list update
+                    const container = widget.inputEl;
+                    const newContent = Timer.html();
+                    if (container.firstChild) {
+                        container.replaceChild(newContent, container.firstChild);
                     } else {
-                        widget.inputEl.replaceChild(Timer.html(), widget.inputEl.firstChild);
+                        container.appendChild(newContent);
                     }
                     //this.onResize?.(this.size);
                 }
