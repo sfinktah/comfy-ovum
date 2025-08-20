@@ -594,9 +594,40 @@ class Timer {
             const timerNodes = app.graph._nodes.filter(node => node.type === "Timer");
             if (timerNodes.length > 0) {
                 const timerNode = timerNodes[0];
-                // Python-created widget for queued input
+
+                // If "input connection" is linked, read the upstream string
+                let connectedText = "";
+                try {
+                    const inputSlot = timerNode.inputs?.find(inp => inp && (inp.name === "input connection" || inp.label === "input connection"));
+                    if (inputSlot?.link != null) {
+                        const link = app.graph.links?.[inputSlot.link];
+                        if (link) {
+                            const originNode = app.graph._nodes_by_id?.[link.origin_id];
+                            if (originNode) {
+                                // Heuristic: prefer a widget that holds a string, else first widget, else a common property
+                                if (Array.isArray(originNode.widgets) && originNode.widgets.length) {
+                                    const candidate =
+                                        originNode.widgets.find(w => typeof w?.value === "string") ||
+                                        originNode.widgets.find(w => (w?.type === "text" || w?.type === "string")) ||
+                                        originNode.widgets[0];
+                                    if (candidate && candidate.value != null) {
+                                        connectedText = String(candidate.value);
+                                    }
+                                }
+                                if (!connectedText && typeof originNode.properties?.value === "string") {
+                                    connectedText = originNode.properties.value;
+                                }
+                            }
+                        }
+                    }
+                } catch (e2) {
+                    console.warn("Failed to read connected input text:", e2);
+                }
+
+                // Python-created widget for queued input (literal fallback)
                 const queuedInputWidget = timerNode.widgets?.find(w => w.name === "Run notes (for queued run)");
-                const queuedText = queuedInputWidget?.value ?? "";
+                const queuedText = (connectedText && connectedText.length) ? connectedText : (queuedInputWidget?.value ?? "");
+
                 // Set JS field "Notes from queue"
                 const queueJsWidget = timerNode.widgets?.find(w => w.name === "Notes from queue");
                 if (queueJsWidget) {
