@@ -86,7 +86,18 @@ class Timer {
     static searchRegex = false;
     static run_notes = {}; // Store notes for each run
     static systemInfo = null; // Store system information when connection opens
+    static hidden = []; // e.g., ['display:runs','copy:per-flow','both:current-run','per-run'] (bare means both)
 
+    static isHidden(key, where) {
+        // where: 'display' | 'copy'
+        if (!Array.isArray(Timer.hidden)) return false;
+        const entries = Timer.hidden.map(String);
+        // Bare key or both:key hides in both places
+        if (entries.includes(key) || entries.includes(`both:${key}`)) return true;
+        // Targeted hide
+        if (where && entries.includes(`${where}:${key}`)) return true;
+        return false;
+    }
 
     static saveToLocalStorage() {
         try {
@@ -238,7 +249,7 @@ class Timer {
     static start() {
         const t = LiteGraph.getTime();
         Timer.current_run_id = Date.now().toString(); // Generate unique run ID
-        Timer.run_history[Timer.current_run_id] = { nodes: {}, startTime: t };
+        Timer.run_history[Timer.current_run_id] = { nodes: {}, startTime: t, systemStartTime: Date.now() };
         Timer.startTime = t;
         Timer.lastChangeTime = t;
         if (Object.keys(Timer.run_history).length > 20) {
@@ -480,6 +491,21 @@ class Timer {
         Timer.lastChangeTime = t;
         Timer.currentNodeId = detail;
 
+        // Record system clock start time for this node
+        if (Timer.current_run_id && Timer.run_history[Timer.current_run_id]) {
+            const runData = Timer.run_history[Timer.current_run_id];
+            const id = Timer.currentNodeId;
+            if (id) {
+                if (!runData.nodes[id]) {
+                    runData.nodes[id] = { count: 0, totalTime: 0, startTimes: [] };
+                }
+                if (!Array.isArray(runData.nodes[id].startTimes)) {
+                    runData.nodes[id].startTimes = [];
+                }
+                runData.nodes[id].startTimes.push(Date.now());
+            }
+        }
+
         if (!Timer.currentNodeId) Timer.add_timing("total", t - Timer.startTime);
 
         if (Timer.onChange) Timer.onChange();
@@ -568,7 +594,17 @@ class Timer {
 
                 // Clipboard copy logic
                 rows.forEach(row => {
-                    const cells = Array.from(row.querySelectorAll('th, td'));
+                    // Skip columns hidden for copy based on their class
+                    const hideableKeys = new Set(['runs','per-run','per-flow','current-run']);
+                    const cells = Array.from(row.querySelectorAll('th, td')).filter(cell => {
+                        const classes = cell.classList || [];
+                        let key = null;
+                        for (const c of classes) {
+                            if (hideableKeys.has(c)) { key = c; break; }
+                        }
+                        return !(key && Timer.isHidden(key, 'copy'));
+                    });
+
                     const rowText = cells.map((cell, idx) => {
                         let text = cell.textContent.trim();
                         // Apply emoji removal and trailing id stripping to the first cell only
@@ -598,6 +634,18 @@ class Timer {
                             }
                         }
                         runNumber++;
+                    }
+                }
+
+                // Append system information if available
+                if (Timer.systemInfo) {
+                    tableText += '\n### System Info\n';
+                    const { gpu, pytorch, argv, connectionClosed, closeCode, closeReason } = Timer.systemInfo;
+                    if (gpu) tableText += `GPU: ${gpu}\n`;
+                    if (pytorch) tableText += `PyTorch: ${pytorch}\n`;
+                    if (argv) tableText += `Args: ${argv}\n`;
+                    if (connectionClosed) {
+                        tableText += `Socket closed: code=${closeCode ?? ''} reason=${closeReason ?? ''}\n`;
                     }
                 }
 
@@ -634,12 +682,11 @@ class Timer {
         }, ["Regex"]);
 
         // Table header with individual columns for each of the last n runs
-        const tableHeader = [$el("th", {className: "node", "textContent": "Node"}),
-            $el("th", {className: "runs", "textContent": "Runs"}),
-            $el("th", {className: "per-run", "textContent": "Per run"}),
-            $el("th", {className: "per-flow", "textContent": "Per flow"}),
-            $el('th', {className: "current-run", "textContent": "Current run"})
-        ];
+        const tableHeader = [$el("th", {className: "node", "textContent": "Node"})];
+        if (!Timer.isHidden('runs', 'display')) tableHeader.push($el("th", {className: "runs", "textContent": "Runs"}));
+        if (!Timer.isHidden('per-run', 'display')) tableHeader.push($el("th", {className: "per-run", "textContent": "Per run"}));
+        if (!Timer.isHidden('per-flow', 'display')) tableHeader.push($el("th", {className: "per-flow", "textContent": "Per flow"}));
+        if (!Timer.isHidden('current-run', 'display')) tableHeader.push($el('th', {className: "current-run", "textContent": "Current run"}));
 
         // Add individual columns for each of the last n runs
         const runIds = Object.keys(Timer.run_history).sort().reverse().slice(0, Timer.last_n_runs);
@@ -698,12 +745,12 @@ class Timer {
             const t = node_data.id;
 
             const rowCells = [
-                $el("td", {className: "node", textContent: get_node_name_by_id(node_data.id)}),
-                $el("td", {className: "runs", "textContent": node_data.runs.toString()}),
-                $el("td", {className: "per-run", "textContent": Timer._format(node_data.avgPerRun)}),
-                $el("td", {className: "per-flow", "textContent": Timer._format(node_data.avgPerFlow)}),
-                $el('td', {className: "current-run", "textContent": Timer._format(Timer.getCurrentRunTime(t))})
+                $el("td", {className: "node", textContent: get_node_name_by_id(node_data.id)})
             ];
+            if (!Timer.isHidden('runs', 'display')) rowCells.push($el("td", {className: "runs", "textContent": node_data.runs.toString()}));
+            if (!Timer.isHidden('per-run', 'display')) rowCells.push($el("td", {className: "per-run", "textContent": Timer._format(node_data.avgPerRun)}));
+            if (!Timer.isHidden('per-flow', 'display')) rowCells.push($el("td", {className: "per-flow", "textContent": Timer._format(node_data.avgPerFlow)}));
+            if (!Timer.isHidden('current-run', 'display')) rowCells.push($el('td', {className: "current-run", "textContent": Timer._format(Timer.getCurrentRunTime(t))}));
 
             // Add individual cells for each of the last n runs
             const runIds = Object.keys(Timer.run_history).sort().reverse().slice(0, Timer.last_n_runs);
