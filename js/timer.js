@@ -66,7 +66,7 @@ class Timer {
     static last_n_runs = 5; // Number of last runs to display
     static runs_since_clear = 0;
     static onChange = null;
-    static searchTerm = '';
+    static searchTerm = '(id:total|\\()';
     static searchRegex = false;
     static run_notes = {}; // Store notes for each run
     static systemInfo = null; // Store system information when connection opens
@@ -929,7 +929,7 @@ class Timer {
 }
 
 app.registerExtension({
-    name: "cg.quicknodes.timer",
+    name: "ovum.timer",
     setup: function () {
         // Import styles from module and inject them directly into the DOM
         import("./timer-styles.js").then(({ injectTimerStyles }) => {
@@ -1217,11 +1217,6 @@ app.registerExtension({
                     },
                 })
                 widget.inputEl = inputEl
-
-                // inputEl.addEventListener('input', () => {
-                    // callback?.(widget.value)
-                    // widget.callback?.(widget.value)
-                // })
                 widget.onRemove = () => {
                     inputEl.remove()
                 }
@@ -1229,16 +1224,6 @@ app.registerExtension({
                 this.serialize_widgets = false;
 
                 Timer.onChange = function () {
-                    // Rebuild entire content so both table and notes list update
-                    // const container = widget.inputEl;
-                    // const newContent = Timer.html();
-                    // if (container.firstChild) {
-                    //     container.replaceChild(newContent, container.firstChild);
-                    // } else {
-                    //     container.appendChild(newContent);
-                    // }
-                    //this.onResize?.(this.size);
-
                     const existingTable = widget.inputEl.querySelector('.cg-timer-table');
                     if (existingTable) {
                         existingTable.parentNode.replaceChild(Timer.html('table'), existingTable);
