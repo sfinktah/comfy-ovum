@@ -1,6 +1,8 @@
 import json
+import comfy.utils
+
 class Timer:
-    CATEGORY = "quicknodes"
+    CATEGORY = "ovum"
     @classmethod    
     def INPUT_TYPES(s):
         dyn_inputs = {"arg1": ('*', {"lazy": True, "tooltip": "Any input. When connected, one more input slot is added."}), }

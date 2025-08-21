@@ -1,9 +1,15 @@
 /** @typedef {import('@comfyorg/comfyui-frontend-types').ComfyApp} ComfyApp */
+/** @typedef {import('./typedefs.js').INodeInputSlot} INodeInputSlot */
 
 import {api} from "../../scripts/api.js";
 /** @type {ComfyApp} */
 import {app} from "../../scripts/app.js";
 import {$el} from "../../scripts/ui.js";
+
+import { graphGetNodeById, findNodesByTypeName, findTimerNodes } from './graphHelpers.js';
+import { removeEmojis, chainCallback, stripTrailingId } from './utility.js';
+import { ensureTooltipLib, attachTooltip } from './tooltipHelpers.js';
+
 // Timer styles will be dynamically imported in the setup function
 // import _ from "./lodash";
 
@@ -11,71 +17,6 @@ const MARGIN = 8;
 
 const LOCALSTORAGE_KEY = 'cg.quicknodes.timer.history';
 
-// Canonical graph helpers to avoid duplicating version/compat checks
-function graphGetNodeById(id) {
-    const g = app?.graph;
-    if (!g) return null;
-    if (typeof g.getNodeById === "function") return g.getNodeById(id);
-    if (g._nodes_by_id) return g._nodes_by_id[id] ?? null;
-    const nodes = g._nodes || g.nodes;
-    return Array.isArray(nodes) ? (nodes.find(n => n?.id === id) ?? null) : null;
-}
-
-function findNodesByTypeName(type) {
-    const g = app?.graph;
-    if (!g) return [];
-    if (typeof g.findNodesByType === "function") return g.findNodesByType(type);
-    if (typeof g.findNodesByClass === "function") return g.findNodesByClass(type);
-    const nodes = g._nodes || g.nodes || [];
-    return nodes.filter(n => n?.type === type || n?.comfyClass === type || n?.name === type);
-}
-
-const findTimerNodes = () => findNodesByTypeName("Timer");
-
-function chainCallback(object, property, callback) {
-    if (object == undefined) {
-        //This should not happen.
-        console.error("Tried to add callback to non-existant object")
-        return;
-    }
-    if (property in object) {
-        const callback_orig = object[property];
-        object[property] = function () {
-            const r = callback_orig?.apply(this, arguments);
-            callback.apply(this, arguments);
-            return r;
-        };
-    } else {
-        object[property] = callback;
-    }
-}
-
-function removeEmojis(input) {
-    // Coerce to string safely; keep prior behavior of returning a string
-    if (typeof input !== "string") {
-        return input == null ? "" : String(input);
-    }
-
-    try {
-        // Use modern Unicode properties to remove emoji and pictographs
-        // - Extended_Pictographic and Emoji_Presentation broadly cover modern emoji
-        // - Remove U+FE0F (variation selector-16) that often appears in sequences
-        // Also handle keycap and skin-tone sequences.
-        const stripped = input
-            .replace(/[\p{Extended_Pictographic}\p{Emoji_Presentation}\uFE0F]/gu, "")
-            .replace(/\p{Emoji_Modifier_Base}\p{Emoji_Modifier}/gu, "")
-            .replace(/[\u20E3]/g, "");
-
-        // Normalize in case of any combining remnants
-        return stripped.normalize();
-    } catch {
-        // Fallback for environments without Unicode property escapes
-        return input.replace(
-            /([\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{1F900}-\u{1F9FF}]|[\u{1FA70}-\u{1FAFF}]|[\u{1F100}-\u{1F1FF}]|[\u{2460}-\u{24FF}]|\uFE0F)/gu,
-            ""
-        );
-    }
-}
 
 function get_node_name_by_id(id) {
     const node = graphGetNodeById(id);
@@ -85,17 +26,6 @@ function get_node_name_by_id(id) {
     // RegExp to remove most common Unicode emoji/emoticon characters
     return removeEmojis(name) + ' (' + id + ')';
 }
-
-function doesNodeBelongToUs(id) {
-    const node = graphGetNodeById(id);
-    if (!node) return false;
-}
-
-function stripTrailingId(title) {
-    // Remove trailing ' (123)' from the title
-    return title.replace(/ \(\d+\)$/, '');
-}
-
 function forwardWheelToCanvas(widgetEl, canvasEl) {
     if (!widgetEl || !canvasEl) return;
 
@@ -129,77 +59,6 @@ function forwardWheelToCanvas(widgetEl, canvasEl) {
         canvasEl.dispatchEvent(forwarded);
     }, { passive: false });
 }
-
-// Tooltip library loader (Tippy.js via CDN) and thin wrapper
-let __tippyLoader = null;
-function ensureTooltipLib() {
-    if (window.tippy) return Promise.resolve();
-    if (__tippyLoader) return __tippyLoader;
-
-    __tippyLoader = new Promise((resolve, reject) => {
-        try {
-            // Load CSS
-            const cssHref = "https://unpkg.com/tippy.js@6/dist/tippy.css";
-            if (!document.querySelector(`link[href="${cssHref}"]`)) {
-                const link = document.createElement('link');
-                link.rel = 'stylesheet';
-                link.href = cssHref;
-                document.head.appendChild(link);
-            }
-
-            // Load Popper
-            const popperSrc = "https://unpkg.com/@popperjs/core@2/dist/umd/popper.min.js";
-            const tippySrc = "https://unpkg.com/tippy.js@6/dist/tippy.umd.min.js";
-
-            function loadScript(src) {
-                return new Promise((res, rej) => {
-                    if (document.querySelector(`script[src="${src}"]`)) return res();
-                    const s = document.createElement('script');
-                    s.src = src;
-                    s.async = true;
-                    s.onload = () => res();
-                    s.onerror = (e) => rej(new Error(`Failed to load ${src}`));
-                    document.head.appendChild(s);
-                });
-            }
-
-            loadScript(popperSrc)
-                .then(() => loadScript(tippySrc))
-                .then(() => resolve())
-                .catch(reject);
-        } catch (e) {
-            reject(e);
-        }
-    });
-
-    return __tippyLoader;
-}
-
-// Wrapper that uses the loaded tippy library; content is resolved on show
-function attachTooltip(el, textOrFn, delay = 1000) {
-    ensureTooltipLib().then(() => {
-        if (!el || !window.tippy) return;
-        window.tippy(el, {
-            content: '',
-            delay: [delay, 0],
-            allowHTML: true,
-            theme: 'light-border',
-            interactive: false,
-            placement: 'bottom-start',
-            onShow(instance) {
-                try {
-                    const content = (typeof textOrFn === 'function') ? textOrFn() : textOrFn;
-                    instance.setContent(content || '');
-                } catch (e) {
-                    instance.setContent('');
-                }
-            }
-        });
-    }).catch(err => {
-        console.warn('Tooltip library failed to load:', err);
-    });
-}
-
 class Timer {
     static all_times = [];
     static run_history = {}; // Store timings for each run
@@ -211,7 +70,7 @@ class Timer {
     static searchRegex = false;
     static run_notes = {}; // Store notes for each run
     static systemInfo = null; // Store system information when connection opens
-    static hidden = []; // e.g., ['display:runs','copy:per-flow','both:current-run','per-run'] (bare means both)
+    static hidden = ['both:current-run', 'both:runs', 'both:per-run', 'both:per-flow']; // e.g., ['display:runs','copy:per-flow','both:current-run','per-run'] (bare means both)
     static ctrlDown = false; // Track Control key state for deletion UI
     static maxRuns = 40; // Maximum saved & displayed runs
     static queuedNotesByPromptId = {}; // prompt_id -> queued note string (captured at queue time)
@@ -521,150 +380,6 @@ class Timer {
             }
         }
     }
-
-    /**
-     * @typedef {Object} ComfyNode
-     * @property {string} type
-     * @property {string} name
-     * @property {string} title
-     * @property {Array<any>} widgets
-     * @property {Array<number>} size
-     * @property {function} addWidget
-     * @property {function} addCustomWidget
-     * @property {function} addDOMWidget
-     * @property {function} onRemoved
-     * @property {HTMLElement} widget_area
-     * @property {boolean} serialize_widgets
-     */
-
-    /**
-     * @typedef {Object} WebSocketLike
-     * @property {string} url
-     * @property {number} readyState
-     * @property {number} bufferedAmount
-     * @property {?function} onopen
-     * @property {?function} onerror
-     * @property {?function} onclose
-     * @property {string} extensions
-     * @property {string} protocol
-     * @property {?function} onmessage
-     * @property {string} binaryType
-     * @property {number} CONNECTING
-     * @property {number} OPEN
-     * @property {number} CLOSING
-     * @property {number} CLOSED
-     * @property {function():void} close
-     * @property {function(*):void} send
-     * @property {function():void} constructor
-     * @property {function(string, function, boolean=):void} addEventListener
-     * @property {function(Event):boolean} dispatchEvent
-     * @property {function(string, function, boolean=):void} removeEventListener
-     * @property {function(string):Promise} when
-     */
-
-    /**
-     * @typedef {Object} SetLike
-     * @property {function(any):boolean} has
-     * @property {function(any):SetLike} add
-     * @property {function(any):boolean} delete
-     * @property {function(SetLike):SetLike} difference
-     * @property {function():void} clear
-     * @property {function():IterableIterator<Array>} entries
-     * @property {function(function, *):void} forEach
-     * @property {function(SetLike):SetLike} intersection
-     * @property {function(SetLike):boolean} isSubsetOf
-     * @property {function(SetLike):boolean} isSupersetOf
-     * @property {function(SetLike):boolean} isDisjointFrom
-     * @property {number} size
-     * @property {function(SetLike):SetLike} symmetricDifference
-     * @property {function(SetLike):SetLike} union
-     * @property {function():IterableIterator<any>} values
-     * @property {function():IterableIterator<any>} keys
-     * @property {function():void} constructor
-     */
-
-    /**
-     * @typedef {Object} ComfyApiLike
-     * @property {string} api_host
-     * @property {string} api_base
-     * @property {string} initialClientId
-     * @property {string} clientId
-     * @property {*} user
-     * @property {WebSocketLike} socket
-     * @property {SetLike} reportedUnknownMessageTypes
-     * @property {function(number, any):Promise<any>} queuePrompt
-     * @property {function():Promise<any>} getNodeDefs
-     * @property {function(string):string} apiURL
-     * @property {function():void} interrupt
-     * @property {function():void} constructor
-     * @property {function(string):string} internalURL
-     * @property {function(string):string} fileURL
-     * @property {function(string, Object=):Promise<any>} fetchApi
-     * @property {function(string, function, Object=):void} addEventListener
-     * @property {function(string, function, Object=):void} removeEventListener
-     * @property {function(string, any, boolean=, boolean=, boolean=):void} dispatchCustomEvent
-     * @property {function(Event):boolean} dispatchEvent
-     * @property {function():Promise<any>} init
-     * @property {function():Promise<any>} getExtensions
-     * @property {function():Promise<any>} getWorkflowTemplates
-     * @property {function():Promise<any>} getCoreWorkflowTemplates
-     * @property {function():Promise<any>} getEmbeddings
-     * @property {function():Promise<any>} getModelFolders
-     * @property {function(string):Promise<any>} getModels
-     * @property {function(string, string):Promise<any>} viewMetadata
-     * @property {function(string):Promise<any>} getItems
-     * @property {function():Promise<any>} getQueue
-     * @property {function(number=):Promise<any>} getHistory
-     * @property {function():Promise<any>} getSystemStats
-     * @property {function(string, any):Promise<any>} deleteItem
-     * @property {function(string):Promise<any>} clearItems
-     * @property {function():Promise<any>} getUserConfig
-     * @property {function(string):Promise<any>} createUser
-     * @property {function():Promise<any>} getSettings
-     * @property {function(string):Promise<any>} getSetting
-     * @property {function(Object):Promise<any>} storeSettings
-     * @property {function(string, any):Promise<any>} storeSetting
-     * @property {function(string, Object=):Promise<any>} getUserData
-     * @property {function(string, any, Object=):Promise<any>} storeUserData
-     * @property {function(string):Promise<any>} deleteUserData
-     * @property {function(string, string, Object=):Promise<any>} moveUserData
-     * @property {function(string):Promise<any>} listUserDataFullInfo
-     * @property {function():Promise<any>} getLogs
-     * @property {function():Promise<any>} getRawLogs
-     * @property {function(boolean):void} subscribeLogs
-     * @property {function():Promise<any>} getFolderPaths
-     * @property {function():Promise<any>} getCustomNodesI18n
-     * @property {function():Promise<any>} when
-     */
-
-    /**
-     * @typedef {Object} ComfyTickEvent
-     * @property {boolean} isTrusted
-     * @property {number} detail
-     * @property {function(string=, any=, boolean=, boolean=, boolean=):void} initCustomEvent
-     * @property {function():void} constructor
-     * @property {string} type
-     * @property {ComfyApiLike} target
-     * @property {ComfyApiLike} currentTarget
-     * @property {number} eventPhase
-     * @property {boolean} bubbles
-     * @property {boolean} cancelable
-     * @property {boolean} defaultPrevented
-     * @property {boolean} composed
-     * @property {number} timeStamp
-     * @property {ComfyApiLike} srcElement
-     * @property {boolean} returnValue
-     * @property {boolean} cancelBubble
-     * @property {number} NONE
-     * @property {number} CAPTURING_PHASE
-     * @property {number} AT_TARGET
-     * @property {number} BUBBLING_PHASE
-     * @property {function():Array<EventTarget>} composedPath
-     * @property {function(string, boolean=, boolean=):void} initEvent
-     * @property {function():void} preventDefault
-     * @property {function():void} stopImmediatePropagation
-     * @property {function():void} stopPropagation
-     */
 
     /**
      * Handles execution tick events from ComfyApi.
@@ -1165,26 +880,49 @@ class Timer {
 
         // Top-level div with search UI, table, and run notes list
         return $el("div", {
-            className: "cg-timer-widget",
+            className: "cg-timer-widget-wrapper",
         }, [
             $el("div", {
-                className: "cg-timer-search",
-                style: {marginBottom: "6px"}
+                className: "cg-timer-widget",
             }, [
-                searchInput,
-                regexCheckbox,
-                regexLabel,
+                $el("div", {
+                    className: "cg-timer-search",
+                    style: { marginBottom: "6px" }
+                }, [
+                    searchInput,
+                    regexCheckbox,
+                    regexLabel,
+                ]),
+                copyButton,
+                $el("div", {
+                    className: "cg-timer-table-wrapper",
+                }, [table]),
+                $el("div", {
+                    className: "cg-timer-notes-list-wrapper",
+                    style: { marginTop: "10px" }
+                }, [
+                    $el("h4", { textContent: "Run Notes" }),
+                    notesListEl
+                ])
             ]),
-            copyButton,
+            // Add the status bar
             $el("div", {
-                className: "cg-timer-table-wrapper",
-            }, [ table ]),
-            $el("div", {
-                className: "cg-timer-notes-list-wrapper",
-                style: { marginTop: "10px" }
+                className: "cg-timer-status-bar",
             }, [
-                $el("h4", { textContent: "Run Notes" }),
-                notesListEl
+                $el("div", {
+                    className: "cg-status-left",
+                    textContent: "Miss Katie, where have you gone, why have you gone so far away from here", // Replace with actual content if needed
+                }),
+                $el("div", {
+                    className: "cg-status-middle",
+                }),
+                $el("div", {
+                    className: "cg-status-middle",
+                }),
+                $el("div", {
+                    className: "cg-status-right",
+                    textContent: "sfinktah made this", // Replace with actual content
+                })
             ])
         ]);
     }
@@ -1354,8 +1092,8 @@ app.registerExtension({
                         }
                         let dynamicInputLength = dynamicInputs.length;
                         if (dynamicInputLength === 1) {
-                            if (dynamicInputs[0].name == dynamicInputs[0].localized_name && dynamicInputs[0].name.startsWith("arg")) {
-                                dynamicInputs[0].localized_name = "py-input " + dynamicInputs[0].name.substr(3);
+                            if (dynamicInputs[0].name && dynamicInputs[0].label === undefined && dynamicInputs[0].name.startsWith("arg")) {
+                                dynamicInputs[0].label = "py-input " + dynamicInputs[0].name.substr(3);
                             }
                         }
                         if (!dynamicInputs.length) {
@@ -1364,7 +1102,7 @@ app.registerExtension({
 
                             // properties include label, link, name, type, shape, widget, boundingRect
                             /** @type {INodeInputSlot} */
-                            const nodeInputSlot = this.addInput(`arg${nextIndex}`, "*", { localized_name: "in-input " + nextIndex });
+                            const nodeInputSlot = this.addInput(`arg${nextIndex}`, "*", { label: "in-input " + nextIndex });
                             dynamicInputs.push(nodeInputSlot);
                             dynamicInputIndexes.push(dynamicInputLength);
                             ++dynamicInputLength;
@@ -1380,7 +1118,7 @@ app.registerExtension({
                         if (lastHasLink) {
                             const nextIndex = dynamicInputLength + 1;
                             console.debug("[Timer] Last input has link; adding input", nextIndex);
-                            const nodeInputSlot = this.addInput(`arg${nextIndex}`, "*", { localized_name: "nu-input " + nextIndex });
+                            const nodeInputSlot = this.addInput(`arg${nextIndex}`, "*", { label: "nu-input " + nextIndex });
                             // setDirtyCanvas is called by LGraphNode.addInput
                             // this.canvas.setDirty(true, true);
                             // node.graph.setDirtyCanvas(true);
@@ -1431,7 +1169,7 @@ app.registerExtension({
                             if (!isConnecting) {
                                 if (this.inputs[slot].name.startsWith("arg")) {
                                     this.inputs[slot].type = '*';
-                                    this.inputs[slot].localized_name = "re-input " + this.inputs[slot].name.substring(3);
+                                    this.inputs[slot].label = "re-input " + this.inputs[slot].name.substring(3);
                                     // revertInputBaseName(slot);
                                     // this.title = "Set"
                                 }
@@ -1448,7 +1186,7 @@ app.registerExtension({
                                     // this.setDirtyCanvas?.(true, true);
 
                                     if (this.inputs[slot].name.startsWith("arg")) {
-                                        this.inputs[slot].localized_name = type + " " + this.inputs[slot].name.substring(3);
+                                        this.inputs[slot].label = type + " " + this.inputs[slot].name.substring(3);
                                         this.inputs[slot].type = type;
                                     }
                                 } else {
@@ -1460,19 +1198,6 @@ app.registerExtension({
                     } catch (err) {
                         console.warn("[Timer] onConnectionsChange handler error:", err);
                     }
-
-                    // Only care about input side
-                    // if (slotType === LiteGraph.INPUT) {
-                    //     if (isChangeConnect) {
-                    //         const tStr = getConnectedTypeString(linkInfo) || "any";
-                    //         renameInputWithType(slot, tStr);
-                    //     } else {
-                    //         // On disconnect, revert to base name
-                    //         revertInputBaseName(slot);
-                    //     }
-                    //     // Always ensure trailing free input exists
-                    //
-                    // }
                 });
                 // ---- End dynamic inputs ----
 
@@ -1493,10 +1218,10 @@ app.registerExtension({
                 })
                 widget.inputEl = inputEl
 
-                inputEl.addEventListener('input', () => {
+                // inputEl.addEventListener('input', () => {
                     // callback?.(widget.value)
-                    widget.callback?.(widget.value)
-                })
+                    // widget.callback?.(widget.value)
+                // })
                 widget.onRemove = () => {
                     inputEl.remove()
                 }
@@ -1505,14 +1230,21 @@ app.registerExtension({
 
                 Timer.onChange = function () {
                     // Rebuild entire content so both table and notes list update
-                    const container = widget.inputEl;
-                    const newContent = Timer.html();
-                    if (container.firstChild) {
-                        container.replaceChild(newContent, container.firstChild);
-                    } else {
-                        container.appendChild(newContent);
-                    }
+                    // const container = widget.inputEl;
+                    // const newContent = Timer.html();
+                    // if (container.firstChild) {
+                    //     container.replaceChild(newContent, container.firstChild);
+                    // } else {
+                    //     container.appendChild(newContent);
+                    // }
                     //this.onResize?.(this.size);
+
+                    const existingTable = widget.inputEl.querySelector('.cg-timer-table');
+                    if (existingTable) {
+                        existingTable.parentNode.replaceChild(Timer.html('table'), existingTable);
+                    } else {
+                        widget.inputEl.replaceChild(Timer.html(), widget.inputEl.firstChild);
+                    }
                 }
                 setTimeout(() => {
                     Timer.onChange();

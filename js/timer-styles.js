@@ -3,6 +3,44 @@
  */
 
 export const timerStyles = `
+:root {
+    --lgraph-node_title_height: 30px;
+    --lgraph-node_title_text_y: 20px;
+    --lgraph-node_slot_height: 20px;
+    --lgraph-node_widget_height: 20px;
+    --lgraph-node_width: 140px;
+    --lgraph-node_min_width: 50px;
+    --lgraph-node_collapsed_radius: 10px;
+    --lgraph-node_collapsed_width: 80px;
+    --lgraph-node_title_color: #999;
+    --lgraph-node_selected_title_color: #FFF;
+    --lgraph-node_text_size: 14px;
+    --lgraph-node_text_color: #AAA;
+    --lgraph-node_text_highlight_color: #EEE;
+    --lgraph-node_subtext_size: 12px;
+    --lgraph-node_default_color: #333;
+    --lgraph-node_default_bgcolor: #353535;
+    --lgraph-node_default_boxcolor: #666;
+    --lgraph-node_default_shape: ROUND;
+    --lgraph-node_box_outline_color: #FFF;
+    --lgraph-node_error_colour: #E00;
+    --lgraph-node_font: Arial;
+    --lgraph-default_font: Arial;
+    --lgraph-default_shadow_color: rgba(0,0,0,0.5);
+    --lgraph-default_group_font: 24px;
+    --lgraph-default_group_font_size: 24px;
+    --lgraph-group_font: Arial;
+    --lgraph-widget_bgcolor: #222;
+    --lgraph-widget_outline_color: #666;
+    --lgraph-widget_advanced_outline_color: rgba(56, 139, 253, 0.8);
+    --lgraph-widget_text_color: #DDD;
+    --lgraph-widget_secondary_text_color: #999;
+    --lgraph-widget_disabled_text_color: #666;
+    --lgraph-link_color: #9A9;
+    --lgraph-event_link_color: #A86;
+    --lgraph-connecting_link_color: #AFA;
+}
+
 .cg-timer-table {
     border-collapse: collapse;
     width: auto;
@@ -168,6 +206,100 @@ export const timerStyles = `
     text-align: right;
 }
 
+.cg-timer-widget-wrapper {
+    height: 100%;
+    width: 100%;
+}
+
+.cg-timer-widget-wrapper > * {
+    height: 100%;
+    width: 100%;
+}
+
+.cg-timer-widget-wrapper {
+    display: flex;
+    flex-direction: column;
+    height: 100%; /* Optional: Adjust depending on your needs */
+    width: 100%;  /* Optional: Adjust depending on your needs */
+}
+
+.cg-timer-widget {
+    flex: 1; /* Takes up the remaining space */
+}
+
+.cg-timer-status-bar {
+    height: 30px; /* Set the height of the status bar */
+    text-align: center; /* Optional: Center the text */
+    line-height: 30px; /* Optional: Vertically center text */
+    color: #dddddd; /* Example text color */
+}
+
+.cg-timer-widget-wrapper {
+    height: 100%;
+    width: 100%;
+}
+
+.cg-timer-widget-wrapper > * {
+    height: 100%;
+    width: 100%;
+}
+
+.cg-timer-widget-wrapper {
+    display: flex;
+    flex-direction: column;
+    height: 100%; /* Optional: Adjust depending on your needs */
+    width: 100%;  /* Optional: Adjust depending on your needs */
+}
+
+.cg-timer-widget {
+    flex: 1; /* Takes up the remaining space */
+}
+
+.cg-timer-status-bar {
+    height: 20px; /* Set the height of the status bar */
+    margin-top: 10px;
+    text-align: center; /* Optional: Center the text */
+    line-height: 13px; /* Optional: Vertically center text */
+    color: #dddddd; /* Example text color */
+    font-family: system-ui;
+    font-size: 0.8em;
+    text-align: left;
+}
+
+.cg-timer-status-bar {
+    display: flex;
+    justify-content: space-between; /* Spread sections dynamically */
+    align-items: center; /* Align items vertically */
+    gap: 10px; /* Optional: Adds spacing between the middle sections */
+}
+
+.cg-status-left,
+.cg-status-right,
+.cg-status-middle {
+    padding: 5px;
+    text-align: center;
+    flex: 1; /* Let all sections scale dynamically */
+}
+
+.cg-status-left {
+    padding-left: 0;
+}
+
+.cg-status-right {
+    padding-left: 0;
+}
+
+.cg-status-left {
+    flex: 0 1 auto; /* Allow shrink and grow naturally */
+}
+
+.cg-status-right {
+    flex: 0 1 auto; /* Allow shrink and grow naturally */
+}
+
+.cg-status-middle {
+    flex: 1; /* Middle sections take the remaining space evenly */
+}
 
 `;
 
