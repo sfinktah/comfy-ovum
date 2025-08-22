@@ -1049,7 +1049,7 @@ app.registerExtension({
                 // Add a number input to control how many last runs to display
                 this.addWidget("number", "Last runs to show", Timer.last_n_runs, (v) => {
                     return Timer.setLastNRuns(v);
-                }, { min: 1, max: Timer.maxRuns, step: 1, precision: 0 });
+                }, { min: 1, max: Timer.maxRuns, step: 10, precision: 0 });
 
                 // Add the multiline run notes textarea (active run)
                 const textareaWidget = this.addWidget("text", "Run notes (for active run)", "", (v) => {
