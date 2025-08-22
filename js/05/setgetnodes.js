@@ -82,7 +82,11 @@ app.registerExtension({
                         parts.push(val);
                     }
                     const joined = parts.join(" & ");
-                    this.title = (!disablePrefix ? "Set_" : "") + (joined || "Itchy & Scratchy");
+                    if (parts.length === 0) {
+                        this.title = "SetTwinNodes";
+                    } else {
+                        this.title = (!disablePrefix ? "Set_" : "") + joined;
+                    }
 
                     // Determine color from the first connected link with a known color
                     let pickedType = null;
@@ -841,8 +845,12 @@ app.registerExtension({
                             const name = String(raw).trim();
                             if (name) parts.push(name);
                         }
-                        const joined = parts.join(" & ") || "Itchy & Scratchy";
-                        this.title = (!disablePrefix ? "Get_" : "") + joined;
+                        const joined = parts.join(" & ");
+                        if (parts.length === 0) {
+                            this.title = "GetTwinNodes";
+                        } else {
+                            this.title = (!disablePrefix ? "Get_" : "") + joined;
+                        }
 
                         // Note: we don't actually have a settings panel yet
                         // Only colorize when a constant is selected; follow same rule as SetTwinNodes (based on constant type)
@@ -872,8 +880,12 @@ app.registerExtension({
                             const name = String(raw).trim();
                             if (name) parts.push(name);
                         }
-                        const joined = parts.join(" & ") || "Itchy & Scratchy";
-                        this.title = (!disablePrefix ? "Get_" : "") + joined;
+                        const joined = parts.join(" & ");
+                        if (parts.length === 0) {
+                            this.title = "GetTwinNodes";
+                        } else {
+                            this.title = (!disablePrefix ? "Get_" : "") + joined;
+                        }
 
                         // No selection or unknown type: reset color
                         this.color = undefined;
