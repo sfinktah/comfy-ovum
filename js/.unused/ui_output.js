@@ -1,6 +1,6 @@
-import { app } from "../../scripts/app.js";
-import { api } from "../../scripts/api.js";
-import { ComfyWidgets } from "../../scripts/widgets.js";
+import { app } from "../../../scripts/app.js";
+import { api } from "../../../scripts/api.js";
+import { ComfyWidgets } from "../../../scripts/widgets.js";
 
 function registerUiOutputListener(nodeType, nodeData, message_type, func) {
 	if (nodeData?.ui_output?.includes(message_type) || nodeData?.description?.includes(message_type)) {

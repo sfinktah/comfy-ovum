@@ -9,23 +9,24 @@ class Timer:
 
         inputs = {
             "required": {
-                "image": ("IMAGE", {"tooltip": "This is just used as a trigger"}),
                 "queued_run_notes": ("STRING", {"tooltip": "This will be recorded when the job is dequeued"})
                 # "select": ("INT", {"default": 1, "min": 1, "max": 999999, "step": 1, "tooltip": "The input number you want to output among the inputs"}),
                 # "sel_mode": ("BOOLEAN", {"default": False, "label_on": "select_on_prompt", "label_off": "select_on_execution", "forceInput": False,
                 #                          "tooltip": "In the case of 'select_on_execution', the selection is dynamically determined at the time of workflow execution. 'select_on_prompt' is an option that exists for older versions of ComfyUI, and it makes the decision before the workflow execution."}),
             },
-            "optional": dyn_inputs,
+            "optional": {
+                "image": ("IMAGE", {"tooltip": "This is just used as a trigger"}),
+                **dyn_inputs
+            },
             # "hidden": {"unique_id": "UNIQUE_ID", "extra_pnginfo": "EXTRA_PNGINFO"}
         }
-
         return inputs
 
     RETURN_TYPES = ()
     RETURN_NAMES = ()
     FUNCTION = "func"
     OUTPUT_NODE = True
-    def func(self, image, queued_run_notes, *args, **kwargs):
+    def func(self, queued_run_notes, image=None, *args, **kwargs):
         # Accept arbitrary dynamic inputs like input2, input3, etc.
 
         def _to_jsonable(obj, _seen=None):

@@ -1,15 +1,15 @@
 /** @typedef {import('@comfyorg/comfyui-frontend-types').ComfyApp} ComfyApp */
-/** @typedef {import('./typedefs.js').INodeInputSlot} INodeInputSlot */
+/** @typedef {import('../01/typedefs.js').INodeInputSlot} INodeInputSlot */
 
-import {api} from "../../scripts/api.js";
+import {api} from "../../../scripts/api.js";
 /** @type {ComfyApp} */
-import {app} from "../../scripts/app.js";
-import {$el} from "../../scripts/ui.js";
+import {app} from "../../../scripts/app.js";
+import {$el} from "../../../scripts/ui.js";
 
-import { getNodeNameById, graphGetNodeById, findNodesByTypeName, findTimerNodes } from './graphHelpers.js';
-import { removeEmojis, chainCallback, stripTrailingId } from './utility.js';
-import { ensureTooltipLib, attachTooltip } from './tooltipHelpers.js';
-import { BestConfigTracker } from './best-config-tracker.js';
+import { removeEmojis, getNodeNameById, graphGetNodeById, findNodesByTypeName, findTimerNodes } from '../02/graphHelpers.js';
+import { chainCallback, stripTrailingId } from '../01/utility.js';
+import { ensureTooltipLib, attachTooltip } from '../01/tooltipHelpers.js';
+import { bestConfigTracker } from '../01/best-config-tracker.js';
 
 const LOCALSTORAGE_KEY = 'cg.quicknodes.timer.history';
 
@@ -40,13 +40,32 @@ export class Timer {
         return false;
     }
 
+    // Unified data snapshot used by all save operations
+    static getPersistedData() {
+        try {
+            return {
+                all_times: Timer.all_times,
+                run_history: Timer.run_history,
+                last_n_runs: Timer.last_n_runs,
+                runs_since_clear: Timer.runs_since_clear,
+                run_notes: Timer.run_notes
+            };
+        } catch (e) {
+            // Fallback to a minimal safe structure if something unexpected occurs
+            return {
+                all_times: Array.isArray(Timer.all_times) ? Timer.all_times : [],
+                run_history: typeof Timer.run_history === 'object' && Timer.run_history ? Timer.run_history : {},
+                last_n_runs: typeof Timer.last_n_runs === 'number' ? Timer.last_n_runs : 5,
+                runs_since_clear: typeof Timer.runs_since_clear === 'number' ? Timer.runs_since_clear : 0,
+                run_notes: typeof Timer.run_notes === 'object' && Timer.run_notes ? Timer.run_notes : {}
+            };
+        }
+    }
+
     static saveToLocalStorage() {
         try {
-            localStorage.setItem(LOCALSTORAGE_KEY, JSON.stringify(Timer.all_times));
-            localStorage.setItem(LOCALSTORAGE_KEY + '.settings', JSON.stringify({
-                last_n_runs: Timer.last_n_runs
-            }));
-            localStorage.setItem(LOCALSTORAGE_KEY + '.run_notes', JSON.stringify(Timer.run_notes));
+            const data = Timer.getPersistedData();
+            localStorage.setItem(LOCALSTORAGE_KEY, JSON.stringify(data));
         } catch (e) {
             console.warn('Failed to save timer history:', e);
         }
@@ -57,14 +76,9 @@ export class Timer {
             // Save to localStorage first
             Timer.saveToLocalStorage();
 
-            // Save data to external storage using API
-            api.storeUserData('timer_run_history', {
-                all_times: Timer.all_times,
-                run_history: Timer.run_history,
-                last_n_runs: Timer.last_n_runs,
-                runs_since_clear: Timer.runs_since_clear,
-                run_notes: Timer.run_notes
-            }).catch(err => {
+            // Save data to external storage using API, using the same unified payload
+            const data = Timer.getPersistedData();
+            api.storeUserData('timer_run_history', data).catch(err => {
                 console.warn('Failed to save timer data to storage:', err);
             });
         } catch (e) {
@@ -74,36 +88,69 @@ export class Timer {
 
     static loadFromLocalStorage() {
         try {
-            const data = localStorage.getItem(LOCALSTORAGE_KEY);
-            if (data) {
-                const parsedData = JSON.parse(data);
-                // Handle migration from array format to object format
-                if (parsedData.length > 0 && Array.isArray(parsedData[0])) {
-                    Timer.all_times = parsedData.map(item => ({
-                        id: item[0],
-                        runs: item[1],
-                        totalTime: item[2],
-                        avgPerRun: item[3],
-                        avgPerFlow: item[4] || 0
-                    }));
+            const dataStr = localStorage.getItem(LOCALSTORAGE_KEY);
+            if (dataStr) {
+                const parsed = JSON.parse(dataStr);
+
+                if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                    // New unified object format
+                    const at = parsed.all_times;
+                    if (Array.isArray(at) && at.length > 0 && Array.isArray(at[0])) {
+                        // Migration from legacy array-of-arrays
+                        Timer.all_times = at.map(item => ({
+                            id: item[0],
+                            runs: item[1],
+                            totalTime: item[2],
+                            avgPerRun: item[3],
+                            avgPerFlow: item[4] || 0
+                        }));
+                    } else if (Array.isArray(at)) {
+                        Timer.all_times = at;
+                    } else {
+                        Timer.all_times = Array.isArray(Timer.all_times) ? Timer.all_times : [];
+                    }
+
+                    if (parsed.run_history && typeof parsed.run_history === 'object') {
+                        Timer.run_history = parsed.run_history;
+                    }
+                    if (typeof parsed.last_n_runs === 'number') {
+                        Timer.last_n_runs = parsed.last_n_runs;
+                    }
+                    if (parsed.runs_since_clear !== undefined) {
+                        Timer.runs_since_clear = parsed.runs_since_clear;
+                    }
+                    if (parsed.run_notes && typeof parsed.run_notes === 'object') {
+                        Timer.run_notes = parsed.run_notes;
+                    }
                 } else {
-                    Timer.all_times = parsedData;
-                }
-            }
+                    // Legacy format: base key contains only all_times array
+                    const legacy = parsed;
+                    if (legacy && legacy.length > 0 && Array.isArray(legacy[0])) {
+                        Timer.all_times = legacy.map(item => ({
+                            id: item[0],
+                            runs: item[1],
+                            totalTime: item[2],
+                            avgPerRun: item[3],
+                            avgPerFlow: item[4] || 0
+                        }));
+                    } else {
+                        Timer.all_times = legacy || [];
+                    }
 
-            // Load settings
-            const settingsData = localStorage.getItem(LOCALSTORAGE_KEY + '.settings');
-            if (settingsData) {
-                const settings = JSON.parse(settingsData);
-                if (settings.last_n_runs && typeof settings.last_n_runs === 'number') {
-                    Timer.last_n_runs = settings.last_n_runs;
-                }
-            }
+                    // Load legacy settings and run notes
+                    const settingsData = localStorage.getItem(LOCALSTORAGE_KEY + '.settings');
+                    if (settingsData) {
+                        const settings = JSON.parse(settingsData);
+                        if (settings.last_n_runs && typeof settings.last_n_runs === 'number') {
+                            Timer.last_n_runs = settings.last_n_runs;
+                        }
+                    }
 
-            // Load run notes
-            const notesData = localStorage.getItem(LOCALSTORAGE_KEY + '.run_notes');
-            if (notesData) {
-                Timer.run_notes = JSON.parse(notesData);
+                    const notesData = localStorage.getItem(LOCALSTORAGE_KEY + '.run_notes');
+                    if (notesData) {
+                        Timer.run_notes = JSON.parse(notesData);
+                    }
+                }
             }
         } catch (e) {
             console.warn('Failed to load timer history:', e);
@@ -157,6 +204,7 @@ export class Timer {
             // Clear from localStorage
             localStorage.removeItem(LOCALSTORAGE_KEY);
             localStorage.removeItem(LOCALSTORAGE_KEY + '.settings');
+            localStorage.removeItem(LOCALSTORAGE_KEY + '.run_notes'); // legacy key
 
             // Clear from external storage API
             api.deleteUserData('timer_run_history').catch(err => {
@@ -288,12 +336,12 @@ export class Timer {
         try {
             // Make sure we have latest logs merged into storage
             try {
-                await BestConfigTracker.fetchAndStoreFromLogs();
+                await bestConfigTracker.fetchAndStoreFromLogs();
             } catch (e) {
                 // non-fatal
             }
 
-            const newItems = BestConfigTracker.getNewSinceAndMark();
+            const newItems = bestConfigTracker.getNewSinceAndMark();
             if (!newItems.length) return false;
 
             const lines = newItems.map(i => (i?.m?.trim?.() ?? String(i?.m || ""))).filter(Boolean);
@@ -325,6 +373,7 @@ export class Timer {
     // Wrapper used by ovum-timer.js to handle the 'execution_success' event.
     // Calls the original executionSuccess (if defined) and then appends best-config notes.
     static async onExecutionSuccess(e) {
+        console.log("[Timer] onExecutionSuccess:", e);
         // Call the original handler if present
         try {
             if (typeof Timer.executionSuccess === "function") {
@@ -398,6 +447,7 @@ export class Timer {
      * @param {ComfyTickEvent} e
      */
     static executing(e) {
+        console.log("[Timer] executing:", e);
         let detail = e.detail;
 
         if (typeof detail === "string") {
@@ -437,6 +487,7 @@ export class Timer {
     }
 
     static executionStart(e) {
+        console.log("[Timer] executionStart (from addEventListener):", e);
         // When a job starts, copy the queued run notes into the JS "Notes from queue" field
         try {
             const timerNodes = findTimerNodes();
@@ -886,6 +937,19 @@ export class Timer {
             rn++;
         }
 
+        // Header for the notes section
+        const notesHeader = $el("h4", { textContent: "Run Notes" });
+
+        // If scope targets the notes list wrapper, return the wrapper element with its content
+        if (scope === "cg-timer-notes-list-wrapper") {
+            return $el("div", {
+                className: "cg-timer-notes-list-wrapper",
+            }, [
+                notesHeader,
+                notesListEl
+            ]);
+        }
+
         // Top-level div with search UI, table, and run notes list
         return $el("div", {
             className: "cg-timer-widget-wrapper",
@@ -907,7 +971,7 @@ export class Timer {
                 $el("div", {
                     className: "cg-timer-notes-list-wrapper",
                 }, [
-                    $el("h4", { textContent: "Run Notes" }),
+                    notesHeader,
                     notesListEl
                 ])
             ]),

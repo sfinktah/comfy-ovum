@@ -1,16 +1,18 @@
 /** @typedef {import('@comfyorg/comfyui-frontend-types').ComfyApp} ComfyApp */
-/** @typedef {import('./typedefs.js').INodeInputSlot} INodeInputSlot */
+/** @typedef {import('../01/typedefs.js').INodeInputSlot} INodeInputSlot */
 
-import {api} from "../../scripts/api.js";
+import {api} from "../../../scripts/api.js";
 /** @type {ComfyApp} */
-import {app} from "../../scripts/app.js";
-import {$el} from "../../scripts/ui.js";
+import {app} from "../../../scripts/app.js";
+import {$el} from "../../../scripts/ui.js";
 
-import { graphGetNodeById  } from './graphHelpers.js';
-import { chainCallback } from './utility.js';
-import { ensureTooltipLib } from './tooltipHelpers.js';
-import { Timer } from './timer-class.js';
-import { BestConfigTracker } from './best-config-tracker.js';
+import { graphGetNodeById  } from '../02/graphHelpers.js';
+import { chainCallback } from '../01/utility.js';
+import { ensureTooltipLib } from '../01/tooltipHelpers.js';
+import { Timer } from '../04/timer-class.js';
+import { bestConfigTracker } from '../01/best-config-tracker.js';
+
+window.Timer = Timer;
 
 // Timer styles will be dynamically imported in the setup function
 // import _ from "./lodash";
@@ -23,6 +25,7 @@ function forwardWheelToCanvas(widgetEl, canvasEl) {
     widgetEl.addEventListener('wheel', (e) => {
         // Only intercept and forward when Ctrl is held
         if (!e.ctrlKey) return;
+        console.log('forwardWheelToCanvas', e);
 
         // Stop the widget from consuming the scroll and forward it
         e.preventDefault();
@@ -30,7 +33,7 @@ function forwardWheelToCanvas(widgetEl, canvasEl) {
 
         const forwarded = new WheelEvent('wheel', {
             deltaX: e.deltaX,
-            deltaY: -e.deltaY, // Invert the deltaY to fix the wheel direction
+            deltaY: e.deltaY, // Invert the deltaY to fix the wheel direction
             deltaZ: e.deltaZ,
             deltaMode: e.deltaMode,
             clientX: e.clientX,
@@ -55,7 +58,7 @@ app.registerExtension({
     name: "ovum.timer",
     setup: function () {
         // Import styles from module and inject them directly into the DOM
-        import("./timer-styles.js").then(({ injectTimerStyles }) => {
+        import("../01/timer-styles.js").then(({ injectTimerStyles }) => {
             injectTimerStyles();
         }).catch(err => {
             console.error("Failed to load timer styles:", err);
@@ -63,35 +66,6 @@ app.registerExtension({
 
         // Preload tooltip library (Tippy.js via CDN)
         ensureTooltipLib().catch(() => {});
-
-        // Wrap queuePrompt to capture queued notes at queue time
-        try {
-            const origQueuePrompt = api.queuePrompt?.bind(api);
-            if (typeof origQueuePrompt === "function") {
-                api.queuePrompt = async function(...args) {
-                    try {
-                        // Last arg is typically the prompt payload
-                        const payload = args[args.length - 1];
-                        const queuedRaw = Timer.extractQueuedNoteFromPrompt(payload);
-                        const result = await origQueuePrompt(...args);
-                        const promptId = result?.prompt_id ?? result?.promptId ?? result?.number ?? result?.data?.prompt_id;
-                        if (promptId && queuedRaw !== undefined) {
-                            const text = Timer.toNoteString(queuedRaw);
-                            Timer.queuedNotesByPromptId[promptId] = text;
-                            console.debug("[Timer] Captured queued note for prompt", promptId, ":", text);
-                        } else {
-                            console.debug("[Timer] queuePrompt: no promptId or no queuedRaw found.", { queuedRaw, result });
-                        }
-                        return result;
-                    } catch (err) {
-                        console.warn("[Timer] queuePrompt wrapper error:", err);
-                        return origQueuePrompt(...args);
-                    }
-                }
-            }
-        } catch (wrapErr) {
-            console.warn("[Timer] Failed to wrap queuePrompt:", wrapErr);
-        }
 
         function onLog(e) {
             console.log("[Timer] onLog", e);
@@ -112,7 +86,7 @@ app.registerExtension({
                 console.warn("Failed to collect system information:", err);
             });
 
-            BestConfigTracker.fetchAndStoreFromLogs().catch(err => {
+            bestConfigTracker.fetchAndStoreFromLogs().catch(err => {
                 console.warn("Failed to collect comfyui logs:", err);
             });
         }
@@ -129,9 +103,7 @@ app.registerExtension({
             onSocketOpen();
         }
         api.addEventListener('reconnected', onSocketOpen);
-        api.addEventListener('logs', onLogs);
 
-        Timer.loadFromLocalStorage(); // <--- Load history on startup
         Timer.loadFromStorage(); // <--- Restore complete history from DB
         window.Timer = Timer;
         api.addEventListener("executing", Timer.executing);
@@ -150,7 +122,8 @@ app.registerExtension({
     },
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
         if (nodeType.comfyClass === "Timer") {
-            chainCallback(nodeType.prototype, "onExecutionStart", function () {
+            chainCallback(nodeType.prototype, "onExecutionStart", function (message) {
+                console.debug("[Timer] onExecutionStart (from chainCallback)", message);
                 Timer.start();
             });
 
@@ -163,7 +136,7 @@ app.registerExtension({
                 }
             });
 
-            chainCallback(nodeType.prototype, "onNodeCreated", function () {
+            chainCallback(nodeType.prototype, "onNodeCreated", function (message) {
                 console.log('beforeRegisterNodeDef.onNodeCreated', this);
                 const node = this;
 
@@ -201,8 +174,9 @@ app.registerExtension({
                 }, { multiline: true });  // Enable multiline for textarea
 
                 // Add Notes from queue textarea (populated when job starts)
-                const notesFromQueueWidget = this.addWidget("text", "Notes from queue", "", (v) => v, { multiline: true });
-
+                const notesFromQueueWidget = this.addWidget("text", "Notes from queue", "", (v) => v, {
+                    readonly: true
+                });
                 // Store references for later use
                 Timer.activeNotesWidget = textareaWidget;
                 Timer.notesFromQueueWidget = notesFromQueueWidget;
@@ -359,6 +333,10 @@ app.registerExtension({
                     const existingTable = widget.inputEl.querySelector('.cg-timer-table');
                     if (existingTable) {
                         existingTable.parentNode.replaceChild(Timer.html('table'), existingTable);
+                        const existingNotes = widget.inputEl.querySelector('.cg-timer-notes-list-wrapper');
+                        if (existingNotes) {
+                            existingNotes.parentNode.replaceChild(Timer.html('cg-timer-notes-list-wrapper'), existingNotes);
+                        }
                     } else {
                         widget.inputEl.replaceChild(Timer.html(), widget.inputEl.firstChild);
                     }

@@ -184,7 +184,6 @@ export const timerStyles = `
     margin-top: 10px;
     color: #dddddd;
     font-family: system-ui, Arial, sans-serif;
-    font-size: 0.8em;
     text-align: left;
 }
 .cg-status-left,
