@@ -29,16 +29,40 @@ export function removeEmojis(input) {
 
 /**
  * Retrieve a node by its ID.
- * @param {string} id 
+ * Supports nested subgraph lookup using colon-separated IDs, e.g. "126:22:11".
+ * @param {string|number} id
  * @returns {object|null} Found node or null if not found.
  */
 export function graphGetNodeById(id) {
-    const g = app?.graph;
-    if (!g) return null;
-    if (typeof g.getNodeById === "function") return g.getNodeById(id);
-    if (g._nodes_by_id) return g._nodes_by_id[id] ?? null;
-    const nodes = g._nodes || g.nodes;
-    return Array.isArray(nodes) ? (nodes.find(n => n?.id === id) ?? null) : null;
+    const root = app?.graph;
+    if (!root) return null;
+
+    const parts = (typeof id === "string" ? id : String(id)).split(":");
+
+    const coerce = (v) => (/^\d+$/.test(v) ? Number(v) : v);
+
+    const getFrom = (graph, key) => {
+        if (!graph) return null;
+        if (typeof graph.getNodeById === "function") return graph.getNodeById(key);
+        if (graph._nodes_by_id) return graph._nodes_by_id[key] ?? null;
+        const nodes = graph._nodes || graph.nodes;
+        return Array.isArray(nodes) ? (nodes.find(n => n?.id === key) ?? null) : null;
+    };
+
+    let currentGraph = root;
+    let node = null;
+
+    for (let i = 0; i < parts.length; i++) {
+        const key = coerce(parts[i]);
+        node = getFrom(currentGraph, key);
+        if (!node) return null;
+        if (i < parts.length - 1) {
+            currentGraph = node.subgraph ?? null;
+            if (!currentGraph) return null;
+        }
+    }
+
+    return node;
 }
 
 /**
@@ -56,6 +80,8 @@ export function findNodesByTypeName(type) {
 }
 
 export function getNodeNameById(id) {
+    // g = app.graph._nodes_by_id[126].subgraph._nodes_by_id[22]
+    // g = app.graph.getNodeById(126).subgraph.getNodeById(22)
     const node = graphGetNodeById(id);
     if (!node) return `id:${id}`;
     const name = node.title || node.name || node.type || "";

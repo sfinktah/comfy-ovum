@@ -402,12 +402,6 @@ export class Timer {
     static executing(e) {
         let detail = e.detail;
 
-        if (typeof detail === "string") {
-            console.log("[Timer] executing: string detail:", detail);
-            const match = detail.match(/^\d+:(\d+)$/);
-            detail = match ? match[1] : detail;
-        }
-
         if (detail === Timer?.currentNodeId) return;
         const node_name = getNodeNameById(detail);
 
