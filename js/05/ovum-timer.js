@@ -6,7 +6,7 @@ import {api} from "../../../scripts/api.js";
 import {app} from "../../../scripts/app.js";
 import {$el} from "../../../scripts/ui.js";
 
-import { graphGetNodeById  } from '../02/graphHelpers.js';
+import { graphGetNodeById  } from '../01/graphHelpers.js';
 import { chainCallback } from '../01/utility.js';
 import { ensureTooltipLib } from '../01/tooltipHelpers.js';
 import { Timer } from '../04/timer-class.js';
@@ -55,7 +55,7 @@ function forwardWheelToCanvas(widgetEl, canvasEl) {
 }
 
 app.registerExtension({
-    name: "ovum.timer",
+    name: "cg.quicknodes.timer",
     setup: function () {
         // Import styles from module and inject them directly into the DOM
         import("../01/timer-styles.js").then(({ injectTimerStyles }) => {
@@ -66,10 +66,6 @@ app.registerExtension({
 
         // Preload tooltip library (Tippy.js via CDN)
         ensureTooltipLib().catch(() => {});
-
-        function onLog(e) {
-            console.log("[Timer] onLog", e);
-        }
 
         // Collect system information when socket opens
         function onSocketOpen() {
@@ -104,11 +100,12 @@ app.registerExtension({
         }
         api.addEventListener('reconnected', onSocketOpen);
 
+        Timer.loadFromLocalStorage(); // <--- Load history on startup
         Timer.loadFromStorage(); // <--- Restore complete history from DB
         window.Timer = Timer;
         api.addEventListener("executing", Timer.executing);
         api.addEventListener("execution_start", Timer.executionStart);
-        api.addEventListener("execution_success", Timer.onExecutionSuccess)
+        api.addEventListener("execution_success", Timer.executionSuccess)
 
         // Track Control key for deletion UI cursor feedback
         document.addEventListener('keydown', (e) => {
@@ -122,8 +119,7 @@ app.registerExtension({
     },
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
         if (nodeType.comfyClass === "Timer") {
-            chainCallback(nodeType.prototype, "onExecutionStart", function (message) {
-                console.debug("[Timer] onExecutionStart (from chainCallback)", message);
+            chainCallback(nodeType.prototype, "onExecutionStart", function () {
                 Timer.start();
             });
 
@@ -136,7 +132,7 @@ app.registerExtension({
                 }
             });
 
-            chainCallback(nodeType.prototype, "onNodeCreated", function (message) {
+            chainCallback(nodeType.prototype, "onNodeCreated", function () {
                 console.log('beforeRegisterNodeDef.onNodeCreated', this);
                 const node = this;
 
@@ -174,9 +170,8 @@ app.registerExtension({
                 }, { multiline: true });  // Enable multiline for textarea
 
                 // Add Notes from queue textarea (populated when job starts)
-                const notesFromQueueWidget = this.addWidget("text", "Notes from queue", "", (v) => v, {
-                    readonly: true
-                });
+                const notesFromQueueWidget = this.addWidget("text", "Notes from queue", "", (v) => v, { multiline: true });
+
                 // Store references for later use
                 Timer.activeNotesWidget = textareaWidget;
                 Timer.notesFromQueueWidget = notesFromQueueWidget;
