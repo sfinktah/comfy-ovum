@@ -1123,7 +1123,7 @@ app.registerExtension({
                                     if (dynamicInputLength > 1)
                                         secondLast = this.inputs[dynamicInputIndexes[dynamicInputLength - 2]]
                                     else
-                                        secondlast = null;
+                                        secondLast = null;
                                     if (secondLast && last && secondLast.link == null && last.link == null) {
                                         console.debug("[Timer] Removing last input", last.name);
                                         this.removeInput(dynamicInputIndexes[dynamicInputLength - 1]);

@@ -1,7 +1,6 @@
 /** @typedef {import('@comfyorg/comfyui-frontend-types').ComfyApp} ComfyApp */
 /** @typedef {import('../01/typedefs.js').INodeInputSlot} INodeInputSlot */
 
-import {api} from "../../../scripts/api.js";
 /** @type {ComfyApp} */
 import {app} from "../../../scripts/app.js";
 import {$el} from "../../../scripts/ui.js";
@@ -47,6 +46,8 @@ export class Timer {
                 last_n_runs: Timer.last_n_runs
             }));
             localStorage.setItem(LOCALSTORAGE_KEY + '.run_notes', JSON.stringify(Timer.run_notes));
+            localStorage.setItem(LOCALSTORAGE_KEY + '.run_history', JSON.stringify(Timer.run_history));
+            localStorage.setItem(LOCALSTORAGE_KEY + '.runs_since_clear', JSON.stringify(Timer.runs_since_clear));
         } catch (e) {
             console.warn('Failed to save timer history:', e);
         }
@@ -54,19 +55,8 @@ export class Timer {
 
     static saveToStorage() {
         try {
-            // Save to localStorage first
+            // Local-only persistence
             Timer.saveToLocalStorage();
-
-            // Save data to external storage using API
-            api.storeUserData('timer_run_history', {
-                all_times: Timer.all_times,
-                run_history: Timer.run_history,
-                last_n_runs: Timer.last_n_runs,
-                runs_since_clear: Timer.runs_since_clear,
-                run_notes: Timer.run_notes
-            }).catch(err => {
-                console.warn('Failed to save timer data to storage:', err);
-            });
         } catch (e) {
             console.warn('Failed to save timer data to storage:', e);
         }
@@ -105,6 +95,24 @@ export class Timer {
             if (notesData) {
                 Timer.run_notes = JSON.parse(notesData);
             }
+
+            // Load run history
+            const historyData = localStorage.getItem(LOCALSTORAGE_KEY + '.run_history');
+            if (historyData) {
+                const parsedHistory = JSON.parse(historyData);
+                if (parsedHistory && typeof parsedHistory === 'object') {
+                    Timer.run_history = parsedHistory;
+                }
+            }
+
+            // Load runs_since_clear
+            const rscData = localStorage.getItem(LOCALSTORAGE_KEY + '.runs_since_clear');
+            if (rscData) {
+                const v = JSON.parse(rscData);
+                if (typeof v === 'number') {
+                    Timer.runs_since_clear = v;
+                }
+            }
         } catch (e) {
             console.warn('Failed to load timer history:', e);
         }
@@ -112,41 +120,9 @@ export class Timer {
 
     static loadFromStorage() {
         try {
-            // First load from localStorage as fallback
+            // Local-only persistence
             Timer.loadFromLocalStorage();
-
-            // Try to load data from storage API
-            api.getUserData('timer_run_history').then(data => {
-                if (data && data.all_times) {
-                    // Handle migration from array format to object format
-                    if (data.all_times.length > 0 && Array.isArray(data.all_times[0])) {
-                        Timer.all_times = data.all_times.map(item => ({
-                            id: item[0],
-                            runs: item[1],
-                            totalTime: item[2],
-                            avgPerRun: item[3],
-                            avgPerFlow: item[4] || 0
-                        }));
-                    } else {
-                        Timer.all_times = data.all_times;
-                    }
-                }
-                if (data && data.run_history) {
-                    Timer.run_history = data.run_history;
-                }
-                if (data && data.last_n_runs) {
-                    Timer.last_n_runs = data.last_n_runs;
-                }
-                if (data && data.runs_since_clear !== undefined) {
-                    Timer.runs_since_clear = data.runs_since_clear;
-                }
-                if (data && data.run_notes) {
-                    Timer.run_notes = data.run_notes;
-                }
-                if (Timer.onChange) Timer.onChange();
-            }).catch(err => {
-                console.warn('Failed to load timer data from storage:', err);
-            });
+            if (Timer.onChange) Timer.onChange();
         } catch (e) {
             console.warn('Failed to load timer data from storage:', e);
         }
@@ -157,11 +133,9 @@ export class Timer {
             // Clear from localStorage
             localStorage.removeItem(LOCALSTORAGE_KEY);
             localStorage.removeItem(LOCALSTORAGE_KEY + '.settings');
-
-            // Clear from external storage API
-            api.deleteUserData('timer_run_history').catch(err => {
-                console.warn('Failed to clear timer data from storage:', err);
-            });
+            localStorage.removeItem(LOCALSTORAGE_KEY + '.run_notes');
+            localStorage.removeItem(LOCALSTORAGE_KEY + '.run_history');
+            localStorage.removeItem(LOCALSTORAGE_KEY + '.runs_since_clear');
 
             console.log('Timer data cleared from storage');
         } catch (e) {
