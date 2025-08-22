@@ -6,60 +6,14 @@ import {api} from "../../scripts/api.js";
 import {app} from "../../scripts/app.js";
 import {$el} from "../../scripts/ui.js";
 
-import { graphGetNodeById, findNodesByTypeName, findTimerNodes } from './graphHelpers.js';
+import { getNodeNameById, graphGetNodeById, findNodesByTypeName, findTimerNodes } from './graphHelpers.js';
 import { removeEmojis, chainCallback, stripTrailingId } from './utility.js';
 import { ensureTooltipLib, attachTooltip } from './tooltipHelpers.js';
-
-// Timer styles will be dynamically imported in the setup function
-// import _ from "./lodash";
-
-const MARGIN = 8;
+import { BestConfigTracker } from './best-config-tracker.js';
 
 const LOCALSTORAGE_KEY = 'cg.quicknodes.timer.history';
 
-
-function get_node_name_by_id(id) {
-    const node = graphGetNodeById(id);
-    if (!node) return `id:${id}`;
-    const name = node.title || node.name || node.type || "";
-
-    // RegExp to remove most common Unicode emoji/emoticon characters
-    return removeEmojis(name) + ' (' + id + ')';
-}
-function forwardWheelToCanvas(widgetEl, canvasEl) {
-    if (!widgetEl || !canvasEl) return;
-
-    widgetEl.addEventListener('wheel', (e) => {
-        // Only intercept and forward when Ctrl is held
-        if (!e.ctrlKey) return;
-
-        // Stop the widget from consuming the scroll and forward it
-        e.preventDefault();
-        e.stopPropagation();
-
-        const forwarded = new WheelEvent('wheel', {
-            deltaX: e.deltaX,
-            deltaY: -e.deltaY, // Invert the deltaY to fix the wheel direction
-            deltaZ: e.deltaZ,
-            deltaMode: e.deltaMode,
-            clientX: e.clientX,
-            clientY: e.clientY,
-            screenX: e.screenX,
-            screenY: e.screenY,
-            ctrlKey: e.ctrlKey,
-            shiftKey: e.shiftKey,
-            altKey: e.altKey,
-            metaKey: e.metaKey,
-            buttons: e.buttons,
-            bubbles: true,
-            cancelable: true,
-            composed: true,
-        });
-
-        canvasEl.dispatchEvent(forwarded);
-    }, { passive: false });
-}
-class Timer {
+export class Timer {
     static all_times = [];
     static run_history = {}; // Store timings for each run
     static current_run_id = null; // ID for the current run
@@ -329,6 +283,64 @@ class Timer {
         return undefined;
     }
 
+    // Append any newly seen best-config entries into the current run notes
+    static async noteNewBestConfigsInCurrentRunNotes() {
+        try {
+            // Make sure we have latest logs merged into storage
+            try {
+                await BestConfigTracker.fetchAndStoreFromLogs();
+            } catch (e) {
+                // non-fatal
+            }
+
+            const newItems = BestConfigTracker.getNewSinceAndMark();
+            if (!newItems.length) return false;
+
+            const lines = newItems.map(i => (i?.m?.trim?.() ?? String(i?.m || ""))).filter(Boolean);
+            if (!lines.length) return false;
+
+            const addition = "New best configs:\n" + lines.join("\n");
+
+            if (Timer.current_run_id) {
+                const prev = Timer.run_notes[Timer.current_run_id] || "";
+                Timer.run_notes[Timer.current_run_id] = prev ? prev + "\n" + addition : addition;
+            }
+
+            // Try to reflect in the active run notes widget, if present
+            if (Timer.activeNotesWidget) {
+                const curVal = Timer.activeNotesWidget.value || "";
+                Timer.activeNotesWidget.value = curVal ? curVal + "\n" + addition : addition;
+            }
+
+            if (typeof Timer.onChange === "function") {
+                Timer.onChange();
+            }
+            return true;
+        } catch (err) {
+            console.warn("[Timer] Failed to append best-config notes:", err);
+            return false;
+        }
+    }
+
+    // Wrapper used by ovum-timer.js to handle the 'execution_success' event.
+    // Calls the original executionSuccess (if defined) and then appends best-config notes.
+    static async onExecutionSuccess(e) {
+        // Call the original handler if present
+        try {
+            if (typeof Timer.executionSuccess === "function") {
+                const maybePromise = Timer.executionSuccess(e);
+                if (maybePromise && typeof maybePromise.then === "function") {
+                    await maybePromise;
+                }
+            }
+        } catch (err) {
+            console.warn("[Timer] executionSuccess handler threw:", err);
+        }
+
+        // Append any newly seen best-config entries to the current run notes
+        await Timer.noteNewBestConfigsInCurrentRunNotes();
+    }
+
     static getLastNRunsAvg(id, n = null) {
         if (n === null) n = Timer.last_n_runs;
         const runIds = Object.keys(Timer.run_history).sort().reverse().slice(0, n);
@@ -394,7 +406,7 @@ class Timer {
         }
 
         if (detail === Timer?.currentNodeId) return;
-        const node_name = get_node_name_by_id(detail);
+        const node_name = getNodeNameById(detail);
 
         const t = LiteGraph.getTime();
         const unix_t = Math.floor(t / 1000);
@@ -601,7 +613,6 @@ class Timer {
             type: "text",
             placeholder: "Quick search...",
             value: Timer.searchTerm,
-            style: { marginRight: "8px", width: "150px" },
             oninput: e => {
                 console.log('html.search.oninput');
                 Timer.searchTerm = e.target.value;
@@ -614,7 +625,7 @@ class Timer {
             onkeydown: e => {
                 console.log('html.search.onkeydown');
                 if (e.key === "Enter" || e.key === "Escape")
-                e.stopPropagation();
+                    e.stopPropagation();
             },
             onkeyup: e => {
                 e.stopPropagation();
@@ -627,7 +638,6 @@ class Timer {
         // Copy button for copying table contents
         const copyButton = $el("button", {
             textContent: "Copy",
-            style: { marginRight: "8px" },
             onclick: e => {
                 // Find the table with the cg-timer-table class
                 const table = document.querySelector('.cg-timer-table');
@@ -726,7 +736,6 @@ class Timer {
 
         const regexLabel = $el("label", {
             for: "timer-search-regex",
-            style: {fontSize: "80%"}
         }, ["Regex"]);
 
         // Table header with individual columns for each of the last n runs
@@ -799,14 +808,14 @@ class Timer {
                 let re;
                 try {
                     re = new RegExp(Timer.searchTerm, "i");
-                    filterFunc = (node_data) => re.test(get_node_name_by_id(node_data.id));
+                    filterFunc = (node_data) => re.test(getNodeNameById(node_data.id));
                 } catch {
                     filterFunc = () => true; // Don't filter if regex is broken
                 }
             } else {
                 const searchLower = Timer.searchTerm.toLowerCase();
                 filterFunc = (node_data) =>
-                    get_node_name_by_id(node_data.id).toLowerCase().includes(searchLower);
+                    getNodeNameById(node_data.id).toLowerCase().includes(searchLower);
             }
         }
 
@@ -815,7 +824,7 @@ class Timer {
             const t = node_data.id;
 
             const rowCells = [
-                $el("td", {className: "node", textContent: get_node_name_by_id(node_data.id)})
+                $el("td", {className: "node", textContent: getNodeNameById(node_data.id)})
             ];
             if (!Timer.isHidden('runs', 'display')) rowCells.push($el("td", {className: "runs", "textContent": node_data.runs.toString()}));
             if (!Timer.isHidden('per-run', 'display')) rowCells.push($el("td", {className: "per-run", "textContent": Timer._format(node_data.avgPerRun)}));
@@ -872,7 +881,6 @@ class Timer {
             const body = $el("div", {
                 className: "cg-run-note-body",
                 textContent: noteText,
-                style: { whiteSpace: "pre-wrap", marginBottom: "8px" }
             });
             notesListEl.append(header, body);
             rn++;
@@ -887,7 +895,6 @@ class Timer {
             }, [
                 $el("div", {
                     className: "cg-timer-search",
-                    style: { marginBottom: "6px" }
                 }, [
                     searchInput,
                     regexCheckbox,
@@ -899,7 +906,6 @@ class Timer {
                 }, [table]),
                 $el("div", {
                     className: "cg-timer-notes-list-wrapper",
-                    style: { marginTop: "10px" }
                 }, [
                     $el("h4", { textContent: "Run Notes" }),
                     notesListEl
@@ -927,318 +933,3 @@ class Timer {
         ]);
     }
 }
-
-app.registerExtension({
-    name: "ovum.timer",
-    setup: function () {
-        // Import styles from module and inject them directly into the DOM
-        import("./timer-styles.js").then(({ injectTimerStyles }) => {
-            injectTimerStyles();
-        }).catch(err => {
-            console.error("Failed to load timer styles:", err);
-        });
-
-        // Preload tooltip library (Tippy.js via CDN)
-        ensureTooltipLib().catch(() => {});
-
-        // Wrap queuePrompt to capture queued notes at queue time
-        try {
-            const origQueuePrompt = api.queuePrompt?.bind(api);
-            if (typeof origQueuePrompt === "function") {
-                api.queuePrompt = async function(...args) {
-                    try {
-                        // Last arg is typically the prompt payload
-                        const payload = args[args.length - 1];
-                        const queuedRaw = Timer.extractQueuedNoteFromPrompt(payload);
-                        const result = await origQueuePrompt(...args);
-                        const promptId = result?.prompt_id ?? result?.promptId ?? result?.number ?? result?.data?.prompt_id;
-                        if (promptId && queuedRaw !== undefined) {
-                            const text = Timer.toNoteString(queuedRaw);
-                            Timer.queuedNotesByPromptId[promptId] = text;
-                            console.debug("[Timer] Captured queued note for prompt", promptId, ":", text);
-                        } else {
-                            console.debug("[Timer] queuePrompt: no promptId or no queuedRaw found.", { queuedRaw, result });
-                        }
-                        return result;
-                    } catch (err) {
-                        console.warn("[Timer] queuePrompt wrapper error:", err);
-                        return origQueuePrompt(...args);
-                    }
-                }
-            }
-        } catch (wrapErr) {
-            console.warn("[Timer] Failed to wrap queuePrompt:", wrapErr);
-        }
-
-        // Collect system information when socket opens
-        function onSocketOpen() {
-            console.info("[ComfyUI] websocket opened/reconnected");
-            // Record system information when connection opens
-            app.api.getSystemStats().then(x => {
-                Timer.systemInfo = {
-                    argv: x.system?.argv?.slice(1).join(' ') || '',
-                    pytorch: x.system?.pytorch_version || '',
-                    gpu: x.devices?.[0]?.name || ''
-                };
-                console.log("System Info Collected:", Timer.systemInfo);
-            }).catch(err => {
-                console.warn("Failed to collect system information:", err);
-            });
-        }
-
-        // Handle socket close events
-        function onSocketClose(event) {
-            console.warn("[ComfyUI] websocket closed", event.code, event.reason);
-            Timer.systemInfo = {...Timer.systemInfo, connectionClosed: true, closeCode: event.code, closeReason: event.reason};
-        }
-
-        // Set up socket event listeners
-        if (api.socket && api.socket.readyState === WebSocket.OPEN) {
-            // If socket is already open, collect stats immediately
-            onSocketOpen();
-        }
-        api.addEventListener('reconnected', onSocketOpen);
-
-        Timer.loadFromLocalStorage(); // <--- Load history on startup
-        Timer.loadFromStorage(); // <--- Restore complete history from DB
-        window.Timer = Timer;
-        api.addEventListener("executing", Timer.executing);
-        api.addEventListener("execution_start", Timer.executionStart);
-        api.addEventListener("execution_success", Timer.executionSuccess)
-
-        // Track Control key for deletion UI cursor feedback
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Control') Timer.ctrlDown = true;
-        });
-        document.addEventListener('keyup', (e) => {
-            if (e.key === 'Control') Timer.ctrlDown = false;
-        });
-
-        console.log('cg.quicknodes.timer registered');
-    },
-    async beforeRegisterNodeDef(nodeType, nodeData, app) {
-        if (nodeType.comfyClass === "Timer") {
-            chainCallback(nodeType.prototype, "onExecutionStart", function () {
-                Timer.start();
-            });
-
-            chainCallback(nodeType.prototype, "onExecuted", function (message) {
-                console.debug("[Timer] onExecuted", message);
-                let bg_image = message["bg_image"];
-                if (bg_image) {
-                    console.log("[Timer] onExecuted: bg_image", bg_image);
-                    this.properties.currentRunning = {data : bg_image };
-                }
-            });
-
-            chainCallback(nodeType.prototype, "onNodeCreated", function () {
-                console.log('beforeRegisterNodeDef.onNodeCreated', this);
-                const node = this;
-
-                // Ensure built-in widgets (like 'Run notes (for queued run)') render above the dynamic inputs
-                // this.widgets_up = true;
-
-                // ComfyNode
-                // console.log('cg.quicknodes.timer.onNodeCreated', this);
-
-                this.addWidget("button", "clear", "", Timer.clear);
-
-
-                // Add Storage button
-                this.addWidget("button", "store", "", () => {
-                    Timer.saveToStorage();
-                });
-
-                // Add Clear Storage button
-                this.addWidget("button", "clear storage", "", () => {
-                    Timer.clearStorage();
-                });
-
-                // Add a number input to control how many last runs to display
-                this.addWidget("number", "Last runs to show", Timer.last_n_runs, (v) => {
-                    return Timer.setLastNRuns(v);
-                }, { min: 1, max: Timer.maxRuns, step: 1, precision: 0 });
-
-                // Add the multiline run notes textarea (active run)
-                const textareaWidget = this.addWidget("text", "Run notes (for active run)", "", (v) => {
-                    // Save the note to the current run if available
-                    if (Timer.current_run_id) {
-                        Timer.run_notes[Timer.current_run_id] = v;
-                    }
-                    return v;
-                }, { multiline: true });  // Enable multiline for textarea
-
-                // Add Notes from queue textarea (populated when job starts)
-                const notesFromQueueWidget = this.addWidget("text", "Notes from queue", "", (v) => v, { multiline: true });
-
-                // Store references for later use
-                Timer.activeNotesWidget = textareaWidget;
-                Timer.notesFromQueueWidget = notesFromQueueWidget;
-
-                // ---- Dynamic inputs: arg1, arg2, ... ----
-                const ensureDynamicInputs = (isConnecting = true) => {
-                    console.log('ensureDynamicInputs', node);
-                    try {
-                        // this.inputs = this.inputs || [];
-                        // Ensure we have at least "input 1"
-                        // this === node
-                        // console.log('this == node?', this === node);
-                        const dynamicInputs = this.inputs.filter(input => input.name.startsWith("arg"));
-                        const dynamicInputIndexes = [];
-                        for (let i = 0; i < this.inputs.length; i++) {
-                            if (!this.inputs[i].isWidgetInputSlot) {
-                                dynamicInputIndexes.push(i);
-                            }
-                        }
-                        let dynamicInputLength = dynamicInputs.length;
-                        if (dynamicInputLength === 1) {
-                            if (dynamicInputs[0].name && dynamicInputs[0].label === undefined && dynamicInputs[0].name.startsWith("arg")) {
-                                dynamicInputs[0].label = "py-input " + dynamicInputs[0].name.substr(3);
-                            }
-                        }
-                        if (!dynamicInputs.length) {
-                            const nextIndex = dynamicInputLength + 1;
-                            console.debug(`[Timer] Adding initial dynamic input: arg${nextIndex}`);
-
-                            // properties include label, link, name, type, shape, widget, boundingRect
-                            /** @type {INodeInputSlot} */
-                            const nodeInputSlot = this.addInput(`arg${nextIndex}`, "*", { label: "in-input " + nextIndex });
-                            dynamicInputs.push(nodeInputSlot);
-                            dynamicInputIndexes.push(dynamicInputLength);
-                            ++dynamicInputLength;
-
-                            // setDirtyCanvas is called by LGraphNode.addInput
-                            // this.canvas.setDirty(true, true);
-                            // node.graph.setDirtyCanvas(true);
-                        }
-
-                        // If last input has a link, add a new trailing input
-                        let last = this.inputs[dynamicInputIndexes[dynamicInputLength - 1]];
-                        const lastHasLink = (last.link != null);
-                        if (lastHasLink) {
-                            const nextIndex = dynamicInputLength + 1;
-                            console.debug("[Timer] Last input has link; adding input", nextIndex);
-                            const nodeInputSlot = this.addInput(`arg${nextIndex}`, "*", { label: "nu-input " + nextIndex });
-                            // setDirtyCanvas is called by LGraphNode.addInput
-                            // this.canvas.setDirty(true, true);
-                            // node.graph.setDirtyCanvas(true);
-                        }
-                        else {
-                            console.debug("[Timer] Last input does not have link; seeing if it's cleanup time");
-                            if (!isConnecting) {
-                                let secondLast;
-                                for (;;) {
-                                    if (dynamicInputLength > 1)
-                                        secondLast = this.inputs[dynamicInputIndexes[dynamicInputLength - 2]]
-                                    else
-                                        secondlast = null;
-                                    if (secondLast && last && secondLast.link == null && last.link == null) {
-                                        console.debug("[Timer] Removing last input", last.name);
-                                        this.removeInput(dynamicInputIndexes[dynamicInputLength - 1]);
-                                        dynamicInputIndexes.pop();
-                                        --dynamicInputLength;
-                                        last = secondLast;
-                                    } else {
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-
-                    } catch (err) {
-                        console.warn("[Timer] ensureDynamicInputs failed:", err);
-                    }
-                };
-
-                // Initialize dynamic inputs
-                ensureDynamicInputs();
-
-                // Hook connections change to handle rename and auto-append inputs
-                chainCallback(this, "onConnectionsChange", function (slotType, slot, isConnecting, linkInfo, output) {
-                    try {
-                        console.debug("[Timer] onConnectionsChange", {
-                            slotType: slotType,
-                            slot: slot,
-                            isChangeConnect: isConnecting,
-                            linkInfo: linkInfo,
-                            output: output,
-                            nodeId: this.id
-                        });
-                        if (slotType == LiteGraph.INPUT) {
-                            // disconnecting
-                            if (!isConnecting) {
-                                if (this.inputs[slot].name.startsWith("arg")) {
-                                    this.inputs[slot].type = '*';
-                                    this.inputs[slot].label = "re-input " + this.inputs[slot].name.substring(3);
-                                    // revertInputBaseName(slot);
-                                    // this.title = "Set"
-                                }
-                            }
-                            //On Connect
-                            if (linkInfo && node.graph && isConnecting) {
-                                const fromNode = graphGetNodeById(linkInfo.origin_id);
-                                // app.graph.getNodeById
-
-                                if (fromNode && fromNode.outputs && fromNode.outputs[linkInfo.origin_slot]) {
-                                    const type = fromNode.outputs[linkInfo.origin_slot].type;
-                                    // slot.name = newName;
-                                    // Set the slot type to match the connected type
-                                    // this.setDirtyCanvas?.(true, true);
-
-                                    if (this.inputs[slot].name.startsWith("arg")) {
-                                        this.inputs[slot].label = type + " " + this.inputs[slot].name.substring(3);
-                                        this.inputs[slot].type = type;
-                                    }
-                                } else {
-                                    showAlert("node input undefined.")
-                                }
-                            }
-                            ensureDynamicInputs(isConnecting);
-                        }
-                    } catch (err) {
-                        console.warn("[Timer] onConnectionsChange handler error:", err);
-                    }
-                });
-                // ---- End dynamic inputs ----
-
-                /**
-                 * @var {BaseDOMWidgetImpl} widget
-                 */
-                let widget;
-
-                const inputEl = Timer.html();
-
-                widget = this.addDOMWidget(name, 'textmultiline', inputEl, {
-                    getValue() {
-                        return inputEl.value
-                    },
-                    setValue(v) {
-                        inputEl.value = v
-                    },
-                })
-                widget.inputEl = inputEl
-                widget.onRemove = () => {
-                    inputEl.remove()
-                }
-
-                this.serialize_widgets = false;
-
-                Timer.onChange = function () {
-                    const existingTable = widget.inputEl.querySelector('.cg-timer-table');
-                    if (existingTable) {
-                        existingTable.parentNode.replaceChild(Timer.html('table'), existingTable);
-                    } else {
-                        widget.inputEl.replaceChild(Timer.html(), widget.inputEl.firstChild);
-                    }
-                }
-                setTimeout(() => {
-                    Timer.onChange();
-                    // Forward wheel events to canvas when Ctrl is pressed
-                    forwardWheelToCanvas(widget.inputEl, app.canvas.canvas);
-                }, 100);
-            });
-        }
-    },
-
-})
-

@@ -1,6 +1,7 @@
 /** @typedef {import('@comfyorg/comfyui-frontend-types').ComfyApp} ComfyApp */
 /** @type {ComfyApp} */
 import { app } from "../../scripts/app.js";
+import {removeEmojis} from "./utility";
 
 /**
  * Retrieve a node by its ID.
@@ -28,6 +29,15 @@ export function findNodesByTypeName(type) {
     if (typeof g.findNodesByClass === "function") return g.findNodesByClass(type);
     const nodes = g._nodes || g.nodes || [];
     return nodes.filter(n => n?.type === type || n?.comfyClass === type || n?.name === type);
+}
+
+export function getNodeNameById(id) {
+    const node = graphGetNodeById(id);
+    if (!node) return `id:${id}`;
+    const name = node.title || node.name || node.type || "";
+
+    // RegExp to remove most common Unicode emoji/emoticon characters
+    return removeEmojis(name) + ' (' + id + ')';
 }
 
 /**

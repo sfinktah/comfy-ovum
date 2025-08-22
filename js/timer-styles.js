@@ -3,7 +3,9 @@
  */
 
 export const timerStyles = `
-:root {
+/* Scoped variables and base layout */
+.cg-timer-widget-wrapper {
+    /* formerly global :root variables, now scoped */
     --lgraph-node_title_height: 30px;
     --lgraph-node_title_text_y: 20px;
     --lgraph-node_slot_height: 20px;
@@ -39,68 +41,35 @@ export const timerStyles = `
     --lgraph-link_color: #9A9;
     --lgraph-event_link_color: #A86;
     --lgraph-connecting_link_color: #AFA;
-}
 
-.cg-timer-table {
-    border-collapse: collapse;
-    width: auto;
-    font-family: sans-serif;
+    height: 100%;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+
+    /* inherited text styling */
+    font-family: system-ui, Arial, sans-serif;
     font-size: 12px;
-    background-color: #1e1e1e;
     color: #e0e0e0;
-    margin: 0;
-    padding: 0;
-    table-layout: auto;
-    border: none;
-    box-shadow: 0 0 4px rgba(0,0,0,0.1);
 }
 
-.cg-timer-table th,
-.cg-timer-table td {
-    border: none;
-    padding: 6px 10px;
-    text-align: right;
-    vertical-align: middle;
-}
-
-.cg-timer-table th:first-child,
-.cg-timer-table td:first-child {
-    text-align: left;
-}
-
-.cg-timer-table th {
-    background-color: #2a2a2a;
-    font-weight: normal;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
-
-.cg-timer-container-unused-now {
-    font-family: monospace;
-    font-size: 12px;
-    color: #eee;
-    overflow: auto;
-    padding: 8px;
-    box-sizing: border-box;
-    left: 64px;
-    top: 57px;
-    overflow: hidden;
-}
-
+/* primary content area */
 .cg-timer-widget {
+    flex: 1 1 auto;
     width: 100%;
     overflow: auto;
 }
 
-.cg-timer-search {
+/* search area (moved inline styles from HTML) */
+.cg-timer-widget .cg-timer-search {
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-bottom: 8px;
+    margin-bottom: 6px; /* from HTML */
 }
-
-.cg-timer-search input[type="text"] {
-    flex: 1;
+.cg-timer-widget .cg-timer-search input[type="text"] {
+    width: 150px;       /* from HTML */
+    margin-right: 8px;  /* from HTML */
     min-width: 100px;
     background: #333;
     border: 1px solid #555;
@@ -108,54 +77,13 @@ export const timerStyles = `
     padding: 4px 8px;
     border-radius: 3px;
 }
-
-.cg-timer-search label {
+.cg-timer-widget .cg-timer-search label {
     color: #ccc;
-    font-size: 11px;
+    font-size: 80%; /* from HTML */
 }
 
-.cg-timer-table {
-    background: #2a2a2a;
-    border: 1px solid #555;
-    border-radius: 4px;
-    border-collapse: collapse;
-    font-size: 12px;
-    color: #eee;
-}
-
-.cg-timer-table th {
-    background-color: #333;
-    color: #eee;
-    text-align: left;
-    padding: 4px 6px;
-    font-weight: bold;
-    border-bottom: 1px solid #555;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.cg-timer-table td {
-    padding: 3px 6px;
-    border-bottom: 1px solid #444;
-    color: #ddd;
-}
-
-.cg-timer-table tr:nth-child(even) {
-    background-color: #262626;
-}
-
-.cg-timer-table tr:hover {
-    background-color: #333333;
-}
-
-.cg-timer-table .node {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.cg-timer-container button {
+/* action buttons (moved inline margin from HTML) */
+.cg-timer-widget button {
     background: #444;
     border: 1px solid #555;
     color: #eee;
@@ -163,144 +91,120 @@ export const timerStyles = `
     border-radius: 3px;
     cursor: pointer;
     font-size: 11px;
-    margin-right: 5px;
-    margin-bottom: 8px;
+    margin-right: 8px; /* from HTML */
 }
-
-.cg-timer-container button:hover {
+.cg-timer-widget button:hover {
     background: #555;
 }
 
-.cg-timer-container {
-    width: 100%;
-}
-
+/* table container */
 .cg-timer-table-wrapper {
-    height: 100%;
     width: 100%;
 }
 
+/* consolidated table styles */
 .cg-timer-table {
     width: 100%;
-}
+    border-collapse: collapse;
+    table-layout: auto;
+    margin: 0;
+    padding: 0;
 
+    background: #2a2a2a;
+    border: 1px solid #555;
+    border-radius: 4px;
+    box-shadow: 0 0 4px rgba(0,0,0,0.1);
+    color: #eee;
+}
+.cg-timer-table th,
 .cg-timer-table td {
-    padding: 3px 6px;
+    border: none;
+    vertical-align: middle;
+}
+.cg-timer-table th:first-child,
+.cg-timer-table td:first-child {
+    text-align: left;
+}
+.cg-timer-table th {
+    background-color: #333;
+    color: #eee;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid #555;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding: 4px 6px;
+}
+.cg-timer-table td {
+    color: #ddd;
     border-bottom: 1px solid #444;
-    color: #ccc;
+    text-align: right;
+    padding: 3px 6px;
 }
-
+.cg-timer-table tr:nth-child(even) {
+    background-color: #262626;
+}
+.cg-timer-table tr:hover {
+    background-color: #333333;
+}
 .cg-timer-table .node {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
     min-width: 200px;
-    width: auto;
 }
-
-.cg-timer-table .runs, 
-.cg-timer-table .per-run, 
-.cg-timer-table .per-flow, 
+.cg-timer-table .runs,
+.cg-timer-table .per-run,
+.cg-timer-table .per-flow,
 .cg-timer-table .current-run,
-.cg-timer-table .run-n
-{
+.cg-timer-table .run-n {
     min-width: 100px;
-    width: auto;
     text-align: right;
 }
 
-.cg-timer-widget-wrapper {
-    height: 100%;
-    width: 100%;
+/* notes (moved inline styles from HTML) */
+.cg-timer-notes-list-wrapper {
+    margin-top: 10px; /* from HTML */
+}
+.cg-run-note-body {
+    white-space: pre-wrap; /* from HTML */
+    margin-bottom: 8px;     /* from HTML */
 }
 
-.cg-timer-widget-wrapper > * {
-    height: 100%;
-    width: 100%;
-}
-
-.cg-timer-widget-wrapper {
-    display: flex;
-    flex-direction: column;
-    height: 100%; /* Optional: Adjust depending on your needs */
-    width: 100%;  /* Optional: Adjust depending on your needs */
-}
-
-.cg-timer-widget {
-    flex: 1; /* Takes up the remaining space */
-}
-
+/* status bar (consolidated duplicates) */
 .cg-timer-status-bar {
-    height: 30px; /* Set the height of the status bar */
-    text-align: center; /* Optional: Center the text */
-    line-height: 30px; /* Optional: Vertically center text */
-    color: #dddddd; /* Example text color */
-}
-
-.cg-timer-widget-wrapper {
-    height: 100%;
-    width: 100%;
-}
-
-.cg-timer-widget-wrapper > * {
-    height: 100%;
-    width: 100%;
-}
-
-.cg-timer-widget-wrapper {
     display: flex;
-    flex-direction: column;
-    height: 100%; /* Optional: Adjust depending on your needs */
-    width: 100%;  /* Optional: Adjust depending on your needs */
-}
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
 
-.cg-timer-widget {
-    flex: 1; /* Takes up the remaining space */
-}
-
-.cg-timer-status-bar {
-    height: 20px; /* Set the height of the status bar */
+    height: 20px;
     margin-top: 10px;
-    text-align: center; /* Optional: Center the text */
-    line-height: 13px; /* Optional: Vertically center text */
-    color: #dddddd; /* Example text color */
-    font-family: system-ui;
+    color: #dddddd;
+    font-family: system-ui, Arial, sans-serif;
     font-size: 0.8em;
     text-align: left;
 }
-
-.cg-timer-status-bar {
-    display: flex;
-    justify-content: space-between; /* Spread sections dynamically */
-    align-items: center; /* Align items vertically */
-    gap: 10px; /* Optional: Adds spacing between the middle sections */
-}
-
 .cg-status-left,
-.cg-status-right,
-.cg-status-middle {
+.cg-status-middle,
+.cg-status-right {
     padding: 5px;
     text-align: center;
-    flex: 1; /* Let all sections scale dynamically */
+    flex: 1;
 }
-
 .cg-status-left {
     padding-left: 0;
+    flex: 0 1 auto;
 }
-
 .cg-status-right {
-    padding-left: 0;
+    padding-right: 0;
+    flex: 0 1 auto;
 }
-
-.cg-status-left {
-    flex: 0 1 auto; /* Allow shrink and grow naturally */
-}
-
-.cg-status-right {
-    flex: 0 1 auto; /* Allow shrink and grow naturally */
-}
-
 .cg-status-middle {
-    flex: 1; /* Middle sections take the remaining space evenly */
+    flex: 1;
 }
-
 `;
 
 /**
