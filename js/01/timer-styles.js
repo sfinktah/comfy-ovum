@@ -142,6 +142,9 @@ export const timerStyles = `
     border-bottom: 1px solid #444;
     text-align: right;
     padding: 3px 6px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 .cg-timer-table tr:nth-child(even) {
     background-color: #262626;
