@@ -74,7 +74,7 @@ app.registerExtension({
 
                 this.addWidget(
                     "text",
-                    "Constant",
+                    "John",
                     '',
                     (s, t, u, v, x) => {
                         node.validateName(node.graph);
@@ -88,7 +88,7 @@ app.registerExtension({
                 // Second name widget for the twin title
                 this.addWidget(
                     "text",
-                    "Constant B",
+                    "Chas",
                     '',
                     () => {
                         this.updateTitle();
@@ -418,17 +418,36 @@ app.registerExtension({
                 }
                 this.properties.showOutputText = GetTwinNodes.defaultVisibility;
                 const node = this;
+                // First selection for the primary name (John)
                 this.addWidget(
                     "combo",
-                    "Constant",
+                    "John",
                     "",
-                    (e) => {
+                    () => {
                         this.onRename();
                     },
                     {
                         values: () => {
-                            const setterNodes = node.graph._nodes.filter((otherNode) => otherNode.type == 'SetTwinNodes');
-                            return setterNodes.map((otherNode) => otherNode.widgets[0].value).sort();
+                            const setterNodes = node.graph._nodes?.filter((otherNode) => otherNode.type == 'SetTwinNodes') || [];
+                            const names = setterNodes.map((otherNode) => otherNode.widgets?.[0]?.value).filter(Boolean);
+                            return Array.from(new Set(names)).sort();
+                        }
+                    }
+                )
+
+                // Second selection for the secondary name (Chas)
+                this.addWidget(
+                    "combo",
+                    "Chas",
+                    "",
+                    () => {
+                        this.onRename();
+                    },
+                    {
+                        values: () => {
+                            const setterNodes = node.graph._nodes?.filter((otherNode) => otherNode.type == 'SetTwinNodes') || [];
+                            const names = setterNodes.map((otherNode) => otherNode.widgets?.[1]?.value).filter(Boolean);
+                            return Array.from(new Set(names)).sort();
                         }
                     }
                 )
@@ -447,8 +466,19 @@ app.registerExtension({
                     this.validateLinks();
                 }
 
+                // Backward-compatible single-name setter
                 this.setName = function(name) {
                     node.widgets[0].value = name;
+                    node.onRename();
+                    node.serialize();
+                }
+
+                // New two-name setter
+                this.setNames = function(nameA, nameB) {
+                    node.widgets[0].value = nameA;
+                    if (node.widgets[1]) {
+                        node.widgets[1].value = nameB;
+                    }
                     node.onRename();
                     node.serialize();
                 }
@@ -508,8 +538,25 @@ app.registerExtension({
                 }
 
                 this.findSetter = function(graph) {
-                    const name = this.widgets[0].value;
-                    const foundNode = graph._nodes.find(otherNode => otherNode.type === 'SetTwinNodes' && otherNode.widgets[0].value === name && name !== '');
+                    const nameA = this.widgets?.[0]?.value;
+                    const nameB = this.widgets?.[1]?.value;
+                    let foundNode = null;
+
+                    if (nameA) {
+                        // Prefer exact pair match
+                        foundNode = graph._nodes.find(otherNode =>
+                            otherNode.type === 'SetTwinNodes' &&
+                            otherNode.widgets?.[0]?.value === nameA &&
+                            otherNode.widgets?.[1]?.value === nameB
+                        );
+                        // Fallback to first-name-only match
+                        if (!foundNode) {
+                            foundNode = graph._nodes.find(otherNode =>
+                                otherNode.type === 'SetTwinNodes' &&
+                                otherNode.widgets?.[0]?.value === nameA
+                            );
+                        }
+                    }
                     return foundNode;
                 };
 

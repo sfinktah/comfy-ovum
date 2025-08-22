@@ -81,7 +81,9 @@ class Timer:
         return {
             "ui": {
                 # Return a list (not a set) to avoid unhashable type errors
-                "bg_image": [safe_json]
+                "queued_run_notes": queued_run_notes,
+                "bg_image": [safe_json],
+                "args": args,
             },
             "result": ()
         }

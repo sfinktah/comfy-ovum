@@ -1,0 +1,15 @@
+[project]
+name = "ovum"
+description = "An assorted reliquary of nodes: mismatched, stubborn, and deliberately indistinct; they do what is required; do not ask for particulars."
+version = "1.0.0"
+license = {file = "LICENSE"}
+
+[project.urls]
+Repository = "https://github.com/sfinktah/comfy-ovum"
+#  Used by Comfy Registry https://registry.comfy.org
+
+[tool.comfy]
+PublisherId = "sfinktah"
+DisplayName = "comfy-ovum"
+Icon = ""
+includes = []

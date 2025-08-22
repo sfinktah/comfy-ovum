@@ -55,7 +55,7 @@ function forwardWheelToCanvas(widgetEl, canvasEl) {
 }
 
 app.registerExtension({
-    name: "cg.quicknodes.timer",
+    name: "ovum.timer",
     setup: function () {
         // Import styles from module and inject them directly into the DOM
         import("../01/timer-styles.js").then(({ injectTimerStyles }) => {
@@ -115,7 +115,7 @@ app.registerExtension({
             if (e.key === 'Control') Timer.ctrlDown = false;
         });
 
-        console.log('cg.quicknodes.timer registered');
+        console.log('ovum.timer registered');
     },
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
         if (nodeType.comfyClass === "Timer") {
@@ -125,10 +125,33 @@ app.registerExtension({
 
             chainCallback(nodeType.prototype, "onExecuted", function (message) {
                 console.debug("[Timer] onExecuted (chainCallback)", message);
+                const timerNode = this;
                 let bg_image = message["bg_image"];
                 if (bg_image) {
                     console.log("[Timer] onExecuted: bg_image", bg_image);
                     this.properties.currentRunning = {data : bg_image };
+                }
+                if (message["queued_run_notes"]) {
+                    // Set JS field "Notes from queue"
+                    const qrn = message["queued_run_notes"];
+                    const queueJsWidget = timerNode.widgets?.find(w => w.name === "Notes from queue");
+                    if (queueJsWidget) {
+                        queueJsWidget.value = queuedText || "";
+                        console.debug("[Timer] Set 'Notes from queue' widget to:", queueJsWidget.value);
+                    }
+                    // Ensure we have a run id
+                    if (!Timer.current_run_id) {
+                        Timer.current_run_id = Date.now().toString();
+                        console.debug("[Timer] Created new current_run_id:", Timer.current_run_id);
+                    }
+                    if (queuedText && Timer.current_run_id) {
+                        const existing = Timer.run_notes[Timer.current_run_id] || "";
+                        const combined = existing ? `${queuedText}\n${existing}` : queuedText;
+                        Timer.run_notes[Timer.current_run_id] = combined;
+                        console.debug("[Timer] Updated run_notes for run:", Timer.current_run_id, "combined:", combined);
+                    }
+                    timerNode.setDirtyCanvas?.(true);
+
                 }
             });
 
@@ -140,7 +163,7 @@ app.registerExtension({
                 // this.widgets_up = true;
 
                 // ComfyNode
-                // console.log('cg.quicknodes.timer.onNodeCreated', this);
+                // console.log('ovum.timer.onNodeCreated', this);
 
                 this.addWidget("button", "clear", "", Timer.clear);
 

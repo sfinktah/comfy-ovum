@@ -8,9 +8,9 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/sfinktah/cg-quicknodes"
+    "url": "https://github.com/sfinktah/comfy-ovum"
   },
-  "private": true,
+  "private": false,
   "devDependencies": {
     "@comfyorg/comfyui-frontend-types": "^1.24.4"
   }
