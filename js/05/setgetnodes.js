@@ -4,6 +4,7 @@ import { app } from "../../../scripts/app.js";
 // based on KJ's SetGet: https://github.com/kj-comfy/ComfyUI-extensions which was
 // based on diffus3's SetGet: https://github.com/diffus3/ComfyUI-extensions
 
+
 // Nodes that allow you to tunnel connections for cleaner graphs
 function setColorAndBgColor(type) {
     const colorMap = {
@@ -58,14 +59,15 @@ app.registerExtension({
                 super(title)
                 if (!this.properties) {
                     this.properties = {
-                        "previousName": ""
+                        previousName: "",
+                        constCount: 2,
                     };
                 }
                 this.properties.showOutputText = SetTwinNodes.defaultVisibility;
 
                 const node = this;
 
-                // Helper to compute and set the combined title from connected widgets with fallbacks,
+                // Helper to compute and set the combined title from connected widgets' values,
                 // and update node color from the first connected typed link
                 this.updateTitle = function () {
                     const parts = [];
@@ -113,6 +115,51 @@ app.registerExtension({
                     while ((this.outputs?.length || 0) > count) this.removeOutput(this.outputs.length - 1);
                 };
 
+                // Get a human-friendly label from the connected output: prefer label, then name, then type
+                this.getPreferredSlotLabel = function(fromNode, originSlotIndex) {
+                    const srcSlot = fromNode?.outputs?.[originSlotIndex];
+                    const lbl = srcSlot?.label || srcSlot?.name || srcSlot?.type;
+                    return (lbl && String(lbl).trim()) || "";
+                };
+
+                // Normalize labels without adding numbers; keep duplicates as-is.
+                // Sync outputs to inputs and fill empty widget values from labels.
+                this.applyDuplicateNumbering = function() {
+                    const count = this.inputs?.length || 0;
+                    for (let i = 0; i < count; i++) {
+                        if (!this.inputs?.[i] || this.inputs[i].link == null) continue;
+
+                        const raw =
+                            this.inputs[i].label ||
+                            this.inputs[i].name ||
+                            (this.widgets?.[i]?.value ? String(this.widgets[i].value).trim() : "") ||
+                            `Constant ${i + 1}`;
+
+                        const base = String(raw).trim();
+
+                        // Set input label/name verbatim (no numbering)
+                        if (this.inputs?.[i]) {
+                            this.inputs[i].name = base;
+                            this.inputs[i].label = base;
+                        }
+
+                        // Sync outputs to inputs verbatim
+                        if (this.outputs?.[i]) {
+                            this.outputs[i].name = base;
+                            this.outputs[i].label = base;
+                        }
+
+                        // Only fill widget value if empty or '*'
+                        if (this.widgets?.[i] && (!this.widgets[i].value || this.widgets[i].value === '*')) {
+                            this.widgets[i].value = base;
+                            // Keep uniqueness enforcement for widget values if defined
+                            if (typeof this.validateWidgetName === "function") {
+                                this.validateWidgetName(this.graph, i);
+                            }
+                        }
+                    }
+                };
+
                 // Create an arbitrary number of constants/links
                 const initialCount = this.properties.constCount || 2;
                 for (let i = 0; i < initialCount; i++) {
@@ -122,8 +169,11 @@ app.registerExtension({
                         `Constant ${idx + 1}`,
                         '',
                         () => {
+                            // Ensure unique name for this specific widget index
+                            if (typeof node.validateWidgetName === "function") {
+                                node.validateWidgetName(node.graph, idx);
+                            }
                             if (idx === 0) {
-                                node.validateName(node.graph);
                                 this.properties.previousName = this.widgets[0].value;
                             }
                             this.updateTitle();
@@ -158,6 +208,7 @@ app.registerExtension({
                         if (this.inputs && this.outputs && this.inputs[s] && this.outputs[s]) {
                             this.outputs[s].type = this.inputs[s].type || '*';
                             this.outputs[s].name = this.inputs[s].name || '*';
+                            this.outputs[s].label = this.inputs[s].label || this.inputs[s].name || '*';
                         }
                     };
 
@@ -166,6 +217,7 @@ app.registerExtension({
                         if (this.inputs?.[slot]) {
                             this.inputs[slot].type = '*';
                             this.inputs[slot].name = '*';
+                            this.inputs[slot].label = '*';
                         }
                         if (this.outputs?.[slot]) {
                             this.outputs[slot].type = '*';
@@ -173,6 +225,10 @@ app.registerExtension({
                         }
                         if (this.widgets?.[slot]) {
                             this.widgets[slot].value = '';
+                        }
+                        // Re-number duplicates among remaining connected inputs
+                        if (typeof this.applyDuplicateNumbering === "function") {
+                            this.applyDuplicateNumbering();
                         }
                         this.updateTitle();
                         propagateToGetters();
@@ -195,20 +251,31 @@ app.registerExtension({
                     if (link_info && this.graph && slotType === 1 && isChangeConnect) {
                         const fromNode = this.graph._nodes.find((otherNode) => otherNode.id == link_info.origin_id);
                         if (fromNode?.outputs?.[link_info.origin_slot]) {
-                            const type = fromNode.outputs[link_info.origin_slot].type;
+                            const srcSlot = fromNode.outputs[link_info.origin_slot];
+                            const type = srcSlot.type;
+                            const preferred = this.getPreferredSlotLabel(fromNode, link_info.origin_slot) || type || '*';
+
+                            // Always reflect the connected label on the input
+                            this.inputs[slot].type = type || '*';
+                            this.inputs[slot].name = preferred;
+                            this.inputs[slot].label = preferred;
 
                             // Auto-name the corresponding widget for this slot if empty or '*'
                             if (this.widgets?.[slot] && (!this.widgets[slot].value || this.widgets[slot].value === '*')) {
-                                this.widgets[slot].value = type;
-                                if (slot === 0) {
-                                    this.validateName(this.graph);
+                                this.widgets[slot].value = preferred;
+                                // Enforce graph-wide uniqueness for this widget index
+                                if (typeof this.validateWidgetName === "function") {
+                                    this.validateWidgetName(this.graph, slot);
                                 }
                             }
 
-                            // Set input and mirror to output
-                            this.inputs[slot].type = type;
-                            this.inputs[slot].name = type;
+                            // Mirror type/name to the corresponding output
                             mirrorOutputFromInput(slot);
+
+                            // Normalize duplicates among all connected inputs
+                            if (typeof this.applyDuplicateNumbering === "function") {
+                                this.applyDuplicateNumbering();
+                            }
 
                             // Update title/color and propagate
                             this.updateTitle();
@@ -235,27 +302,37 @@ app.registerExtension({
                     }
                 }
 
-                this.validateName = function(graph) {
-                    let widgetValue = node.widgets[0].value;
+                // Ensure a widget's name is unique across all SetTwinNodes widgets in the graph.
+                // If a collision is found, append _0, _1, ... to the original base.
+                this.validateWidgetName = function(graph, idx) {
+                    if (!graph || !this.widgets || !this.widgets[idx]) return;
+                    let base = String(this.widgets[idx].value || "").trim();
+                    if (!base) return;
 
-                    if (widgetValue !== '') {
-                        let tries = 0;
-                        const existingValues = new Set();
-
-                        graph._nodes.forEach(otherNode => {
-                            if (otherNode !== this && otherNode.type === 'SetTwinNodes') {
-                                existingValues.add(otherNode.widgets[0].value);
-                            }
-                        });
-
-                        while (existingValues.has(widgetValue)) {
-                            widgetValue = node.widgets[0].value + "_" + tries;
-                            tries++;
+                    // Collect every widget value from all SetTwinNodes (excluding this exact widget)
+                    const existingValues = new Set();
+                    graph._nodes.forEach(otherNode => {
+                        if (otherNode && otherNode.type === 'SetTwinNodes' && Array.isArray(otherNode.widgets)) {
+                            otherNode.widgets.forEach((w, wi) => {
+                                if (!w) return;
+                                if (otherNode === this && wi === idx) return; // skip self at same index
+                                const v = (w.value != null) ? String(w.value).trim() : "";
+                                if (v) existingValues.add(v);
+                            });
                         }
+                    });
 
-                        node.widgets[0].value = widgetValue;
-                        this.update();
+                    // If base collides, append _0, _1, ...
+                    if (existingValues.has(base)) {
+                        let tries = 0;
+                        let candidate = `${base}_${tries}`;
+                        while (existingValues.has(candidate)) {
+                            tries++;
+                            candidate = `${base}_${tries}`;
+                        }
+                        this.widgets[idx].value = candidate;
                     }
+                    this.update();
                 }
 
                 this.clone = function () {
@@ -274,7 +351,9 @@ app.registerExtension({
                 };
 
                 this.onAdded = function(graph) {
-                    this.validateName(graph);
+                    if (typeof this.validateWidgetName === "function") {
+                        this.validateWidgetName(graph, 0);
+                    }
                 }
 
                 this.update = function() {
@@ -472,6 +551,58 @@ app.registerExtension({
 
 app.registerExtension({
     name: "GetTwinNodes",
+    async setup() {
+        const value = 'top';
+        const valuesToAddToIn = ["GetTwinNodes"];
+        const valuesToAddToOut = ["SetTwinNodes"];
+        // Remove entries if they exist
+        for (const arr of Object.values(LiteGraph.slot_types_default_in)) {
+            for (const valueToAdd of valuesToAddToIn) {
+                const idx = arr.indexOf(valueToAdd);
+                if (idx !== -1) {
+                    arr.splice(idx, 1);
+                }
+            }
+        }
+
+        for (const arr of Object.values(LiteGraph.slot_types_default_out)) {
+            for (const valueToAdd of valuesToAddToOut) {
+                const idx = arr.indexOf(valueToAdd);
+                if (idx !== -1) {
+                    arr.splice(idx, 1);
+                }
+            }
+        }
+        if (value != "disabled") {
+            for (const arr of Object.values(LiteGraph.slot_types_default_in)) {
+                for (const valueToAdd of valuesToAddToIn) {
+                    const idx = arr.indexOf(valueToAdd);
+                    if (idx !== -1) {
+                        arr.splice(idx, 1);
+                    }
+                    if (value === "top") {
+                        arr.unshift(valueToAdd);
+                    } else {
+                        arr.push(valueToAdd);
+                    }
+                }
+            }
+
+            for (const arr of Object.values(LiteGraph.slot_types_default_out)) {
+                for (const valueToAdd of valuesToAddToOut) {
+                    const idx = arr.indexOf(valueToAdd);
+                    if (idx !== -1) {
+                        arr.splice(idx, 1);
+                    }
+                    if (value === "top") {
+                        arr.unshift(valueToAdd);
+                    } else {
+                        arr.push(valueToAdd);
+                    }
+                }
+            }
+        }
+    },
     registerCustomNodes() {
         class GetTwinNodes extends LGraphNode {
 
@@ -505,10 +636,18 @@ app.registerExtension({
                             {
                                 values: () => {
                                     const setterNodes = node.graph?._nodes?.filter((n) => n.type === 'SetTwinNodes') || [];
-                                    const names = setterNodes
-                                        .map((n) => n.widgets?.[idx]?.value)
-                                        .filter(Boolean);
-                                    return Array.from(new Set(names)).sort();
+                                    // Collect ALL constants from ALL positions across all setters
+                                    const names = [];
+                                    for (const s of setterNodes) {
+                                        const ws = s.widgets || [];
+                                        for (const w of ws) {
+                                            if (w?.value) names.push(String(w.value));
+                                        }
+                                    }
+                                    const uniq = Array.from(new Set(names)).sort();
+                                    // Add reset option to allow unsetting the selection
+                                    uniq.unshift("(unset)");
+                                    return uniq;
                                 }
                             }
                         );
@@ -523,7 +662,14 @@ app.registerExtension({
 
                 // Start with one selector; expand after matching a setter
                 this.ensureGetterWidgetCount(1);
-                this.ensureOutputCount(0);
+                this.ensureOutputCount(1);
+                // Ensure the first output exists with label and type "*"
+                if (this.outputs?.[0]) {
+                    this.outputs[0].name = "*";
+                    // superfluous
+                    // this.outputs[0].label = "*";
+                    this.outputs[0].type = "*";
+                }
 
                 this.onConnectionsChange = function(
                     slotType,	//0 = output, 1 = input
@@ -560,6 +706,11 @@ app.registerExtension({
                         }
                         this.onRename();
                     }
+
+                    // Also refresh on output disconnects to update color/title when links are removed
+                    if (slotType === 0 && !isChangeConnect) {
+                        this.onRename();
+                    }
                 }
 
                 // Backward-compatible single-name setter
@@ -580,17 +731,105 @@ app.registerExtension({
                 }
 
                 this.onRename = function() {
-                    const setter = this.findSetter(node.graph);
-                    if (setter) {
-                        const inCount = setter.inputs?.length || 0;
-                        const types = [];
-                        for (let i = 0; i < inCount; i++) {
-                            types.push(setter.inputs?.[i]?.type || '*');
+                    // Support "(unset)" option: clear widget value and possibly remove the first extra unset widget and its output
+                    const RESET_LABEL = "(unset)";
+                    let didUnset = false;
+                    if (Array.isArray(this.widgets)) {
+                        for (let i = 0; i < this.widgets.length; i++) {
+                            if (this.widgets[i] && this.widgets[i].value === RESET_LABEL) {
+                                this.widgets[i].value = "";
+                                didUnset = true;
+                            }
                         }
-                        this.ensureOutputCount(inCount);
-                        this.ensureGetterWidgetCount(setter.widgets?.length || inCount);
-                        if (this.setTypesArray) {
-                            this.setTypesArray(types);
+                    }
+                    if (didUnset) {
+                        // Find all unset widgets (empty string or falsy)
+                        const unsetIndices = [];
+                        for (let i = 0; i < (this.widgets?.length || 0); i++) {
+                            const v = this.widgets?.[i]?.value;
+                            if (!v) unsetIndices.push(i);
+                        }
+
+                        // Disconnect links for every unset widget's corresponding output
+                        for (const idx of unsetIndices) {
+                            if (this.outputs?.[idx]?.links?.length) {
+                                const links = [...this.outputs[idx].links];
+                                for (const linkId of links) {
+                                    const link = node.graph.links?.[linkId];
+                                    if (link) node.graph.removeLink(linkId);
+                                }
+                            }
+                        }
+
+                        if (unsetIndices.length > 1) {
+                            // Remove the first unset widget and its corresponding output slot
+                            const removeIdx = unsetIndices[0];
+                            if (typeof this.removeOutput === "function") {
+                                this.removeOutput(removeIdx);
+                            }
+                            if (Array.isArray(this.widgets)) {
+                                this.widgets.splice(removeIdx, 1);
+                            }
+                            // Recompute node size after removal
+                            this.size = this.computeSize();
+                        }
+                    }
+
+                    const setter = this.findSetter(node.graph);
+                    // Gather current selections
+                    const selected = (this.widgets || []).map(w => (w?.value ? String(w.value).trim() : ""));
+                    const anySelected = selected.some(v => !!v);
+
+                    if (setter) {
+                        const setterNames = (setter.widgets || []).map(w => (w?.value ? String(w.value).trim() : ""));
+                        // Map selected constant -> type (from matched setter input at that label)
+                        const typeByConst = {};
+                        setterNames.forEach((name, idx) => {
+                            const t = setter.inputs?.[idx]?.type || '*';
+                            if (name) typeByConst[name] = t;
+                        });
+
+                        // Ensure enough widgets and outputs
+                        const wNeeded = setter.widgets?.length || 0;
+                        this.ensureGetterWidgetCount(wNeeded || 1);
+                        this.ensureOutputCount(this.widgets?.length || 0);
+
+                        // Autofill any empty selections from the matched setter (position-agnostic)
+                        // Only perform this when we didn't just unset a widget via "(unset)".
+                        if (!didUnset) {
+                            const setterVals = (setter.widgets || []).map(w => (w?.value ? String(w.value).trim() : "")).filter(Boolean);
+                            const selectedVals = new Set(
+                                (this.widgets || []).map(w => (w?.value ? String(w.value).trim() : "")).filter(Boolean)
+                            );
+                            for (let i = 0; i < wNeeded; i++) {
+                                if (this.widgets?.[i] && (!this.widgets[i].value || this.widgets[i].value === '*')) {
+                                    const next = setterVals.find(v => !selectedVals.has(v));
+                                    if (next) {
+                                        this.widgets[i].value = next;
+                                        selectedVals.add(next);
+                                    }
+                                }
+                            }
+                        }
+
+                        // Set each output's name to the selected constant text and type from matched setter
+                        const outCount = this.widgets?.length || 0;
+                        let pickedType = null;
+                        for (let i = 0; i < outCount; i++) {
+                            const label = this.widgets?.[i]?.value ? String(this.widgets[i].value).trim() : "";
+                            const t = label ? (typeByConst[label] || '*') : '*';
+
+                            // Ensure output slot exists
+                            if (i >= (this.outputs?.length || 0)) this.ensureOutputCount(i + 1);
+
+                            if (this.outputs?.[i]) {
+                                this.outputs[i].name = label || '*';
+                                this.outputs[i].label = label || '*';
+                                this.outputs[i].type = t;
+                            }
+                            if (!pickedType && label && t && t !== '*') {
+                                pickedType = t;
+                            }
                         }
 
                         // Build title from selected widget values; fallback to Itchy/Scratchy/Constant n
@@ -605,22 +844,25 @@ app.registerExtension({
                         const joined = parts.join(" & ") || "Itchy & Scratchy";
                         this.title = (!disablePrefix ? "Get_" : "") + joined;
 
-                        // Pick color from the first typed output
-                        let picked = null;
-                        for (let i = 0; i < this.outputs.length; i++) {
-                            const t = this.outputs[i]?.type;
-                            if (t && t !== '*') { picked = t; break; }
-                        }
                         // Note: we don't actually have a settings panel yet
-                        if (picked && app.ui.settings.getSettingValue("KJNodes.nodeAutoColor")){
-                            setColorAndBgColor.call(this, picked);
+                        // Only colorize when a constant is selected; follow same rule as SetTwinNodes (based on constant type)
+                        if (anySelected && pickedType && app.ui.settings.getSettingValue("KJNodes.nodeAutoColor")) {
+                            setColorAndBgColor.call(this, pickedType);
+                        } else if (!anySelected) {
+                            this.color = undefined;
+                            this.bgcolor = undefined;
                         }
                     } else {
-                        // Unknown setter; keep outputs to at least widgets length with '*'
+                        // No matching setter: outputs mirror current selections with '*' type
                         const count = this.widgets?.length || 1;
                         this.ensureOutputCount(count);
-                        if (this.setTypesArray) {
-                            this.setTypesArray(new Array(count).fill('*'));
+                        for (let i = 0; i < count; i++) {
+                            const label = this.widgets?.[i]?.value ? String(this.widgets[i].value).trim() : "";
+                            if (this.outputs?.[i]) {
+                                this.outputs[i].name = label || '*';
+                                this.outputs[i].label = label || '*';
+                                this.outputs[i].type = '*';
+                            }
                         }
                         const parts = [];
                         const wCount = this.widgets?.length || 0;
@@ -632,7 +874,14 @@ app.registerExtension({
                         }
                         const joined = parts.join(" & ") || "Itchy & Scratchy";
                         this.title = (!disablePrefix ? "Get_" : "") + joined;
+
+                        // No selection or unknown type: reset color
+                        this.color = undefined;
+                        this.bgcolor = undefined;
                     }
+
+                    // Finally, validate existing links against updated types
+                    if (typeof this.validateLinks === "function") this.validateLinks();
                 }
 
                 this.clone = function () {
@@ -668,20 +917,19 @@ app.registerExtension({
                 }
 
                 this.findSetter = function(graph) {
-                    const chosen = (this.widgets || []).map(w => w?.value).map(v => (v ? String(v).trim() : ""));
+                    const chosen = (this.widgets || []).map(w => w?.value).map(v => (v ? String(v).trim() : "")).filter(v => !!v);
                     const setters = graph?._nodes?.filter(n => n.type === 'SetTwinNodes') || [];
-                    // Prefer a setter matching all provided (non-empty) positions
+                    if (chosen.length === 0) return null;
+
+                    // Match any setter that contains all chosen constants, regardless of position
                     let found = setters.find(s => {
-                        const sw = s.widgets || [];
-                        for (let i = 0; i < chosen.length; i++) {
-                            if (!chosen[i]) continue; // ignore empty selections
-                            if (sw?.[i]?.value !== chosen[i]) return false;
-                        }
-                        return chosen.some(v => !!v); // at least one selection provided
+                        const sw = (s.widgets || []).map(w => (w?.value ? String(w.value).trim() : ""));
+                        return chosen.every(v => sw.includes(v));
                     });
+
+                    // Fallback: match any setter that contains at least the first chosen value
                     if (!found && chosen[0]) {
-                        // Fallback to first-name-only match
-                        found = setters.find(s => s.widgets?.[0]?.value === chosen[0]);
+                        found = setters.find(s => (s.widgets || []).some(w => String(w?.value || "").trim() === chosen[0]));
                     }
                     return found || null;
                 };
