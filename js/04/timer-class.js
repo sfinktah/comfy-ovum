@@ -290,6 +290,7 @@ export class Timer {
             try {
                 await bestConfigTracker.fetchAndStoreFromLogs();
             } catch (e) {
+                console.warn("[Timer] Failed to fetch and store logs:", e);
                 // non-fatal
             }
 
@@ -402,6 +403,7 @@ export class Timer {
         let detail = e.detail;
 
         if (typeof detail === "string") {
+            console.log("[Timer] executing: string detail:", detail);
             const match = detail.match(/^\d+:(\d+)$/);
             detail = match ? match[1] : detail;
         }

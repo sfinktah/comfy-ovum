@@ -124,7 +124,7 @@ app.registerExtension({
             });
 
             chainCallback(nodeType.prototype, "onExecuted", function (message) {
-                console.debug("[Timer] onExecuted", message);
+                console.debug("[Timer] onExecuted (chainCallback)", message);
                 let bg_image = message["bg_image"];
                 if (bg_image) {
                     console.log("[Timer] onExecuted: bg_image", bg_image);
