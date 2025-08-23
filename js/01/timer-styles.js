@@ -195,6 +195,9 @@ export const timerStyles = `
     padding: 5px;
     text-align: center;
     flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 .cg-status-left {
     padding-left: 0;
