@@ -25,7 +25,7 @@ export class Timer {
     static systemInfo = null; // Store system information when connection opens
     static hidden = ['both:current-run', 'both:runs', 'both:per-run', 'both:per-flow']; // e.g., ['display:runs','copy:per-flow','both:current-run','per-run'] (bare means both)
     static ctrlDown = false; // Track Control key state for deletion UI
-    static maxRuns = 40; // Maximum saved & displayed runs
+    static maxRuns = 100; // Maximum saved & displayed runs
     static queuedNotesByPromptId = {}; // prompt_id -> queued note string (captured at queue time)
 
     static isHidden(key, where) {

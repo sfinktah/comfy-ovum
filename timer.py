@@ -73,7 +73,7 @@ class Timer:
 
         payload = {
             "args": _to_jsonable(args),
-            "queued_run_notes": _to_jsonable(queued_run_notes),
+            "queued_run_notes": queued_run_notes,
             "kwargs": _to_jsonable(kwargs),
         }
         safe_json = json.dumps(payload, ensure_ascii=False)
@@ -81,8 +81,9 @@ class Timer:
         return {
             "ui": {
                 # Return a list (not a set) to avoid unhashable type errors
-                "queued_run_notes": queued_run_notes,
+                "queued_run_notes": [queued_run_notes],
                 "bg_image": [safe_json],
+                "kwargs": kwargs,
                 "args": args,
             },
             "result": ()

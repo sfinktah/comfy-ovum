@@ -133,7 +133,7 @@ app.registerExtension({
                 }
                 if (message["queued_run_notes"]) {
                     // Set JS field "Notes from queue"
-                    const qrn = message["queued_run_notes"];
+                    const queuedText = message["queued_run_notes"];
                     const queueJsWidget = timerNode.widgets?.find(w => w.name === "Notes from queue");
                     if (queueJsWidget) {
                         queueJsWidget.value = queuedText || "";
@@ -147,7 +147,7 @@ app.registerExtension({
                     if (queuedText && Timer.current_run_id) {
                         const existing = Timer.run_notes[Timer.current_run_id] || "";
                         const combined = existing ? `${queuedText}\n${existing}` : queuedText;
-                        Timer.run_notes[Timer.current_run_id] = combined;
+                        Timer.run_notes[Timer.current_run_id] = combined.trim();
                         console.debug("[Timer] Updated run_notes for run:", Timer.current_run_id, "combined:", combined);
                     }
                     timerNode.setDirtyCanvas?.(true);
@@ -181,7 +181,7 @@ app.registerExtension({
                 // Add a number input to control how many last runs to display
                 this.addWidget("number", "Last runs to show", Timer.last_n_runs, (v) => {
                     return Timer.setLastNRuns(v);
-                }, { min: 1, max: Timer.maxRuns, step: 1, precision: 0 });
+                }, { min: 1, max: Timer.maxRuns, step: 10, precision: 0 });
 
                 // Add the multiline run notes textarea (active run)
                 const textareaWidget = this.addWidget("text", "Run notes (for active run)", "", (v) => {
