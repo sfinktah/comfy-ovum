@@ -171,9 +171,20 @@ export const timerStyles = `
 .cg-timer-notes-list-wrapper {
     margin-top: 10px; /* from HTML */
 }
+/* New: flex row for a run note, with small fixed header and top alignment */
+.cg-run-note {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5em;
+}
+.cg-run-note-header {
+    flex: 0 0 4em;      /* small fixed width */
+    align-self: flex-start;
+}
 .cg-run-note-body {
     white-space: pre-wrap; /* from HTML */
-    margin-bottom: 8px;     /* from HTML */
+    flex: 1 1 auto;
+    align-self: flex-start;
 }
 
 /* status bar (consolidated duplicates) */

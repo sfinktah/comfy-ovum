@@ -826,19 +826,6 @@ export class Timer {
         });
 
 
-
-        // Total up the time taken by each node in our recent run history
-        const totalsByK = runIds.reduce((acc, id) => {
-            const nodes = Timer.run_history[id]?.nodes;
-            if (!nodes) return acc;
-
-            for (const [k, v] of Object.entries(nodes)) {
-                const total = (v && typeof v.totalTime === 'number') ? v.totalTime : 0;
-                acc[k] = (acc[k] || 0) + total;
-            }
-            return acc;
-        }, {});
-
         // Total up the time taken by each node in our recent run history
         const startTimes = runIds.reduce((acc, id) => {
             const nodes = Timer.run_history[id]?.nodes;
@@ -967,7 +954,13 @@ export class Timer {
                 className: "cg-run-note-body",
                 textContent: noteText,
             });
-            notesListEl.append(header, body);
+
+            // Wrap header and body into a flex container; styling handled via CSS
+            const row = $el("div", {
+                className: "cg-run-note",
+            }, [header, body]);
+
+            notesListEl.append(row);
             rn++;
         }
 
