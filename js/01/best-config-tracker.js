@@ -1,7 +1,5 @@
 /** @typedef {import('@comfyorg/comfyui-frontend-types').ComfyApp} ComfyApp */
 
-import { app } from "../../../scripts/app.js";
-
 export class bestConfigTracker {
     static storageKey = "timer_best_configs";
     static lastSeenKey = "timer_best_configs.last_seen";

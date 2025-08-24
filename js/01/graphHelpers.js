@@ -84,7 +84,7 @@ export function getNodeNameById(id) {
     // g = app.graph.getNodeById(126).subgraph.getNodeById(22)
     const node = graphGetNodeById(id);
     if (!node) return `id:${id}`;
-    const name = node.title || node.name || node.type || "";
+    const name = node.getTitle() || node.title || node.name || node.type || "";
 
     // RegExp to remove most common Unicode emoji/emoticon characters
     return removeEmojis(name) + ' (' + id + ')';

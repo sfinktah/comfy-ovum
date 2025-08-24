@@ -578,6 +578,46 @@ export class Timer {
         }
     }
 
+    // Edit notes for a specific runId; prompts user and persists changes
+    static editRunNotes(runId) {
+        try {
+            const existing = (Timer.run_notes && Timer.run_notes[runId]) ? String(Timer.run_notes[runId]) : "";
+            const updated = window.prompt("Edit notes for this run:", existing);
+            if (updated !== null) {
+                if (updated.trim().length) {
+                    Timer.run_notes[runId] = updated;
+                } else {
+                    // Empty input => clear notes
+                    delete Timer.run_notes[runId];
+                }
+                Timer.saveToStorage();
+                if (typeof Timer.onChange === "function") Timer.onChange();
+            }
+        } catch (err) {
+            console.warn("[Timer] editRunNotes failed:", err);
+        }
+    }
+
+    // Edit notes for a specific runId; prompts user and persists changes
+    static editRunNotes(runId) {
+        try {
+            const existing = (Timer.run_notes && Timer.run_notes[runId]) ? String(Timer.run_notes[runId]) : "";
+            const updated = window.prompt("Edit notes for this run:", existing);
+            if (updated !== null) {
+                if (updated.trim().length) {
+                    Timer.run_notes[runId] = updated;
+                } else {
+                    // Empty input => clear notes
+                    delete Timer.run_notes[runId];
+                }
+                Timer.saveToStorage();
+                if (typeof Timer.onChange === "function") Timer.onChange();
+            }
+        } catch (err) {
+            console.warn("[Timer] editRunNotes failed:", err);
+        }
+    }
+
     static html(scope) {
         // Search/filter UI
         const searchInput = $el("input", {
@@ -716,15 +756,24 @@ export class Timer {
         if (!Timer.isHidden('per-flow', 'display')) tableHeader.push($el("th", {className: "per-flow", "textContent": "Per flow"}));
         if (!Timer.isHidden('current-run', 'display')) tableHeader.push($el('th', {className: "current-run", "textContent": "Current run"}));
 
+        // Prepare attributes for header <tr> that map displayed run indices to true run numbers
+        const headerAttrs = {};
+        const allRunIdsAsc = Object.keys(Timer.run_history).sort(); // chronological list of all runs
+
         // Add individual columns for each of the last n runs
-        const runIds = Object.keys(Timer.run_history).sort().reverse().slice(0, Timer.last_n_runs);
-        const actualRuns = Math.min(runIds.length, Timer.last_n_runs);
+        const runIds = Object.keys(Timer.run_history).sort().reverse().slice(0, Timer.last_n_runs - 1); // -1 to exclude the current run
+        const actualRuns = Math.min(runIds.length, Timer.last_n_runs - 1);
         let runNumber = 1;
         for (let i = actualRuns - 1; i >= 0; i--) {
             const runId = runIds[i];
+
+            // Compute the true chronological run number (1-based)
+            const trueRunNumber = allRunIdsAsc.indexOf(runId) + 1;
+
+            /** @type {HTMLTableCellElement} */
             const th = $el('th', {
                 className: "run-n",
-                textContent: `Run ${runNumber}`,
+                textContent: Timer.run_notes[runId] ?  `* Run ${runNumber}` : `Run ${runNumber}`,
                 onmouseenter: ev => {
                     ev.currentTarget.style.cursor = (ev.ctrlKey || Timer.ctrlDown) ? 'not-allowed' : '';
                 },
@@ -738,10 +787,16 @@ export class Timer {
                     if (Timer.onChange) Timer.onChange();
                 }
             });
+            th.setAttribute('data-run-number', String(trueRunNumber));
 
             // Tooltip showing run notes after 1 second hover
             const notesText = Timer.run_notes[runId] || "No run notes";
             attachTooltip(th, () => notesText, 1000);
+
+            // Attach double click event for editing run notes
+            th.addEventListener("dblclick", () => {
+                Timer.editRunNotes(runId);
+            });
 
             tableHeader.push(th);
             runNumber += 1;
@@ -769,8 +824,65 @@ export class Timer {
         Timer.all_times.forEach((node_data) => {
             node_data.avgPerFlow = node_data.totalTime / Timer.runs_since_clear;
         });
-        // Sort descending by per-flow
-        Timer.all_times.sort((a, b) => b.avgPerFlow - a.avgPerFlow);
+
+
+
+        // Total up the time taken by each node in our recent run history
+        const totalsByK = runIds.reduce((acc, id) => {
+            const nodes = Timer.run_history[id]?.nodes;
+            if (!nodes) return acc;
+
+            for (const [k, v] of Object.entries(nodes)) {
+                const total = (v && typeof v.totalTime === 'number') ? v.totalTime : 0;
+                acc[k] = (acc[k] || 0) + total;
+            }
+            return acc;
+        }, {});
+
+        // Total up the time taken by each node in our recent run history
+        const startTimes = runIds.reduce((acc, id) => {
+            const nodes = Timer.run_history[id]?.nodes;
+            if (!nodes) return acc;
+
+            for (const [k, v] of Object.entries(nodes)) {
+                const start = v.startTimes?.[0] ?? 0;
+                //const title = app.graph.getNodeById(k)?.getTitle();
+                const title = getNodeNameById(k);
+                if (title && start && v.totalTime > 10000) {
+                    acc.push({start: start, node: title, total: v.totalTime});
+                }
+            }
+            return acc;
+        }, []);
+
+        const averagesByK = (function averageByK(runIds) {
+            const sums = Object.create(null);
+            const counts = Object.create(null);
+
+            for (const id of runIds) {
+                const nodes = Timer.run_history[id]?.nodes;
+                if (!nodes) continue;
+
+                // Exclude runs that don't have a numeric totalTime for the 'id:total' key
+                const totalNode = nodes['id:total'];
+                if (!totalNode || typeof totalNode.totalTime !== 'number') continue;
+
+                for (const [k, v] of Object.entries(nodes)) {
+                    const total = (v && typeof v.totalTime === 'number') ? v.totalTime : 0;
+                    sums[k] = (sums[k] || 0) + total;
+                    counts[k] = (counts[k] || 0) + 1; // count appearance of k within included runs
+                }
+            }
+
+            const averages = Object.create(null);
+            for (const k of Object.keys(sums)) {
+                averages[k] = counts[k] ? sums[k] / counts[k] : 0;
+            }
+            return averages;
+        })(runIds);
+
+        // Sort by aggregated totals (desc), defaulting to 0 when missing
+        Timer.all_times.sort((a, b) => (averagesByK[b.id] ?? 0) - (averagesByK[a.id] ?? 0));
 
         // Build filter
         let filterFunc = () => true;
@@ -803,12 +915,14 @@ export class Timer {
             if (!Timer.isHidden('current-run', 'display')) rowCells.push($el('td', {className: "current-run", "textContent": Timer._format(Timer.getCurrentRunTime(t))}));
 
             // Add individual cells for each of the last n runs
-            const runIds = Object.keys(Timer.run_history).sort().reverse().slice(0, Timer.last_n_runs);
-            const actualRuns = Math.min(runIds.length, Timer.last_n_runs);
+            // const runIds = Object.keys(Timer.run_history).sort().reverse().slice(0, Timer.last_n_runs);
+            // const actualRuns = Math.min(runIds.length, Timer.last_n_runs - 1);
 
             // Add cells for actual runs
             for (let i = actualRuns - 1; i >= 0; i--) {
                 const runId = runIds[i];
+                // Compute the true chronological run number (1-based)
+                const trueRunNumber = allRunIdsAsc.indexOf(runId) + 1;
                 const runTime = runId && Timer.run_history[runId]?.nodes[t]?.totalTime || 0;
                 rowCells.push($el('td', {className: "run-n", "textContent": Timer._format(runTime)}));
             }
@@ -827,11 +941,11 @@ export class Timer {
         }
 
         // Build list of all run notes
-        const allRunIds = Object.keys(Timer.run_history).sort(); // chronological by id
+        // const allRunIdsAsc = Object.keys(Timer.run_history).sort(); // chronological by id
         const notesListEl = $el("div", { className: "cg-timer-notes-list" });
         let rn = 1;
-        for (let i = 0; i < allRunIds.length; i++) {
-            const runId = allRunIds[i];
+        for (let i = 0; i < allRunIdsAsc.length; i++) {
+            const runId = allRunIdsAsc[i];
             const header = $el("div", {
                 className: "cg-run-note-header",
                 textContent: `RUN ${rn}`,
