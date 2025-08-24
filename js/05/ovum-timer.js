@@ -104,7 +104,6 @@ app.registerExtension({
         Timer.loadFromStorage(); // <--- Restore complete history from DB
         window.Timer = Timer;
         api.addEventListener("executing", Timer.executing);
-        api.addEventListener("execution_start", Timer.executionStart);
         api.addEventListener("execution_success", Timer.executionSuccess)
 
         // Track Control key for deletion UI cursor feedback
