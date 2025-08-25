@@ -64,6 +64,13 @@ app.registerExtension({
             console.error("Failed to load timer styles:", err);
         });
 
+        const styleLink = document.createElement('link');
+        styleLink.rel = 'stylesheet';
+        styleLink.href = '/extensions/ovum/css/tippy.css';
+        styleLink.id = 'cg-timer-stylesheet';
+        document.head.appendChild(styleLink);
+
+
         // Preload tooltip library (Tippy.js via CDN)
         ensureTooltipLib().catch(() => {});
 
@@ -77,6 +84,7 @@ app.registerExtension({
                     pytorch: x.system?.pytorch_version || '',
                     gpu: x.devices?.[0]?.name || ''
                 };
+                Timer.pending_run_notes = JSON.stringify(Timer.systemInfo)
                 console.log("System Info Collected:", Timer.systemInfo);
             }).catch(err => {
                 console.warn("Failed to collect system information:", err);
@@ -105,6 +113,7 @@ app.registerExtension({
         window.Timer = Timer;
         api.addEventListener("executing", Timer.executing);
         api.addEventListener("execution_success", Timer.executionSuccess)
+        api.addEventListener("logs", e => console.log("[Timer] logs event", e));
 
         // Track Control key for deletion UI cursor feedback
         document.addEventListener('keydown', (e) => {

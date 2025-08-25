@@ -9,12 +9,14 @@ import { removeEmojis, getNodeNameById, graphGetNodeById, findNodesByTypeName, f
 import { chainCallback, stripTrailingId } from '../01/utility.js';
 import { ensureTooltipLib, attachTooltip } from '../01/tooltipHelpers.js';
 import { bestConfigTracker } from '../01/best-config-tracker.js';
+import { onCopyGraphData, onCopyButton } from "../01/copyButton.js";
 
 const LOCALSTORAGE_KEY = 'ovum.timer.history';
 
 export class Timer {
     static all_times = [];
     static run_history = {}; // Store timings for each run
+    static pending_run_notes = null;
     static current_run_id = null; // ID for the current run
     static last_n_runs = 5; // Number of last runs to display
     static runs_since_clear = 0;
@@ -149,6 +151,7 @@ export class Timer {
         Timer.current_run_id = null;
         Timer.runs_since_clear = 0;
         Timer.run_notes = {};
+        Timer.pending_run_notes = null;
         if (Timer.onChange) Timer.onChange();
     }
 
@@ -165,6 +168,7 @@ export class Timer {
         const t = LiteGraph.getTime();
         Timer.current_run_id = Date.now().toString(); // Generate unique run ID
         Timer.run_history[Timer.current_run_id] = { nodes: {}, startTime: t, systemStartTime: Date.now() };
+        Timer.run_notes[Timer.current_run_id] = Timer.pending_run_notes || '';
         Timer.startTime = t;
         Timer.lastChangeTime = t;
 
@@ -520,91 +524,13 @@ export class Timer {
         // Copy button for copying table contents
         const copyButton = $el("button", {
             textContent: "Copy",
-            onclick: e => {
-                // Find the table with the cg-timer-table class
-                const table = document.querySelector('.cg-timer-table');
-                if (!table) {
-                    console.warn('Timer table not found');
-                    return;
-                }
+            onclick: onCopyButton
+        }); // onCopyGraphData
 
-                // Extract the data from the table
-                const rows = Array.from(table.querySelectorAll('tr'));
-                let tableText = '';
-
-                // Clipboard copy logic
-                rows.forEach(row => {
-                    // Skip columns hidden for copy based on their class
-                    const hideableKeys = new Set(['runs','per-run','per-flow','current-run']);
-                    const cells = Array.from(row.querySelectorAll('th, td')).filter(cell => {
-                        const classes = cell.classList || [];
-                        let key = null;
-                        for (const c of classes) {
-                            if (hideableKeys.has(c)) { key = c; break; }
-                        }
-                        return !(key && Timer.isHidden(key, 'copy'));
-                    });
-
-                    const rowText = cells.map((cell, idx) => {
-                        let text = cell.textContent.trim();
-                        // Apply emoji removal and trailing id stripping to the first cell only
-                        if (idx === 0) {
-                            text = removeEmojis(text);
-                            text = stripTrailingId(text);
-                        }
-                        return text;
-                    }).join('\t');
-                    tableText += rowText + '\n';
-                });
-
-                // Add run notes if we have any
-                if (Object.keys(Timer.run_notes).length > 0) {
-                    tableText += '\n### Run Notes\n';
-                    const runIds = Object.keys(Timer.run_history).sort().reverse().slice(0, Timer.last_n_runs);
-                    let runNumber = 1;
-                    for (let i = runIds.length - 1; i >= 0; i--) {
-                        const runId = runIds[i];
-                        if (Timer.run_notes[runId]) {
-                            const noteLines = Timer.run_notes[runId].split('\n');
-                            if (noteLines.length > 0) {
-                                tableText += `RUN ${runNumber}: ${noteLines[0]}\n`;
-                                for (let j = 1; j < noteLines.length; j++) {
-                                    tableText += `       ${noteLines[j]}\n`;
-                                }
-                            }
-                        }
-                        runNumber++;
-                    }
-                }
-
-                // Append system information if available
-                if (Timer.systemInfo) {
-                    tableText += '\n### System Info\n';
-                    const { gpu, pytorch, argv, connectionClosed, closeCode, closeReason } = Timer.systemInfo;
-                    if (gpu) tableText += `GPU: ${gpu}\n`;
-                    if (pytorch) tableText += `PyTorch: ${pytorch}\n`;
-                    if (argv) tableText += `Args: ${argv}\n`;
-                    if (connectionClosed) {
-                        tableText += `Socket closed: code=${closeCode ?? ''} reason=${closeReason ?? ''}\n`;
-                    }
-                }
-
-                // Copy to clipboard
-                navigator.clipboard.writeText(tableText)
-                    .then(() => {
-                        console.log('Table copied to clipboard');
-                        // Visual feedback that copy worked
-                        const originalText = copyButton.textContent;
-                        copyButton.textContent = "Copied!";
-                        setTimeout(() => {
-                            copyButton.textContent = originalText;
-                        }, 1500);
-                    })
-                    .catch(err => {
-                        console.error('Failed to copy: ', err);
-                    });
-            }
-        });
+        const copyGraphDataButton = $el("button", {
+            textContent: "Copy Graph Data",
+            onclick: onCopyGraphData
+        }); // onCopyGraphData
 
         const regexCheckbox = $el("input", {
             type: "checkbox",
@@ -864,6 +790,7 @@ export class Timer {
                     regexLabel,
                 ]),
                 copyButton,
+                copyGraphDataButton,
             ]),
             $el("div", {
                 className: "cg-timer-widget",

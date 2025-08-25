@@ -5,6 +5,8 @@ let __tippyLoader = null;
  * @returns {Promise<void>}
  */
 export function ensureTooltipLib() {
+    // This isn't really needed, and didn't work very will as comfyui preloads the library and therefore
+    // it aborts before it loads the css.
     if (window.tippy) return Promise.resolve();
     if (__tippyLoader) return __tippyLoader;
 
