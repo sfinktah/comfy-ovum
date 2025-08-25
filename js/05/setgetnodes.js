@@ -255,9 +255,44 @@ app.registerExtension({
                         if (fromNode?.outputs?.[link_info.origin_slot]) {
                             const srcSlot = fromNode.outputs[link_info.origin_slot];
                             const type = srcSlot.type;
-                            const preferred = this.getPreferredSlotLabel(fromNode, link_info.origin_slot) || type || '*';
+                            const basePreferred = this.getPreferredSlotLabel(fromNode, link_info.origin_slot) || type || '*';
 
-                            // Always reflect the connected label on the input
+                            // If the preferred label is a "lame name" (equals type), see if exactly one GetTwinNodes
+                            // has a starred constant and an output typed to this 'type'. If so, adopt that label,
+                            // but DO NOT adopt the trailing '*'. Also update the remote origin output label.
+                            let preferred = basePreferred;
+                            if (basePreferred === type) {
+                                const candidates = (this.graph?._nodes || []).filter(n => {
+                                    if (n.type !== 'GetTwinNodes') return false;
+                                    const hasStar = Array.isArray(n.widgets) && n.widgets.some(w => typeof w?.value === 'string' && w.value.trim().endsWith('*'));
+                                    const matchesType = Array.isArray(n.outputs) && n.outputs.some(out => out?.type === type);
+                                    return hasStar && matchesType;
+                                });
+                                if (candidates.length === 1) {
+                                    const starred = candidates[0].widgets.find(w => typeof w?.value === 'string' && w.value.trim().endsWith('*'))?.value;
+                                    if (starred) {
+                                        const destarred = String(starred).replace(/\*+$/, '').trim();
+                                        preferred = destarred || basePreferred;
+
+                                        // Update the remote origin (fromNode) output label/name to the new de-starred name
+                                        if (fromNode.outputs?.[link_info.origin_slot]) {
+                                            fromNode.outputs[link_info.origin_slot].label = preferred;
+                                            fromNode.outputs[link_info.origin_slot].name = preferred;
+                                            if (app?.canvas?.setDirty) app.canvas.setDirty(true, true);
+                                        }
+
+                                        // Also update the GetTwinNodes widget value to the de-starred name
+                                        const gwidgets = candidates[0].widgets || [];
+                                        const starredIdx = gwidgets.findIndex(w => typeof w?.value === 'string' && w.value.trim().endsWith('*'));
+                                        if (starredIdx !== -1) {
+                                            gwidgets[starredIdx].value = destarred;
+                                            if (app?.canvas?.setDirty) app.canvas.setDirty(true, true);
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Always reflect the connected (possibly adopted) label on the input
                             this.inputs[slot].type = type || '*';
                             this.inputs[slot].name = preferred;
                             this.inputs[slot].label = preferred;
@@ -728,7 +763,17 @@ app.registerExtension({
                                     (inSlot?.type && String(inSlot.type).trim()) ||
                                     "";
                                 if (preferred) {
-                                    this.widgets[0].value = preferred;
+                                    // If the derived name is not present in any SetTwinNodes constants, suffix with "*"
+                                    const setterNodes = node.graph?._nodes?.filter(n => n.type === 'SetTwinNodes') || [];
+                                    const known = new Set();
+                                    for (const s of setterNodes) {
+                                        const ws = s.widgets || [];
+                                        for (const w of ws) {
+                                            if (w?.value) known.add(String(w.value).trim());
+                                        }
+                                    }
+                                    const needsStar = !known.has(preferred);
+                                    this.widgets[0].value = needsStar && !preferred.endsWith("*") ? `${preferred}*` : preferred;
                                 }
                             }
                         }

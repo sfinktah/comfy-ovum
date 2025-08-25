@@ -852,8 +852,9 @@ export class Timer {
         return $el("div", {
             className: "cg-timer-widget-wrapper",
         }, [
+            // Moved UI above the widget
             $el("div", {
-                className: "cg-timer-widget",
+                className: "cg-timer-above-table",
             }, [
                 $el("div", {
                     className: "cg-timer-search",
@@ -863,6 +864,10 @@ export class Timer {
                     regexLabel,
                 ]),
                 copyButton,
+            ]),
+            $el("div", {
+                className: "cg-timer-widget",
+            }, [
                 $el("div", {
                     className: "cg-timer-table-wrapper",
                 }, [table]),
