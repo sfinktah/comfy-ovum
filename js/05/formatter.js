@@ -31,7 +31,7 @@ app.registerExtension({
 
                     // Ensure at least arg0 exists (backend should add it, but be defensive)
                     if (dyn.length === 0) {
-                        node.addInput("arg0", "*", { label: "arg0" });
+                        node.addInput("arg0", "*", { label: "arg0", forceInput: true });
                         dyn = getDynamicInputs();
                     }
 
@@ -96,11 +96,15 @@ app.registerExtension({
                         const fromNode = graphGetNodeById(linkInfo.origin_id) || app.graph?.getNodeById?.(linkInfo.origin_id);
                         const type = fromNode?.outputs?.[linkInfo.origin_slot]?.type ?? "*";
                         input.type = type || "*";
-                        input.label = `${input.type !== "*" ? input.type : "arg"} ${input.name.substring(3)}`;
+                        if (input.type !== "*") {
+                            input.label = input.name + ` ${input.type.toLowerCase()}`
+                        } else {
+                            input.label = input.name;
+                        }
                     } else if (!isConnecting) {
                         // Reset to wildcard on disconnect
                         input.type = "*";
-                        input.label = `arg${input.name.substring(3)}`;
+                        input.label = input.name;
                     }
 
                     ensureDynamicInputs(isConnecting);

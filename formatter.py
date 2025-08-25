@@ -86,18 +86,19 @@ class TextFormatNode:
         #     node = next((x for x in workflow["nodes"] if str(x["id"]) == unique_id[0]), None)
         #     if node:
         #         node["widgets_values"] = [values]
-        if isinstance(values, list) and len(values) == 1:
-            return {"ui": {"text": values}, "result": (values[0],), }
-        else:
-            return {"ui": {"text": values}, "result": (values,), }
+        # if isinstance(values, list) and len(values) == 1:
+        #     return {"ui": {"text": values}, "result": (values[0],), }
+        # else:
+        #     return {"ui": {"text": values}, "result": (values,), }
         result = fmt.format(**kwargs)
         return (result,)
 
 
-class TextFormatManyInputs(TextFormatNode):
+class PythonStringFormat(TextFormatNode):
+    NAME = "Python String Format"
     @classmethod
     def INPUT_TYPES(s):
-        dyn_inputs = {"arg0": (any_type, {"lazy": True, "tooltip": "Any input. When connected, one more input slot is added."}), }
+        # dyn_inputs = {"arg0": (any_type, {"lazy": True, "tooltip": "Any input. When connected, one more input slot is added."}), }
 
         inputs = {
             "required": {
@@ -107,7 +108,7 @@ class TextFormatManyInputs(TextFormatNode):
                 #                          "tooltip": "In the case of 'select_on_execution', the selection is dynamically determined at the time of workflow execution. 'select_on_prompt' is an option that exists for older versions of ComfyUI, and it makes the decision before the workflow execution."}),
             },
             "hidden": {"unique_id": "UNIQUE_ID", "extra_pnginfo": "EXTRA_PNGINFO", },
-            "optional": dyn_inputs,
+            # "optional": dyn_inputs,
         }
 
         return inputs
@@ -165,4 +166,4 @@ class TextFormat10Node(TextFormatNode):
             }
         }
 
-CLAZZES = [TextFormatManyInputs]
+CLAZZES = [PythonStringFormat]
