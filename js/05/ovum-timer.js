@@ -351,7 +351,7 @@ app.registerExtension({
                     const w = Array.isArray(this.size) ? this.size[0] : 0;
                     const h = Array.isArray(this.size) ? this.size[1] : 0;
                     const minW = 800, minH = 600;
-                    this.setsize(Math.max(w || 0, minW), Math.max(h || 0, minH));
+                    this.size=[Math.max(w || 0, minW), Math.max(h || 0, minH)];
                     this.__sizeInitialized = true;
                 }
 
