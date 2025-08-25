@@ -10,7 +10,7 @@ export function ensureTooltipLib() {
 
     __tippyLoader = new Promise((resolve, reject) => {
         try {
-            const cssHref = "https://unpkg.com/tippy.js@6/dist/tippy.css";
+            const cssHref = "/extensions/ovum/css/tippy.css";
             if (!document.querySelector(`link[href="${cssHref}"]`)) {
                 const link = document.createElement('link');
                 link.rel = 'stylesheet';
@@ -18,8 +18,8 @@ export function ensureTooltipLib() {
                 document.head.appendChild(link);
             }
 
-            const popperSrc = "https://unpkg.com/@popperjs/core@2/dist/umd/popper.min.js";
-            const tippySrc = "https://unpkg.com/tippy.js@6/dist/tippy.umd.min.js";
+            const popperSrc = "/extensions/ovum/lib/popper.min.js";
+            const tippySrc = "/extensions/ovum/lib/tippy.umd.min.js";
 
             function loadScript(src) {
                 return new Promise((res, rej) => {
