@@ -422,18 +422,14 @@ export class Timer {
             if (timerNodes.length > 0) {
                 const timerNode = timerNodes[0]; // Use the first timer node found
                 const activeWidget = timerNode.widgets.find(w => w.name === "Run notes (for active run)");
-                const queueWidget = timerNode.widgets.find(w => w.name === "Notes from queue");
                 const activeText = (activeWidget?.value || "").toString().trim();
-                const queueText = (queueWidget?.value || "").toString().trim();
-                const combined = [queueText, activeText].filter(Boolean).join('\n');
 
-                if (combined) {
-                    Timer.run_notes[Timer.current_run_id] = combined;
+                if (activeText) {
+                    Timer.run_notes[Timer.current_run_id] = activeText;
                 }
 
-                // Reset the text areas for next run
+                // Reset the text area for next run
                 if (activeWidget) activeWidget.value = "";
-                if (queueWidget) queueWidget.value = "";
                 timerNode.setDirtyCanvas(true);
             }
 

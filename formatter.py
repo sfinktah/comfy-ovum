@@ -55,8 +55,8 @@ class TextFormatNode:
                         # Keep scalar types as-is (no string conversion)
                         tv = val
                     else:
-                        # Non-scalar, non-list, non-str: JSON serialize
-                        tv = json.dumps(val)
+                        # Keep non-scalar, non-list, non-str values as real objects (no JSON conversion)
+                        tv = val
                 except Exception:
                     tv = str(val)
                 arg_items.append((idx, tv))
@@ -90,7 +90,24 @@ class TextFormatNode:
         #     return {"ui": {"text": values}, "result": (values[0],), }
         # else:
         #     return {"ui": {"text": values}, "result": (values,), }
-        result = fmt.format(**kwargs)
+        class _MissingArg:
+            def __format__(self, format_spec):
+                return "None"
+            def __str__(self):
+                return "None"
+            def __repr__(self):
+                return "None"
+
+        class _SafeDict(dict):
+            def __missing__(self, key):
+                return _MissingArg()
+
+        # Gracefully substitute "None" for any missing placeholder instead of failing.
+        try:
+            result = fmt.format_map(_SafeDict(kwargs))
+        except Exception as e:
+            print(f"Python String Format failed with fmt={fmt!r} and kwargs={kwargs!r}: {e.__class__.__name__}: {e}")
+            result = f"{e.__class__.__name__}: {e}"
         return (result,)
 
 

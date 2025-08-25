@@ -8,8 +8,9 @@ app.registerExtension({
     name: "ovum.format",
     async beforeRegisterNodeDef(nodeType, nodeData, appInstance) {
         // Target the Python class that supports many dynamic inputs
-        if (nodeType?.comfyClass !== "TextFormatManyInputs") return;
+        if (nodeType?.comfyClass !== "PythonStringFormat") return;
 
+        console.log('ovum.format registered');
         chainCallback(nodeType.prototype, "onNodeCreated", function () {
             const node = this;
 
@@ -23,6 +24,33 @@ app.registerExtension({
                         const bn = parseInt(b.inp.name.substring(3), 10);
                         return an - bn;
                     });
+            };
+
+            // Guard removal: keep at least one dynamic input present at all times
+            const _origRemoveInput = typeof node.removeInput === "function" ? node.removeInput.bind(node) : null;
+            node.removeInput = function (index) {
+                if (_origRemoveInput) {
+                    _origRemoveInput(index);
+                }
+                try {
+                    let dyn = getDynamicInputs();
+
+                    // If all dynamic inputs were removed, re-add arg0
+                    if (dyn.length === 0) {
+                        node.addInput("arg0", "*", { label: "arg0", forceInput: true });
+                        dyn = getDynamicInputs();
+                    }
+
+                    // If the last dynamic input is linked, ensure a trailing empty slot exists
+                    const last = dyn[dyn.length - 1]?.inp;
+                    if (last && last.link != null) {
+                        const lastNum = parseInt(last.name.substring(3), 10);
+                        const nextNum = lastNum + 1;
+                        node.addInput(`arg${nextNum}`, "*", { label: `arg${nextNum}` });
+                    }
+                } catch (err) {
+                    console.warn("[formatter] removeInput guard error:", err);
+                }
             };
 
             const ensureDynamicInputs = (isConnecting = true) => {
@@ -80,6 +108,15 @@ app.registerExtension({
 
             // Initialize once created
             ensureDynamicInputs(false);
+
+            // Also enforce after loading from saved graph
+            chainCallback(node, "onConfigure", function () {
+                try {
+                    ensureDynamicInputs(false);
+                } catch (err) {
+                    console.warn("[formatter] onConfigure error:", err);
+                }
+            });
 
             // Update labels/types and manage dynamic slots on connect/disconnect
             chainCallback(node, "onConnectionsChange", function (slotType, slot, isConnecting, linkInfo, output) {

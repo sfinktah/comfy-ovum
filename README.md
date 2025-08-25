@@ -2,8 +2,8 @@
 
 Some custom nodes for Comfy that I just couldn't live without.  Some have come
 from other packages that were annoyingly hard to find, some have been improved
-from other peoples' work who don't accept PR requests, and some have been made
-by me.
+from other peoples' work who don't accept PR requests, some have been made
+by me, and one has been made entirely by AI.
 
 ## Twin Connectors: SetTwinNodes and GetTwinNodes
 
@@ -33,9 +33,97 @@ How to use:
 
 These nodes are meant to keep large graphs navigable while preserving intent through names, not just types. They are deliberately forgiving when you work top-down or bottom-up, and they do their best to stay out of your way once you’ve chosen the labels that make sense in your workflow.
 
-## Text Format Many Nodes
+## Python String Format
 
-[WIP] Make strings from as many inputs as you want, with python `format` syntax.
+Turn multiple inputs into a single, neatly formatted string using Python’s `str.format` syntax. This node is ideal for building prompts, captions, file names, or any text that needs values injected at runtime.
+
+What it does:
+- Accepts a format template (fmt) and inserts values into placeholders like `{arg0}`, `{arg1}`, etc.
+- Produces a single STRING output.
+- Uses Python’s standard formatting rules, so you get powerful control over numbers, padding, alignment, and more.
+
+Placeholders:
+- Use `{arg0}` for the first input, `{arg1}` for the second, and so on.
+- You can apply format specs: `{arg0:.2f}`, `{arg1:03d}`, `{arg2:^20}`, `{arg3!r}`.
+- To show a literal curly brace, escape it: `{{` or `}}`.
+
+New lines:
+- Press Enter in the fmt field to insert real line breaks; the output will contain those line breaks exactly.
+- You can also embed newline escapes: use `\n` for a single new line, or `\n\n` to insert a blank line.
+- Mix placeholders and text across lines to build readable multi-line prompts or file names.
+
+Examples:
+- Multiline prompt with escape sequences:
+  - fmt: `Positive: {arg0}\nNegative: {arg1}\nSteps: {arg2}`
+  - Inputs: arg0 = "cozy cabin", arg1 = "low quality, blurry", arg2 = 30
+  - Output:
+        Positive: cozy cabin
+        Negative: low quality, blurry
+        Steps: 30
+- Multiline using literal line breaks:
+  - fmt:
+        Title: {arg0}
+
+        {arg1}
+        Tags: {arg2}, {arg3}
+  - Inputs: arg0 = "Autumn Forest", arg1 = "golden hour, volumetric light", arg2 = "forest", arg3 = "sunset"
+  - Output:
+        Title: Autumn Forest
+
+        golden hour, volumetric light
+        Tags: forest, sunset
+
+Common recipes:
+- Basic substitution:
+  - fmt: `Prompt: {arg0}. Steps: {arg1}`
+  - Inputs: arg0 = "A cozy cabin at night", arg1 = 30
+  - Output: `Prompt: A cozy cabin at night. Steps: 30`
+- Float precision:
+  - fmt: `Score: {arg0:.2f}`
+  - Inputs: arg0 = 0.98765
+  - Output: `Score: 0.99`
+- Zero-padded integers:
+  - fmt: `Image_{arg0:04d}`
+  - Inputs: arg0 = 7
+  - Output: `Image_0007`
+- Alignment and width:
+  - fmt: `[{arg0:^10}]`
+  - Inputs: arg0 = "OK"
+  - Output: `[    OK    ]`
+- Literal braces:
+  - fmt: `Config: {{enabled: {arg0}}}`
+  - Inputs: arg0 = true
+  - Output: `Config: {enabled: true}`
+
+Tips:
+- Missing or empty inputs are gracefully replaced with the literal string "None" at format time, so your workflow keeps running even if something disconnects or a generator yields no value. This is a dramatic improvement over other formatting nodes that can kill your workflow right when it’s about to finish saving that super‑long video.
+- Another bonus: non‑scalar inputs (lists, dictionaries, tuples, and custom objects) are kept as real Python objects rather than being flattened to JSON. That means you can index or key into them right in the format string.
+- Robust error handling: if formatting fails (e.g., invalid format spec, out-of-range index, missing key/attribute), the node prints the error to the console and returns the error text as the output string instead of crashing your run.
+- Numbers respect format specs; use them to avoid manual rounding or string tricks.
+- If you need default values, provide them upstream (e.g., via a constant/text node) and wire them in.
+
+Structured data (lists, dicts, tuples):
+- Lists:
+  - fmt: `Top tags: {arg0[0]}, {arg0[1]}, count={arg0[2]:02d}`
+  - Inputs: arg0 = ["hdr", "sunset", 7]
+  - Output: `Top tags: hdr, sunset, count=07`
+- Dictionaries:
+  - fmt: `User: {arg0[name]} (id={arg0[id]})`
+  - Inputs: arg0 = {"name": "Riley", "id": 42}
+  - Output: `User: Riley (id=42)`
+- Tuples (or list-like sizes):
+  - fmt: `Size: {arg0[0]}x{arg0[1]}`
+  - Inputs: arg0 = (1024, 576)
+  - Output: `Size: 1024x576`
+- You can combine indexing with format specs:
+  - fmt: `Mean: {arg0[1]:.2f}`
+  - Inputs: arg0 = ["loss", 0.123456]
+  - Output: `Mean: 0.12`
+
+Use cases:
+- Build dynamic prompts from multiple upstream nodes.
+- Compose file names with counters, dates, or padded indices.
+- Generate human-readable summaries that include numeric metrics.
 
 ## Timer
 

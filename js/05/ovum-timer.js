@@ -142,11 +142,6 @@ app.registerExtension({
                 if (message["queued_run_notes"]) {
                     // Set JS field "Notes from queue"
                     const queuedText = message["queued_run_notes"];
-                    const queueJsWidget = timerNode.widgets?.find(w => w.name === "Notes from queue");
-                    if (queueJsWidget) {
-                        queueJsWidget.value = queuedText || "";
-                        console.debug("[Timer] Set 'Notes from queue' widget to:", queueJsWidget.value);
-                    }
                     // Ensure we have a run id
                     if (!Timer.current_run_id) {
                         Timer.current_run_id = Date.now().toString();
@@ -200,12 +195,8 @@ app.registerExtension({
                     return v;
                 }, { multiline: true });  // Enable multiline for textarea
 
-                // Add Notes from queue textarea (populated when job starts)
-                const notesFromQueueWidget = this.addWidget("text", "Notes from queue", "", (v) => v, { multiline: true });
-
                 // Store references for later use
                 Timer.activeNotesWidget = textareaWidget;
-                Timer.notesFromQueueWidget = notesFromQueueWidget;
 
                 // ---- Dynamic inputs: arg1, arg2, ... ----
                 const ensureDynamicInputs = (isConnecting = true) => {
@@ -353,7 +344,16 @@ app.registerExtension({
                     inputEl.remove()
                 }
 
-                this.serialize_widgets = false;
+                this.serialize_widgets = true;
+
+                // Ensure a larger default/initial size for the Timer node
+                if (!this.__sizeInitialized) {
+                    const w = Array.isArray(this.size) ? this.size[0] : 0;
+                    const h = Array.isArray(this.size) ? this.size[1] : 0;
+                    const minW = 800, minH = 600;
+                    this.setsize(Math.max(w || 0, minW), Math.max(h || 0, minH));
+                    this.__sizeInitialized = true;
+                }
 
                 Timer.onChange = function () {
                     const existingTable = widget.inputEl.querySelector('.cg-timer-table');
