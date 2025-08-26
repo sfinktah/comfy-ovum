@@ -641,11 +641,17 @@ export class Timer {
 
             for (const id of runIds) {
                 const nodes = Timer.run_history[id]?.nodes;
-                if (!nodes) continue;
+                if (!nodes) {
+                    console.log(`[Timer] [averagesByK] No nodes found for run ${id}`);
+                    continue;
+                }
 
-                // Exclude runs that don't have a numeric totalTime for the 'id:total' key
-                const totalNode = nodes['id:total'];
-                if (!totalNode || typeof totalNode.totalTime !== 'number') continue;
+                // Exclude runs that don't have a numeric totalTime for the 'total' key
+                const totalNode = nodes['total'];
+                if (!totalNode || typeof totalNode.totalTime !== 'number') {
+                    console.log(`[Timer] [averagesByK] No totalTime found for run ${id}`);
+                    continue;
+                }
 
                 for (const [k, v] of Object.entries(nodes)) {
                     const total = (v && typeof v.totalTime === 'number') ? v.totalTime : 0;
