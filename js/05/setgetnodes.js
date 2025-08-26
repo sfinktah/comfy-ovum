@@ -1,4 +1,5 @@
 import { app } from "../../../scripts/app.js";
+import { GraphHelpers } from "../common/graphHelpersForTwinNodes.js";
 
 // mostly written by GPT-5
 // based on KJ's SetGet: https://github.com/kj-comfy/ComfyUI-extensions which was
@@ -269,7 +270,7 @@ app.registerExtension({
 
                     // Input connected
                     if (link_info && this.graph && slotType === LiteGraph.INPUT && isChangeConnect) {
-                        const fromNode = this.graph._nodes.find((otherNode) => otherNode.id == link_info.origin_id);
+                        const fromNode = GraphHelpers.getNodeById(this.graph, link_info.origin_id);
                         if (fromNode?.outputs?.[link_info.origin_slot]) {
                             const srcSlot = fromNode.outputs[link_info.origin_slot];
                             const type = srcSlot.type;
@@ -437,7 +438,7 @@ app.registerExtension({
                         });
                     }
 
-                    const allGetters = node.graph._nodes.filter(otherNode => otherNode.type === "GetTwinNodes");
+                    const allGetters = GraphHelpers.getNodesByType(node.graph, "GetTwinNodes");
                     allGetters.forEach(otherNode => {
                         if (otherNode.setComboValues) {
                             otherNode.setComboValues();
@@ -449,7 +450,7 @@ app.registerExtension({
                 this.findGetters = function(graph, checkForPreviousName) {
                     // TODO
                     const name = checkForPreviousName ? this.properties.previousName : this.widgets[0].value;
-                    return graph._nodes.filter(otherNode => otherNode.type === 'GetTwinNodes' && otherNode.widgets[0].value === name && name !== '');
+                    return GraphHelpers.getAllNodes(graph).filter(otherNode => otherNode.type === 'GetTwinNodes' && otherNode.widgets[0].value === name && name !== '');
                 }
 
                 // This node is purely frontend and does not impact the resulting prompt so should not be serialized
@@ -458,7 +459,7 @@ app.registerExtension({
 
 
             onRemoved() {
-                const allGetters = this.graph._nodes.filter((otherNode) => otherNode.type == "GetTwinNodes");
+                const allGetters = GraphHelpers.getNodesByType(this.graph, "GetTwinNodes");
                 allGetters.forEach((otherNode) => {
                     if (otherNode.setComboValues) {
                         otherNode.setComboValues([this]);
@@ -505,7 +506,7 @@ app.registerExtension({
                     {
                         content: "Hide all connections",
                         callback: () => {
-                            const allGetters = this.graph._nodes.filter(otherNode => otherNode.type === "GetTwinNodes" || otherNode.type === "SetTwinNodes");
+                            const allGetters = GraphHelpers.getAllNodes(this.graph).filter(otherNode => otherNode.type === "GetTwinNodes" || otherNode.type === "SetTwinNodes");
                             allGetters.forEach(otherNode => {
                                 otherNode.drawConnection = false;
                                 console.log(otherNode);
@@ -695,7 +696,7 @@ app.registerExtension({
                     const names = [];
 
                     // Gather from SetTwinNodes (all widget values)
-                    const setTwinNodes = node.graph?._nodes?.filter((n) => n.type === 'SetTwinNodes') || [];
+                    const setTwinNodes = GraphHelpers.getNodesByType(node.graph, 'SetTwinNodes');
                     for (const s of setTwinNodes) {
                         const ws = s.widgets || [];
                         for (const w of ws) {
@@ -802,13 +803,7 @@ app.registerExtension({
                             }
                             if (totalLinks === 1 && link_info) {
                                 // Try to read the target node and its input slot
-                                let targetNode = null;
-                                if (typeof node.graph.getNodeById === "function" && link_info.target_id != null) {
-                                    targetNode = node.graph.getNodeById(link_info.target_id);
-                                }
-                                if (!targetNode && link_info.target_id != null) {
-                                    targetNode = (node.graph._nodes || []).find(n => n && n.id == link_info.target_id);
-                                }
+                                const targetNode = GraphHelpers.getNodeById(node.graph, link_info.target_id);
                                 const inSlot = targetNode?.inputs?.[link_info.target_slot];
                                 const preferred =
                                     (inSlot?.label && String(inSlot.label).trim()) ||
@@ -831,7 +826,7 @@ app.registerExtension({
 
                         const idx = slot;
                         const val = this.widgets?.[idx]?.value;
-                        const allSetters = node.graph?._nodes?.filter(n => n.type === 'SetTwinNodes') || [];
+                        const allSetters = GraphHelpers.getNodesByType(node.graph, 'SetTwinNodes');
                         const options = Array.from(new Set(
                             allSetters.map(s => s.widgets?.[idx]?.value).filter(Boolean)
                         ));
@@ -901,8 +896,8 @@ app.registerExtension({
                                 if (this.outputs?.[i]?.links?.length) {
                                     const links = [...this.outputs[i].links];
                                     for (const linkId of links) {
-                                        const link = node.graph.links?.[linkId];
-                                        if (link) node.graph.removeLink(linkId);
+                                        const link = GraphHelpers.getLink(node.graph, linkId);
+                                        if (link) GraphHelpers.removeLink(node.graph, linkId);
                                     }
                                 }
                                 // Clear to empty string immediately and refresh UI
@@ -927,8 +922,8 @@ app.registerExtension({
                             if (this.outputs?.[idx]?.links?.length) {
                                 const links = [...this.outputs[idx].links];
                                 for (const linkId of links) {
-                                    const link = node.graph.links?.[linkId];
-                                    if (link) node.graph.removeLink(linkId);
+                                    const link = GraphHelpers.getLink(node.graph, linkId);
+                                    if (link) GraphHelpers.removeLink(node.graph, linkId);
                                 }
                             }
                         }
@@ -1109,11 +1104,11 @@ app.registerExtension({
                     for (let i = 0; i < this.outputs.length; i++) {
                         if (this.outputs[i].type !== '*' && this.outputs[i].links) {
                             this.outputs[i].links.filter(linkId => {
-                                const link = node.graph.links[linkId];
+                                const link = GraphHelpers.getLink(node.graph, linkId);
                                 return link && (!link.type.split(",").includes(this.outputs[i].type) && link.type !== '*');
                             }).forEach(linkId => {
                                 console.log("[Timer] Removing invalid link", linkId);
-                                node.graph.removeLink(linkId);
+                                GraphHelpers.removeLink(node.graph, linkId);
                             });
                         }
                     }
@@ -1151,7 +1146,7 @@ app.registerExtension({
 
                 this.findSetter = function(graph) {
                     const chosen = (this.widgets || []).map(w => w?.value).map(v => (v ? String(v).trim() : "")).filter(v => !!v);
-                    const setters = graph?._nodes?.filter(n => n.type === 'SetTwinNodes') || [];
+                    const setters = GraphHelpers.getNodesByType(graph, 'SetTwinNodes');
                     if (chosen.length === 0) return null;
 
                     // Match any setter that contains all chosen constants, regardless of position
@@ -1185,7 +1180,7 @@ app.registerExtension({
 
                 if (setter) {
                     const slotInfo = setter.inputs[slot];
-                    const link = this.graph.links[slotInfo.link];
+                    const link = GraphHelpers.getLink(this.graph, slotInfo.link);
                     return link;
                 } else {
                     const errorMessage = "No SetTwinNodes found for " + this.widgets[0].value + "(" + this.type + ")";
