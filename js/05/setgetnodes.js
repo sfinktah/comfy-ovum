@@ -19,6 +19,7 @@ function setColorAndBgColor(type) {
         "WANVIDEOMODEL": LGraphCanvas.node_colors.blue,
         "LATENT": LGraphCanvas.node_colors.purple,
         "VAE": LGraphCanvas.node_colors.red,
+        "WANVAE": LGraphCanvas.node_colors.red,
         "CONDITIONING": LGraphCanvas.node_colors.brown,
         "WANVIDEOTEXTEMBEDS": LGraphCanvas.node_colors.orange,
         "IMAGE": LGraphCanvas.node_colors.pale_blue,
@@ -830,7 +831,7 @@ app.registerExtension({
 
                 // Ensure the number of outputs matches count
                 this.ensureOutputCount = function(count) {
-                    console.log("[Timer]");
+                    console.log("[GetSetTwinNodes]");
                     const min = this.properties?.constCount || 2;
                     count = Math.max(min, count);
                     while ((this.outputs?.length || 0) < count) this.addOutput("*", "*");
@@ -861,7 +862,7 @@ app.registerExtension({
 
                 // During deserialization, respect serialized widgets/outputs by suppressing auto-derivation for a tick
                 this.onConfigure = function(_data) {
-                    console.log("[Timer] onConfigure");
+                    console.log("[GetSetTwinNodes] onConfigure");
                     this.__restoring = true;
                     // Clear restoration flag shortly after configuration to allow normal behavior thereafter
                     setTimeout(() => { this.__restoring = false; }, 1000);
@@ -875,7 +876,7 @@ app.registerExtension({
                     output
                 ) {
                     // Respect serialized data on restore: skip auto-derive during deserialization
-                    console.log("[Timer] onConnectionsChange");
+                    console.log("[GetSetTwinNodes] onConnectionsChange");
                     if (this.__restoring) return;
 
                     this.validateLinks();
@@ -950,7 +951,10 @@ app.registerExtension({
 
                 // Backward-compatible single-name setter
                 this.setName = function(name) {
-                    node.widgets[0].value = name;
+                    console.log("[GetTwinNodes] setName should not have been called");
+                    if (this.widgets?.[0]) {
+                        this.widgets[0].value = name;
+                    }
                     node.onRename();
                     node.serialize();
                 }
@@ -976,7 +980,7 @@ app.registerExtension({
 
                 this.onRename = function() {
                     // Respect serialized data on restore: skip auto-derive during deserialization
-                    console.log("[Timer] onRename");
+                    console.log("[GetSetTwinNodes] onRename");
                     if (this.__restoring) return;
 
                     // Support "(unset)" option: clear widget value and possibly remove the first extra unset widget and its output
@@ -1212,7 +1216,7 @@ app.registerExtension({
                                 const link = GraphHelpers.getLink(node.graph, linkId);
                                 return link && (!link.type.split(",").includes(this.outputs[i].type) && link.type !== '*');
                             }).forEach(linkId => {
-                                console.log("[Timer] Removing invalid link", linkId);
+                                console.log("[GetSetTwinNodes] Removing invalid link", linkId);
                                 GraphHelpers.removeLink(node.graph, linkId);
                             });
                         }
