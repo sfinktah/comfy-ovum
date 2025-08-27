@@ -169,6 +169,7 @@ export class Timer {
         Timer.current_run_id = Date.now().toString(); // Generate unique run ID
         Timer.run_history[Timer.current_run_id] = { nodes: {}, startTime: t, systemStartTime: Date.now() };
         Timer.run_notes[Timer.current_run_id] = Timer.pending_run_notes || '';
+        Timer.pending_run_notes = null;
         Timer.startTime = t;
         Timer.lastChangeTime = t;
 

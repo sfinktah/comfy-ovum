@@ -82,7 +82,7 @@ app.registerExtension({
                 Timer.systemInfo = {
                     argv: x.system?.argv?.slice(1).join(' ') || '',
                     pytorch: x.system?.pytorch_version || '',
-                    gpu: x.devices?.[0]?.name || ''
+                    gpu: x.devices?.[0]?.name || '',
                 };
                 Timer.pending_run_notes = JSON.stringify(Timer.systemInfo)
                 console.log("System Info Collected:", Timer.systemInfo);
