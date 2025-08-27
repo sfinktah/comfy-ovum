@@ -1,0 +1,74 @@
+=== Analysis of NodeInputSlot ===
+
+Inheritance Chain:
+NodeInputSlot (instance)
+  |- NodeInputSlot (prototype)
+    |- NodeSlot (prototype)
+      |- SlotBase (prototype)
+        |- Object (base)
+
+Functions:
+constructor(this, "NodeInputSlot") (constructor) [NodeInputSlot (prototype)]
+draw(ctx, options2) [NodeInputSlot (prototype)]
+    draw(ctx, options2) {
+        const { textAlign } = ctx;
+        ctx.textAlign = "left";
+        super.draw(ctx, {
+          ...options2,
+          labelPosition: LabelPosition.Right,
+          doStroke: false
+        });
+        ctx.textAlign = textAlign;
+      }
+drawCollapsed(ctx) [NodeSlot (prototype)]
+isValidTarget(fromSlot) [NodeInputSlot (prototype)]
+renderingColor(colorContext) [SlotBase (prototype)]
+    renderingColor(colorContext) {
+        return this.isConnected ? this.color_on || colorContext.getConnectedColor(this.type) : this.color_off || colorContext.getDisconnectedColor(this.type);
+      }
+
+Getters:
+_widget [NodeInputSlot (prototype)]
+    get _widget() {
+        return this.#widget?.deref();
+      }
+collapsedPos [NodeInputSlot (prototype)]
+    get collapsedPos() {
+        return [0, LiteGraph.NODE_TITLE_HEIGHT * -0.5];
+      }
+highlightColor [NodeSlot (prototype)]
+    get highlightColor() {
+        return LiteGraph.NODE_TEXT_HIGHLIGHT_COLOR ?? LiteGraph.NODE_SELECTED_TITLE_COLOR ?? LiteGraph.NODE_TEXT_COLOR;
+      }
+isConnected [NodeInputSlot (prototype)]
+    get isConnected() {
+        return this.link != null;
+      }
+isWidgetInputSlot [NodeInputSlot (prototype)]
+    get isWidgetInputSlot() {
+        return !!this.widget;
+      }
+node [NodeSlot (prototype)]
+    get node() {
+        return this.#node;
+      }
+renderingLabel [NodeSlot (prototype)]
+    get renderingLabel() {
+        return this.label || this.localized_name || this.name || "";
+      }
+
+Setters:
+_widget [NodeInputSlot (prototype)]
+    set _widget(widget) {
+        this.#widget = widget ? new WeakRef(widget) : void 0;
+      }
+
+Summary:
+  |- Total members: 25
+  |- Functions: 15
+  |- Getters: 8
+  |- Setters: 2
+  |- Own members: 0
+  |- Inherited members: 25
+  |- Async members: 0
+  |- With source code: 22
