@@ -1,5 +1,13 @@
+/** @typedef {import('@comfyorg/comfyui-frontend-types').ComfyApp} ComfyApp */
+/** @typedef {import('@comfyorg/litegraph/dist/litegraph').LGraph} LGraph */
+/** @typedef {import('@comfyorg/litegraph/dist/litegraph').Subgraph} Subgraph */
+/** @typedef {import('@comfyorg/litegraph/dist/litegraph').LLink} LLink */
+/** @typedef {import('@comfyorg/litegraph/dist/litegraph').NodeInputSlot} NodeInputSlot */
+/** @typedef {import('@comfyorg/litegraph/dist/litegraph').NodeOutputSlot} NodeOutputSlot */
+
 import { app } from "../../../scripts/app.js";
 import { GraphHelpers } from "../common/graphHelpersForTwinNodes.js";
+import { analyzeNamesForAbbrev } from "../01/stringHelper.js";
 
 // mostly written by GPT-5
 // based on KJ's SetGet: https://github.com/kj-comfy/ComfyUI-extensions which was
@@ -8,10 +16,13 @@ import { GraphHelpers } from "../common/graphHelpersForTwinNodes.js";
 function setColorAndBgColor(type) {
     const colorMap = {
         "MODEL": LGraphCanvas.node_colors.blue,
+        "WANVIDEOMODEL": LGraphCanvas.node_colors.blue,
         "LATENT": LGraphCanvas.node_colors.purple,
         "VAE": LGraphCanvas.node_colors.red,
         "CONDITIONING": LGraphCanvas.node_colors.brown,
+        "WANVIDEOTEXTEMBEDS": LGraphCanvas.node_colors.orange,
         "IMAGE": LGraphCanvas.node_colors.pale_blue,
+        "WANVIDIMAGE_EMBEDS": LGraphCanvas.node_colors.pale_blue,
         "CLIP": LGraphCanvas.node_colors.yellow,
         "FLOAT": LGraphCanvas.node_colors.green,
         "MASK": { color: "#1c5715", bgcolor: "#1f401b"},
@@ -74,7 +85,7 @@ app.registerExtension({
                 super(title)
                 if (!this.properties) {
                     this.properties = {
-                        previousName: "",
+                        previousNames: [],
                         constCount: 2,
                     };
                 }
@@ -85,7 +96,7 @@ app.registerExtension({
                 // Helper to compute and set the combined title from connected widgets' values,
                 // and update node color from the first connected typed link
                 this.updateTitle = function () {
-                    const parts = [];
+                    const names = [];
                     const widgetCount = (this.widgets?.length || 0);
                     for (let i = 0; i < widgetCount; i++) {
                         const connected = this.inputs?.[i]?.link != null;
@@ -94,13 +105,19 @@ app.registerExtension({
                         const val = (raw && String(raw).trim())
                             ? String(raw).trim()
                             : (i === 0 ? "Itchy" : i === 1 ? "Scratchy" : `Constant ${i + 1}`);
-                        parts.push(val);
+                        names.push(val);
                     }
-                    const joined = parts.join(" & ");
-                    if (parts.length === 0) {
+
+                    if (names.length === 0) {
                         this.title = "SetTwinNodes";
                     } else {
-                        this.title = (!disablePrefix ? "Set_" : "") + joined;
+                        const analysis = analyzeNamesForAbbrev(names);
+                        if (analysis && analysis.use) {
+                            this.title = (!disablePrefix ? "Set_" : "") + analysis.titleText;
+                        } else {
+                            const joined = names.join(" & ");
+                            this.title = (!disablePrefix ? "Set_" : "") + joined;
+                        }
                     }
 
                     // Determine color from the first connected link with a known color
@@ -114,13 +131,18 @@ app.registerExtension({
                         }
                     }
                     // Note: we don't actually have a settings panel yet
-                    if (pickedType && app.ui.settings.getSettingValue("KJNodes.nodeAutoColor")) {
+                    const autoColor = app.ui.settings.getSettingValue("KJNodes.nodeAutoColor");
+                    if (pickedType && autoColor) {
                         setColorAndBgColor.call(this, pickedType);
-                    }
-                    if (!pickedType) {
-                        // reset to default look if nothing connected
+                    } else {
+                        // reset to default look if nothing connected or auto-color disabled
                         this.color = undefined;
                         this.bgcolor = undefined;
+                    }
+
+                    // After updating the title/color, apply shortened labels to outputs when appropriate
+                    if (typeof this.applyAbbreviatedOutputLabels === "function") {
+                        this.applyAbbreviatedOutputLabels();
                     }
                 };
 
@@ -162,7 +184,7 @@ app.registerExtension({
                             this.inputs[i].label = base;
                         }
 
-                        // Sync outputs to inputs verbatim
+                        // Sync outputs to inputs verbatim (temporary; may be shortened later)
                         if (this.outputs?.[i]) {
                             this.outputs[i].name = base;
                             this.outputs[i].label = base;
@@ -179,6 +201,42 @@ app.registerExtension({
                     }
                 };
 
+                // Compute and apply abbreviated labels to SetTwinNodes outputs where appropriate
+                this.applyAbbreviatedOutputLabels = function() {
+                    const items = [];
+                    const maxCount = Math.max(
+                        this.widgets?.length || 0,
+                        this.inputs?.length || 0,
+                        this.outputs?.length || 0
+                    );
+
+                    for (let i = 0; i < maxCount; i++) {
+                        const connected = !!(this.inputs?.[i]?.link != null);
+                        const raw = this.widgets?.[i]?.value;
+                        const val = (raw && String(raw).trim()) || "";
+                        // Only consider slots that are connected or have a meaningful value
+                        if (connected || val) {
+                            const baseName = val || String(this.inputs?.[i]?.label || this.inputs?.[i]?.name || "").trim();
+                            if (baseName) {
+                                items.push({ index: i, name: baseName });
+                            }
+                        }
+                    }
+
+                    if (!items.length) return;
+
+                    const analysis = analyzeNamesForAbbrev(items.map(it => it.name));
+                    if (analysis && analysis.use) {
+                        items.forEach((it, j) => {
+                            if (this.outputs?.[it.index]) {
+                                const short = analysis.shortNames[j] || it.name;
+                                this.outputs[it.index].name = short;
+                                this.outputs[it.index].label = short;
+                            }
+                        });
+                    }
+                };
+
                 // Create an arbitrary number of constants/links
                 const initialCount = this.properties.constCount || 2;
                 for (let i = 0; i < initialCount; i++) {
@@ -192,11 +250,6 @@ app.registerExtension({
                             if (typeof node.validateWidgetName === "function") {
                                 node.validateWidgetName(node.graph, idx);
                             }
-                            // TODO: Check - only the first widget's value is tracked as previousName (primary constant)
-                            if (idx === 0) {
-                                // TODO
-                                this.properties.previousName = this.widgets[0].value;
-                            }
                             this.updateTitle();
                             this.update();
                         },
@@ -204,6 +257,8 @@ app.registerExtension({
                     );
                 }
                 this.ensureSlotCount(initialCount);
+                // Initialize previousNames snapshot to current widget values
+                this.properties.previousNames = (this.widgets || []).map(w => (w && w.value != null ? String(w.value).trim() : ""));
                 this.updateTitle();
 
                 this.onConnectionsChange = function(
@@ -401,7 +456,7 @@ app.registerExtension({
                         }
                     }
                     cloned.value = '';
-                    cloned.properties.previousName = '';
+                    cloned.properties.previousNames = [];
                     cloned.size = cloned.computeSize();
                     return cloned;
                 };
@@ -419,6 +474,7 @@ app.registerExtension({
                         return;
                     }
 
+                    // Propagate types to all getters that share at least one of this node's names
                     const getters = this.findGetters(node.graph);
                     const types = (this.inputs || []).map(inp => inp?.type || '*');
                     getters.forEach(getter => {
@@ -429,28 +485,65 @@ app.registerExtension({
                         }
                     });
 
-                    // TODO: Check - propagation keyed only to widgets[0] (primary constant naming)
-                    if (this.widgets[0].value) {
-                        // TODO
-                        const gettersWithPreviousName = this.findGetters(node.graph, true);
-                        gettersWithPreviousName.forEach(getter => {
-                            getter.setName(this.widgets[0].value);
-                        });
+                    // Rename propagation across all widget indices:
+                    // compare previousNames snapshot vs current widget values and
+                    // update any GetTwinNodes widgets that still reference the old name.
+                    const currNames = Array.isArray(this.widgets)
+                        ? this.widgets.map(w => (w && w.value != null ? String(w.value).trim() : ""))
+                        : [];
+                    const prevNames = Array.isArray(this.properties.previousNames) ? this.properties.previousNames : [];
+
+                    for (let i = 0; i < Math.max(prevNames.length, currNames.length); i++) {
+                        const prev = prevNames[i] || "";
+                        const curr = currNames[i] || "";
+                        if (prev && curr && prev !== curr) {
+                            const allGettersForRename = GraphHelpers.getNodesByType(node.graph, "GetTwinNodes");
+                            allGettersForRename.forEach(getter => {
+                                if (!Array.isArray(getter.widgets)) return;
+                                let changed = false;
+                                for (let gi = 0; gi < getter.widgets.length; gi++) {
+                                    const gv = getter.widgets[gi]?.value;
+                                    if (gv && String(gv).trim() === prev) {
+                                        getter.widgets[gi].value = curr;
+                                        changed = true;
+                                    }
+                                }
+                                if (changed && typeof getter.onRename === "function") {
+                                    getter.onRename();
+                                }
+                            });
+                        }
                     }
 
+                    // Refresh combo values for all getters
                     const allGetters = GraphHelpers.getNodesByType(node.graph, "GetTwinNodes");
                     allGetters.forEach(otherNode => {
                         if (otherNode.setComboValues) {
                             otherNode.setComboValues();
                         }
                     });
+
+                    // Update the previousNames snapshot
+                    this.properties.previousNames = currNames;
                 }
 
-                // TODO: Check - matching GetTwinNodes by widgets[0] only (primary-key semantics)
+                // Match GetTwinNodes if they share at least one name with this node
+                // If checkForPreviousName is true, use the previousNames snapshot; otherwise use current widget values.
                 this.findGetters = function(graph, checkForPreviousName) {
-                    // TODO
-                    const name = checkForPreviousName ? this.properties.previousName : this.widgets[0].value;
-                    return GraphHelpers.getAllNodes(graph).filter(otherNode => otherNode.type === 'GetTwinNodes' && otherNode.widgets[0].value === name && name !== '');
+                    const sourceNames = checkForPreviousName
+                        ? (Array.isArray(this.properties.previousNames) ? this.properties.previousNames : [])
+                        : (Array.isArray(this.widgets) ? this.widgets.map(w => (w && w.value != null ? String(w.value).trim() : "")) : []);
+                    const names = sourceNames.filter(v => !!v);
+                    if (!graph || names.length === 0) return [];
+                    const nameSet = new Set(names);
+                    return GraphHelpers.getAllNodes(graph).filter(otherNode =>
+                        otherNode.type === 'GetTwinNodes' &&
+                        Array.isArray(otherNode.widgets) &&
+                        otherNode.widgets.some(w => {
+                            const val = w && w.value != null ? String(w.value).trim() : "";
+                            return val && nameSet.has(val);
+                        })
+                    );
                 }
 
                 // This node is purely frontend and does not impact the resulting prompt so should not be serialized
@@ -1024,27 +1117,34 @@ app.registerExtension({
                             }
                         }
 
-                        // Build title from selected widget values; fallback to Itchy/Scratchy/Constant n
-                        const parts = [];
+                        // Build title from selected widget values; prefer compact form if names share common parts
+                        const namesForTitle = [];
                         const wCount = this.widgets?.length || 0;
                         for (let i = 0; i < wCount; i++) {
                             const raw = this.widgets?.[i]?.value;
                             if (!raw) continue;
                             const name = String(raw).trim();
-                            if (name) parts.push(name);
+                            if (name) namesForTitle.push(name);
                         }
-                        const joined = parts.join(" & ");
-                        if (parts.length === 0) {
+                        if (namesForTitle.length === 0) {
                             this.title = "GetTwinNodes";
                         } else {
-                            this.title = (!disablePrefix ? "Get_" : "") + joined;
+                            const analysis = analyzeNamesForAbbrev(namesForTitle);
+                            if (analysis && analysis.use) {
+                                this.title = (!disablePrefix ? "Get_" : "") + analysis.titleText;
+                            } else {
+                                const joined = namesForTitle.join(" & ");
+                                this.title = (!disablePrefix ? "Get_" : "") + joined;
+                            }
                         }
 
                         // Note: we don't actually have a settings panel yet
                         // Only colorize when a constant is selected; follow same rule as SetTwinNodes (based on constant type)
-                        if (anySelected && pickedType && app.ui.settings.getSettingValue("KJNodes.nodeAutoColor")) {
+                        const autoColor = app.ui.settings.getSettingValue("KJNodes.nodeAutoColor");
+                        if (anySelected && pickedType && autoColor) {
                             setColorAndBgColor.call(this, pickedType);
-                        } else if (!anySelected) {
+                        } else {
+                            // reset to default look if no selection, unknown type, or auto-color disabled
                             this.color = undefined;
                             this.bgcolor = undefined;
                         }
@@ -1069,19 +1169,24 @@ app.registerExtension({
                                 this.outputs[i].type = '*';
                             }
                         }
-                        const parts = [];
+                        const namesForTitle = [];
                         const wCount = this.widgets?.length || 0;
                         for (let i = 0; i < wCount; i++) {
                             const raw = this.widgets?.[i]?.value;
                             if (!raw) continue;
                             const name = String(raw).trim();
-                            if (name) parts.push(name);
+                            if (name) namesForTitle.push(name);
                         }
-                        const joined = parts.join(" & ");
-                        if (parts.length === 0) {
+                        if (namesForTitle.length === 0) {
                             this.title = "GetTwinNodes";
                         } else {
-                            this.title = (!disablePrefix ? "Get_" : "") + joined;
+                            const analysis = analyzeNamesForAbbrev(namesForTitle);
+                            if (analysis && analysis.use) {
+                                this.title = (!disablePrefix ? "Get_" : "") + analysis.titleText;
+                            } else {
+                                const joined = namesForTitle.join(" & ");
+                                this.title = (!disablePrefix ? "Get_" : "") + joined;
+                            }
                         }
 
                         // No selection or unknown type: reset color
