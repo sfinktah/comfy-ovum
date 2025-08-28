@@ -14,44 +14,69 @@ async def status(d):
     except Exception as e:
         return web.json_response({"error": True, "message": str(e)})
 
-@PromptServer.instance.routes.post('/ovum/cudnn-set')
-async def set_cudnn(d):
+@PromptServer.instance.routes.get('/ovum/cudnn/enable')
+async def cudnn_enable(d):
     try:
-        # Capture previous states
         prev_enabled = torch.backends.cudnn.enabled
         prev_benchmark = torch.backends.cudnn.benchmark
 
-        # Parse body (may be empty/invalid)
-        data = {}
-        try:
-            data = await d.json()
-        except Exception:
-            # If no/invalid body, keep empty dict and apply no changes
-            pass
+        # Change only 'enabled'
+        torch.backends.cudnn.enabled = True
 
-        def to_bool(v):
-            if isinstance(v, bool):
-                return v
-            if isinstance(v, str):
-                return v.strip().lower() in ("1", "true", "yes", "on")
-            return bool(v)
+        return web.json_response({
+            "previous.torch.backends.cudnn.enabled": prev_enabled,
+            "previous.torch.backends.cudnn.benchmark": prev_benchmark,
+            "torch.backends.cudnn.enabled": torch.backends.cudnn.enabled,
+            "torch.backends.cudnn.benchmark": torch.backends.cudnn.benchmark
+        })
+    except Exception as e:
+        return web.json_response({"error": True, "message": str(e)})
 
-        # Determine new values
-        enabled_in = data.get("enabled", None)
-        benchmark_in = data.get("benchmark", None)
+@PromptServer.instance.routes.get('/ovum/cudnn/disable')
+async def cudnn_disable(d):
+    try:
+        prev_enabled = torch.backends.cudnn.enabled
+        prev_benchmark = torch.backends.cudnn.benchmark
 
-        new_enabled = to_bool(enabled_in) if enabled_in is not None else prev_enabled
-        if benchmark_in is not None:
-            new_benchmark = to_bool(benchmark_in)
-        else:
-            # If benchmark is not supplied, assume it is the same as enabled when enabled is provided
-            new_benchmark = new_enabled if enabled_in is not None else prev_benchmark
+        # Change only 'enabled'
+        torch.backends.cudnn.enabled = False
 
-        # Apply changes
-        torch.backends.cudnn.enabled = new_enabled
-        torch.backends.cudnn.benchmark = new_benchmark
+        return web.json_response({
+            "previous.torch.backends.cudnn.enabled": prev_enabled,
+            "previous.torch.backends.cudnn.benchmark": prev_benchmark,
+            "torch.backends.cudnn.enabled": torch.backends.cudnn.enabled,
+            "torch.backends.cudnn.benchmark": torch.backends.cudnn.benchmark
+        })
+    except Exception as e:
+        return web.json_response({"error": True, "message": str(e)})
 
-        # Return previous and current states
+@PromptServer.instance.routes.get('/ovum/cudnn-benchmark/enable')
+async def cudnn_benchmark_enable(d):
+    try:
+        prev_enabled = torch.backends.cudnn.enabled
+        prev_benchmark = torch.backends.cudnn.benchmark
+
+        # Change only 'benchmark'
+        torch.backends.cudnn.benchmark = True
+
+        return web.json_response({
+            "previous.torch.backends.cudnn.enabled": prev_enabled,
+            "previous.torch.backends.cudnn.benchmark": prev_benchmark,
+            "torch.backends.cudnn.enabled": torch.backends.cudnn.enabled,
+            "torch.backends.cudnn.benchmark": torch.backends.cudnn.benchmark
+        })
+    except Exception as e:
+        return web.json_response({"error": True, "message": str(e)})
+
+@PromptServer.instance.routes.get('/ovum/cudnn-benchmark/disable')
+async def cudnn_benchmark_disable(d):
+    try:
+        prev_enabled = torch.backends.cudnn.enabled
+        prev_benchmark = torch.backends.cudnn.benchmark
+
+        # Change only 'benchmark'
+        torch.backends.cudnn.benchmark = False
+
         return web.json_response({
             "previous.torch.backends.cudnn.enabled": prev_enabled,
             "previous.torch.backends.cudnn.benchmark": prev_benchmark,
