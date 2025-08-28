@@ -154,9 +154,7 @@ app.registerExtension({
                     }
 
                     // After updating the title/color, apply shortened labels to outputs when appropriate
-                    if (typeof this.applyAbbreviatedOutputLabels === "function") {
-                        this.applyAbbreviatedOutputLabels();
-                    }
+                    this.applyAbbreviatedOutputLabels();
                 };
 
                 // Ensure there are N inputs and outputs matching widget count
@@ -206,10 +204,7 @@ app.registerExtension({
                         // Only fill widget value if empty or '*'
                         if (this.widgets?.[i] && (!this.widgets[i].value || this.widgets[i].value === '*')) {
                             this.widgets[i].value = base;
-                            // Keep uniqueness enforcement for widget values if defined
-                            if (typeof this.validateWidgetName === "function") {
-                                this.validateWidgetName(this.graph, i);
-                            }
+                            this.validateWidgetName(this.graph, i);
                         }
                     }
                 };
@@ -263,9 +258,7 @@ app.registerExtension({
                         '',
                         () => {
                             // Ensure unique name for this specific widget index
-                            if (typeof node.validateWidgetName === "function") {
-                                node.validateWidgetName(node.graph, idx);
-                            }
+                            node.validateWidgetName(node.graph, idx);
                             this.updateTitle();
                             this.update();
                         },
@@ -325,9 +318,7 @@ app.registerExtension({
                             this.widgets[slot].value = '';
                         }
                         // Re-number duplicates among remaining connected inputs
-                        if (typeof this.applyDuplicateNumbering === "function") {
-                            this.applyDuplicateNumbering();
-                        }
+                        this.applyDuplicateNumbering();
                         this.updateTitle();
                         propagateToGetters();
                         this.update();
@@ -473,18 +464,14 @@ app.registerExtension({
                             if (this.widgets?.[slot] && (!this.widgets[slot].value || this.widgets[slot].value === '*')) {
                                 this.widgets[slot].value = preferred;
                                 // Enforce graph-wide uniqueness for this widget index
-                                if (typeof this.validateWidgetName === "function") {
-                                    this.validateWidgetName(this.graph, slot);
-                                }
+                                this.validateWidgetName(this.graph, slot);
                             }
 
                             // Mirror type/name to the corresponding output
                             mirrorOutputFromInput(slot);
 
                             // Normalize duplicates among all connected inputs
-                            if (typeof this.applyDuplicateNumbering === "function") {
-                                this.applyDuplicateNumbering();
-                            }
+                            this.applyDuplicateNumbering();
 
                             // Update title/color and propagate
                             this.updateTitle();
@@ -574,7 +561,7 @@ app.registerExtension({
                 };
 
                 this.onAdded = function(graph) {
-                    if (typeof this.validateWidgetName === "function" && Array.isArray(this.widgets)) {
+                    if (Array.isArray(this.widgets)) {
                         for (let i = 0; i < this.widgets.length; i++) {
                             this.validateWidgetName(graph, i);
                         }
@@ -934,9 +921,7 @@ app.registerExtension({
                         );
                     }
                     // Normalize widget labels to Constant 1, Constant 2, ...
-                    if (typeof this.normalizeGetterWidgetLabels === "function") {
-                        this.normalizeGetterWidgetLabels();
-                    }
+                    this.normalizeGetterWidgetLabels();
                 };
 
                 // Ensure the number of outputs matches count
@@ -1016,11 +1001,8 @@ app.registerExtension({
                                     "";
                                 if (preferred) {
                                     // If the derived name is not present in any known constants, append '*'
-                                    let knownNames = [];
-                                    if (typeof this.getCombinedConstantNames === "function") {
-                                        knownNames = this.getCombinedConstantNames()
+                                    let knownNames = this.getCombinedConstantNames()
                                             .filter(n => n && n !== "(unset)");
-                                    }
                                     const known = new Set(knownNames);
                                     const needsUnlinked = !known.has(preferred);
                                     this.widgets[0].value = needsUnlinked ? makeUnlinkedName(preferred) : preferred;
@@ -1138,9 +1120,7 @@ app.registerExtension({
                         if (unsetIndices.length > 1) {
                             // Remove the first unset widget and its corresponding output slot
                             const removeIdx = unsetIndices[0];
-                            if (typeof this.removeOutput === "function") {
-                                this.removeOutput(removeIdx);
-                            }
+                            this.removeOutput(removeIdx);
                             if (Array.isArray(this.widgets)) {
                                 this.widgets.splice(removeIdx, 1);
                             }
@@ -1149,9 +1129,7 @@ app.registerExtension({
                         }
 
                         // Always normalize labels after unset/removal
-                        if (typeof this.normalizeGetterWidgetLabels === "function") {
-                            this.normalizeGetterWidgetLabels();
-                        }
+                        this.normalizeGetterWidgetLabels();
                         // Keep outputs count aligned to widgets after any removals
                         this.ensureOutputCount(this.widgets?.length || 0);
                     }
@@ -1207,9 +1185,7 @@ app.registerExtension({
                         }
 
                         // Normalize labels after any additions
-                        if (typeof this.normalizeGetterWidgetLabels === "function") {
-                            this.normalizeGetterWidgetLabels();
-                        }
+                        this.normalizeGetterWidgetLabels();
 
                         // Set each output's name to the selected constant text and type from matched setter
                         const outCount = this.widgets?.length || 0;
@@ -1309,7 +1285,7 @@ app.registerExtension({
                     }
 
                     // Finally, validate existing links against updated types
-                    if (typeof this.validateLinks === "function") this.validateLinks();
+                    this.validateLinks();
                 }
 
                 this.clone = function () {
