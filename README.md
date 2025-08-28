@@ -129,3 +129,50 @@ Use cases:
 
 How long does the workflow spend in each node?
 
+## Environment Bridge: Set Environment Variable and Get Environment Variable
+
+Publish and subscribe values anywhere in your workflow (and even across workflows) using the process environment as a lightweight, global message bus.
+
+What they do:
+- “Set Environment Variable” writes key/value pairs to the process environment. You can optionally thread a passthrough input/output to enforce execution order without altering data flow.
+- “Get Environment Variable” reads a key from the environment with a fallback default. It is change-aware and will re-evaluate when the targeted variable changes.
+- Together they enable out‑of‑band data routing without extra wires, allowing one‑to‑many fan‑out, late binding, and cross‑graph coordination.
+
+Why it’s special:
+- Global scope within the process: values are visible to all workflows running in the same Comfy session.
+- “Virtual wires” without clutter: connect distant parts of a large graph through names, not cables.
+- Change detection: readers can refresh only when a variable’s value or existence actually changes, keeping runs fast and deterministic.
+- Execution ordering: use the passthrough to place setting/getting in precise positions of your pipeline without affecting the payload being processed.
+
+Patterns you can build:
+- Publish/Subscribe hub:
+  - Upstream nodes “publish” dimensions, models, seeds, or file paths with “Set Environment Variable.”
+  - Downstream consumers “subscribe” with “Get Environment Variable” wherever they need the same value.
+- Cross‑workflow handoff (inter‑workflow):
+  - Use a stable variable name (e.g., PROJECT_PREFIX, ACTIVE_CHECKPOINT) so separate workflows launched in the same session share configuration.
+- Pseudo‑feedback loops (intra‑workflow):
+  - Emulate feedback by writing a value early and reading it later in the same run to condition subsequent steps, without creating illegal graph cycles.
+- State and toggles:
+  - Flip feature flags (e.g., USE_HIRES_FIX=true) to drive conditional branches or tool selection across multiple, otherwise unconnected nodes.
+- Secrets and tokens:
+  - Inject API keys, model licenses, or service endpoints at runtime; consumers read them on demand.
+- One‑to‑many routing:
+  - Publish once, consume everywhere—useful for common output directories, date stamps, or version tags.
+
+Common recipes:
+- Share a counter between runs:
+  - Read COUNT with “Get Environment Variable” (default 0) → increment in your logic → write back with “Set Environment Variable” for the next run.
+- Centralize paths:
+  - Use “Set Environment Variable” with name=OUTPUT_DIR, value=/data/renders → multiple savers read OUTPUT_DIR to stay in sync.
+- Switch models/tools globally:
+  - Use “Set Environment Variable” with name=ACTIVE_MODEL, value=SDXL → routers or conditionals pick the right branch downstream.
+
+Tips and caveats:
+- Scope: values live only for the current process and its children; they do not persist after a restart.
+- Collisions: environment space is shared; pick distinctive names or prefixes (e.g., OVUM_) to avoid clashes.
+- Security: avoid printing secrets; prefer generic names and keep sensitive values out of saved screenshots or public logs.
+- Consistency: environment variables are strings; encode complex data (e.g., JSON) explicitly if needed and decode where you read it.
+- Ordering: use the passthrough to ensure “set before get” along your execution path; visual proximity doesn’t influence execution—connections do.
+
+In short, “Set Environment Variable” and “Get Environment Variable” act like SetNode/GetNode with super powers: they can tunnel values across the graph, coordinate multiple consumers, and enable inter‑ and intra‑workflow value transfer—while staying simple, explicit, and robust.
+
