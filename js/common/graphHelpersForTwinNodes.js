@@ -8,14 +8,6 @@ export const GraphHelpers = {
      */
     getAllNodes(graph) {
         if (!graph) return [];
-        // Prefer public accessor if available in the environment
-        if (typeof graph.getNodes === "function") {
-            try {
-                const nodes = graph.getNodes();
-                if (Array.isArray(nodes)) return nodes;
-            } catch (_) {}
-        }
-        console.log("[TwinNodes] getAllNodes: using fallback");
         return Array.isArray(graph?._nodes) ? graph._nodes : [];
     },
 
@@ -83,11 +75,22 @@ export const GraphHelpers = {
 
     /**
      * @param {LGraph | Subgraph} graph
-     * @param {string} type
+     * @param {string | string[]} typeOrTypes
      * @returns {(LGraphNode | SubgraphNode)[]}
      */
-    getNodesByType(graph, type) {
+    getNodesByType(graph, typeOrTypes) {
         if (!graph) return [];
-        return this.getAllNodes(graph).filter(n => n && n.type === type);
+        const types = Array.isArray(typeOrTypes) ? typeOrTypes : [typeOrTypes];
+
+        let matches = [];
+        for (const t of types) {
+            if (t == null) continue;
+
+            // Call without the 'result' parameter so each call returns a fresh array (the native impl clears 'result')
+            const newMatches = graph.findNodesByType(t) || [];
+            matches.push(...newMatches);
+        }
+
+        return matches;
     }
 };

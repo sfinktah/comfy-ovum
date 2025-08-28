@@ -8,8 +8,8 @@ import {$el} from "../../../scripts/ui.js";
 import { removeEmojis, getNodeNameById, graphGetNodeById, findNodesByTypeName, findTimerNodes } from '../01/graphHelpers.js';
 import { chainCallback, stripTrailingId } from '../01/utility.js';
 import { ensureTooltipLib, attachTooltip } from '../01/tooltipHelpers.js';
-import { bestConfigTracker } from '../01/best-config-tracker.js';
 import { onCopyGraphData, onCopyButton } from "../01/copyButton.js";
+import { bestConfigTracker } from "../01/best-config-tracker.js";
 
 const LOCALSTORAGE_KEY = 'ovum.timer.history';
 
@@ -29,6 +29,7 @@ export class Timer {
     static ctrlDown = false; // Track Control key state for deletion UI
     static maxRuns = 100; // Maximum saved & displayed runs
     static queuedNotesByPromptId = {}; // prompt_id -> queued note string (captured at queue time)
+    static cudnn_enabled = null;
 
     static isHidden(key, where) {
         // where: 'display' | 'copy'
@@ -224,84 +225,6 @@ export class Timer {
         return currentRun.nodes[id].totalTime;
     }
 
-    // Attempt to extract the Timer node's queued note from a prompt payload
-    static extractQueuedNoteFromPrompt(promptPayload) {
-        try {
-            if (!promptPayload) return undefined;
-            // Heuristic: scan for any object with class_type === "Timer" and inputs containing our field
-            const targetInputKey = "Run notes (for queued run)";
-
-            const visited = new WeakSet();
-            const stack = [promptPayload];
-
-            while (stack.length) {
-                const cur = stack.pop();
-                if (!cur || typeof cur !== "object") continue;
-                if (visited.has(cur)) continue;
-                visited.add(cur);
-
-                // Node-like object check
-                if (cur.class_type === "Timer" && cur.inputs && typeof cur.inputs === "object") {
-                    if (Object.prototype.hasOwnProperty.call(cur.inputs, targetInputKey)) {
-                        return cur.inputs[targetInputKey];
-                    }
-                }
-
-                // If it's a plain object or array, traverse
-                if (Array.isArray(cur)) {
-                    for (const v of cur) stack.push(v);
-                } else {
-                    for (const k of Object.keys(cur)) {
-                        stack.push(cur[k]);
-                    }
-                }
-            }
-        } catch (err) {
-            console.warn("[Timer] extractQueuedNoteFromPrompt failed:", err);
-        }
-        return undefined;
-    }
-
-    // Append any newly seen best-config entries into the current run notes
-    static async noteNewBestConfigsInCurrentRunNotes() {
-        try {
-            // Make sure we have latest logs merged into storage
-            try {
-                await bestConfigTracker.fetchAndStoreFromLogs();
-            } catch (e) {
-                console.warn("[Timer] Failed to fetch and store logs:", e);
-                // non-fatal
-            }
-
-            const newItems = bestConfigTracker.getNewSinceAndMark();
-            if (!newItems.length) return false;
-
-            const lines = newItems.map(i => (i?.m?.trim?.() ?? String(i?.m || ""))).filter(Boolean);
-            if (!lines.length) return false;
-
-            const addition = "New best configs:\n" + lines.join("\n");
-
-            if (Timer.current_run_id) {
-                const prev = Timer.run_notes[Timer.current_run_id] || "";
-                Timer.run_notes[Timer.current_run_id] = prev ? prev + "\n" + addition : addition;
-            }
-
-            // Try to reflect in the active run notes widget, if present
-            if (Timer.activeNotesWidget) {
-                const curVal = Timer.activeNotesWidget.value || "";
-                Timer.activeNotesWidget.value = curVal ? curVal + "\n" + addition : addition;
-            }
-
-            if (typeof Timer.onChange === "function") {
-                Timer.onChange();
-            }
-            return true;
-        } catch (err) {
-            console.warn("[Timer] Failed to append best-config notes:", err);
-            return false;
-        }
-    }
-
     // Wrapper used by ovum-timer.js to handle the 'execution_success' event.
     // Calls the original executionSuccess (if defined) and then appends best-config notes.
     static async onExecutionSuccess(e) {
@@ -317,9 +240,6 @@ export class Timer {
         } catch (err) {
             console.warn("[Timer] executionSuccess handler threw:", err);
         }
-
-        // Append any newly seen best-config entries to the current run notes
-        await Timer.noteNewBestConfigsInCurrentRunNotes();
     }
 
     static getLastNRunsAvg(id, n = null) {
@@ -398,7 +318,7 @@ export class Timer {
             const id = Timer.currentNodeId;
             if (id) {
                 if (!runData.nodes[id]) {
-                    runData.nodes[id] = { count: 0, totalTime: 0, startTimes: [] };
+                    runData.nodes[id] = { count: 0, totalTime: 0, startTimes: [], cudnn: Timer.cudnn_enabled };
                 }
                 if (!Array.isArray(runData.nodes[id].startTimes)) {
                     runData.nodes[id].startTimes = [];
@@ -410,6 +330,23 @@ export class Timer {
         if (!Timer.currentNodeId) Timer.add_timing("total", t - Timer.startTime);
 
         if (Timer.onChange) Timer.onChange();
+    }
+
+    static onLog(e) {
+        /*
+        detail.entries = [{m: message, t: timestamp}]
+         */
+        e.detail.entries.forEach(entry => {
+            const timpstamp = bestConfigTracker.parseTimestampToMs(entry.t);
+            const msg = entry.m;
+            // Extract regex group if it matches test pattern
+            const match = msg.match(/torch\.backends\.cudnn\.enabled (?:still )?set to (\w+)/);
+            if (match && match[1]) {
+                const group1 = match[1]; // Contains true or false
+                // Process extracted group1 value
+                Timer.cudnn_enabled = group1 == 'true'
+            }
+        })
     }
 
     static executionSuccess(e) {
@@ -650,7 +587,6 @@ export class Timer {
                 // Exclude runs that don't have a numeric totalTime for the 'total' key
                 const totalNode = nodes['total'];
                 if (!totalNode || typeof totalNode.totalTime !== 'number') {
-                    console.log(`[Timer] [averagesByK] No totalTime found for run ${id}`);
                     continue;
                 }
 
@@ -711,7 +647,17 @@ export class Timer {
                 // Compute the true chronological run number (1-based)
                 const trueRunNumber = allRunIdsAsc.indexOf(runId) + 1;
                 const runTime = runId && Timer.run_history[runId]?.nodes[t]?.totalTime || 0;
-                rowCells.push($el('td', {className: "run-n", "textContent": Timer._format(runTime)}));
+                var extraClasses;
+                if (Timer.run_history[runId]?.nodes[t]?.totalTime === false) {
+                    extraClasses = "cudnn-off";
+                }
+                else if (Timer.run_history[runId]?.nodes[t]?.totalTime === true) {
+                    extraClasses = "cudnn-on";
+                }
+                else {
+                    extraClasses = '';
+                }
+                rowCells.push($el('td', {className: `run-n ${extraClasses}`.trim(), "textContent": Timer._format(runTime)}));
             }
 
             // Add empty cells for missing runs

@@ -1,12 +1,17 @@
 import sys, os, importlib, re, os
+from ._cudnn_toggle_api import status
+
 sys.path.insert(0,os.path.dirname(os.path.realpath(__file__)))
 module_root_directory = os.path.dirname(os.path.realpath(__file__))
 
-NODE_CLASS_MAPPINGS= {}
-NODE_DISPLAY_NAME_MAPPINGS = {}
+NODE_CLASS_MAPPINGS = {
+}
+
+NODE_DISPLAY_NAME_MAPPINGS = {
+}
 
 def pretty(name:str):
-    return " ".join(re.findall("[A-Z][a-z]*", name))
+    return " ".join(re.findall("[A-Z]*[a-z]*", name))
 
 for module in [os.path.splitext(f)[0] for f in os.listdir(module_root_directory) if f.endswith('.py') and not f.startswith('_')]:
     imported_module = importlib.import_module(f"{module}")

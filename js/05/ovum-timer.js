@@ -10,7 +10,6 @@ import { graphGetNodeById  } from '../01/graphHelpers.js';
 import { chainCallback } from '../01/utility.js';
 import { ensureTooltipLib } from '../01/tooltipHelpers.js';
 import { Timer } from '../04/timer-class.js';
-import { bestConfigTracker } from '../01/best-config-tracker.js';
 
 window.Timer = Timer;
 
@@ -78,6 +77,9 @@ app.registerExtension({
         function onSocketOpen() {
             console.info("[ComfyUI] websocket opened/reconnected");
             // Record system information when connection opens
+            app.api.subscribeLogs(true).then(x => {
+                console.log("Logs subscribed", x);
+            });
             app.api.getSystemStats().then(x => {
                 Timer.systemInfo = {
                     argv: x.system?.argv?.slice(1).join(' ') || '',
@@ -88,10 +90,6 @@ app.registerExtension({
                 console.log("System Info Collected:", Timer.systemInfo);
             }).catch(err => {
                 console.warn("Failed to collect system information:", err);
-            });
-
-            bestConfigTracker.fetchAndStoreFromLogs().catch(err => {
-                console.warn("Failed to collect comfyui logs:", err);
             });
         }
 
@@ -113,7 +111,7 @@ app.registerExtension({
         window.Timer = Timer;
         api.addEventListener("executing", Timer.executing);
         api.addEventListener("execution_success", Timer.executionSuccess)
-        api.addEventListener("logs", e => console.log("[Timer] logs event", e));
+        api.addEventListener("logs", Timer.onLog);
 
         // Track Control key for deletion UI cursor feedback
         document.addEventListener('keydown', (e) => {
@@ -198,128 +196,103 @@ app.registerExtension({
                 // Store references for later use
                 Timer.activeNotesWidget = textareaWidget;
 
+                const getDynamicInputs = () => {
+                    const inputs = Array.isArray(node.inputs) ? node.inputs : [];
+                    return inputs
+                        .map((inp, idx) => ({ inp, idx }))
+                        .filter(o => o.inp && typeof o.inp.name === "string" && /^arg\d+$/.test(o.inp.name))
+                        .sort((a, b) => {
+                            const an = parseInt(a.inp.name.substring(3), 10);
+                            const bn = parseInt(b.inp.name.substring(3), 10);
+                            return an - bn;
+                        });
+                };
                 // ---- Dynamic inputs: arg1, arg2, ... ----
                 const ensureDynamicInputs = (isConnecting = true) => {
-                    console.log('ensureDynamicInputs', node);
                     try {
-                        // this.inputs = this.inputs || [];
-                        // Ensure we have at least "input 1"
-                        // this === node
-                        // console.log('this == node?', this === node);
-                        const dynamicInputs = this.inputs.filter(input => input.name.startsWith("arg"));
-                        const dynamicInputIndexes = [];
-                        for (let i = 0; i < this.inputs.length; i++) {
-                            if (!this.inputs[i].isWidgetInputSlot) {
-                                dynamicInputIndexes.push(i);
+                        let dyn = getDynamicInputs();
+
+                        // Ensure at least arg0 exists (backend should add it, but be defensive)
+                        if (dyn.length === 0) {
+                            node.addInput("arg0", "*", { label: "arg0", forceInput: true });
+                            dyn = getDynamicInputs();
+                        }
+
+                        // Normalize labels for existing dynamic inputs
+                        for (const { inp } of dyn) {
+                            const n = inp.name.substring(3);
+                            if (!inp.label) {
+                                const t = inp.type || "*";
+                                inp.label = (t && t !== "*") ? `arg${n} ${t}` : `arg${n}`;
                             }
                         }
-                        let dynamicInputLength = dynamicInputs.length;
-                        if (dynamicInputLength === 1) {
-                            if (dynamicInputs[0].name && dynamicInputs[0].label === undefined && dynamicInputs[0].name.startsWith("arg")) {
-                                dynamicInputs[0].label = "py-input " + dynamicInputs[0].name.substr(3);
-                            }
-                        }
-                        if (!dynamicInputs.length) {
-                            const nextIndex = dynamicInputLength + 1;
-                            console.debug(`[Timer] Adding initial dynamic input: arg${nextIndex}`);
 
-                            // properties include label, link, name, type, shape, widget, boundingRect
-                            /** @type {INodeInputSlot} */
-                            const nodeInputSlot = this.addInput(`arg${nextIndex}`, "*", { label: "in-input " + nextIndex });
-                            dynamicInputs.push(nodeInputSlot);
-                            dynamicInputIndexes.push(dynamicInputLength);
-                            ++dynamicInputLength;
-
-                            // setDirtyCanvas is called by LGraphNode.addInput
-                            // this.canvas.setDirty(true, true);
-                            // node.graph.setDirtyCanvas(true);
+                        // If the last dynamic input has a link, append a new trailing argN
+                        let last = dyn[dyn.length - 1]?.inp;
+                        if (last && last.link != null) {
+                            const lastNum = parseInt(last.name.substring(3), 10);
+                            const nextNum = lastNum + 1;
+                            node.addInput(`arg${nextNum}`, "*", { label: `arg${nextNum}` });
+                            return; // addInput already dirties the canvas
                         }
 
-                        // If last input has a link, add a new trailing input
-                        let last = this.inputs[dynamicInputIndexes[dynamicInputLength - 1]];
-                        const lastHasLink = (last.link != null);
-                        if (lastHasLink) {
-                            const nextIndex = dynamicInputLength + 1;
-                            console.debug("[Timer] Last input has link; adding input", nextIndex);
-                            const nodeInputSlot = this.addInput(`arg${nextIndex}`, "*", { label: "nu-input " + nextIndex });
-                            // setDirtyCanvas is called by LGraphNode.addInput
-                            // this.canvas.setDirty(true, true);
-                            // node.graph.setDirtyCanvas(true);
-                        }
-                        else {
-                            console.debug("[Timer] Last input does not have link; seeing if it's cleanup time");
-                            if (!isConnecting) {
-                                let secondLast;
-                                for (;;) {
-                                    if (dynamicInputLength > 1)
-                                        secondLast = this.inputs[dynamicInputIndexes[dynamicInputLength - 2]]
-                                    else
-                                        secondLast = null;
-                                    if (secondLast && last && secondLast.link == null && last.link == null) {
-                                        console.debug("[Timer] Removing last input", last.name);
-                                        this.removeInput(dynamicInputIndexes[dynamicInputLength - 1]);
-                                        dynamicInputIndexes.pop();
-                                        --dynamicInputLength;
-                                        last = secondLast;
-                                    } else {
-                                        break;
-                                    }
+                        // When disconnecting, trim trailing unused inputs leaving exactly one empty at the end
+                        if (!isConnecting) {
+                            // Repeatedly remove the last input if the last two are both unlinked
+                            // This keeps one unlinked trailing input
+                            while (true) {
+                                dyn = getDynamicInputs();
+                                if (dyn.length < 2) break;
+                                const lastInp = dyn[dyn.length - 1].inp;
+                                const prevInp = dyn[dyn.length - 2].inp;
+                                if (lastInp.link == null && prevInp.link == null) {
+                                    // Remove the last one
+                                    // Recompute index each loop to avoid stale indices after removal
+                                    const fresh = getDynamicInputs();
+                                    const lastIdx = fresh[fresh.length - 1].idx;
+                                    node.removeInput(lastIdx);
+                                } else {
+                                    break;
                                 }
                             }
                         }
-
                     } catch (err) {
-                        console.warn("[Timer] ensureDynamicInputs failed:", err);
+                        console.warn("[formatter] ensureDynamicInputs failed:", err);
                     }
                 };
 
                 // Initialize dynamic inputs
                 ensureDynamicInputs();
 
-                // Hook connections change to handle rename and auto-append inputs
-                chainCallback(this, "onConnectionsChange", function (slotType, slot, isConnecting, linkInfo, output) {
+                // Update labels/types and manage dynamic slots on connect/disconnect
+                chainCallback(node, "onConnectionsChange", function (slotType, slot, isConnecting, linkInfo, output) {
                     try {
-                        console.debug("[Timer] onConnectionsChange", {
-                            slotType: slotType,
-                            slot: slot,
-                            isChangeConnect: isConnecting,
-                            linkInfo: linkInfo,
-                            output: output,
-                            nodeId: this.id
-                        });
-                        if (slotType == LiteGraph.INPUT) {
-                            // disconnecting
-                            if (!isConnecting) {
-                                if (this.inputs[slot].name.startsWith("arg")) {
-                                    this.inputs[slot].type = '*';
-                                    this.inputs[slot].label = "re-input " + this.inputs[slot].name.substring(3);
-                                    // revertInputBaseName(slot);
-                                    // this.title = "Set"
-                                }
-                            }
-                            //On Connect
-                            if (linkInfo && node.graph && isConnecting) {
-                                const fromNode = graphGetNodeById(linkInfo.origin_id);
-                                // app.graph.getNodeById
-
-                                if (fromNode && fromNode.outputs && fromNode.outputs[linkInfo.origin_slot]) {
-                                    const type = fromNode.outputs[linkInfo.origin_slot].type;
-                                    // slot.name = newName;
-                                    // Set the slot type to match the connected type
-                                    // this.setDirtyCanvas?.(true, true);
-
-                                    if (this.inputs[slot].name.startsWith("arg")) {
-                                        this.inputs[slot].label = type + " " + this.inputs[slot].name.substring(3);
-                                        this.inputs[slot].type = type;
-                                    }
-                                } else {
-                                    showAlert("node input undefined.")
-                                }
-                            }
+                        if (slotType !== LiteGraph.INPUT) return;
+                        const input = this.inputs?.[slot];
+                        if (!input || !/^arg\d+$/.test(input.name)) {
+                            // Only react to argN inputs
                             ensureDynamicInputs(isConnecting);
+                            return;
                         }
+
+                        if (isConnecting && linkInfo) {
+                            const fromNode = graphGetNodeById(linkInfo.origin_id) || app.graph?.getNodeById?.(linkInfo.origin_id);
+                            const type = fromNode?.outputs?.[linkInfo.origin_slot]?.type ?? "*";
+                            input.type = type || "*";
+                            if (input.type !== "*") {
+                                input.label = input.name + ` ${input.type.toLowerCase()}`
+                            } else {
+                                input.label = input.name;
+                            }
+                        } else if (!isConnecting) {
+                            // Reset to wildcard on disconnect
+                            input.type = "*";
+                            input.label = input.name;
+                        }
+
+                        ensureDynamicInputs(isConnecting);
                     } catch (err) {
-                        console.warn("[Timer] onConnectionsChange handler error:", err);
+                        console.warn("[formatter] onConnectionsChange error:", err);
                     }
                 });
                 // ---- End dynamic inputs ----

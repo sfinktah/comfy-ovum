@@ -537,8 +537,7 @@ app.registerExtension({
                     const names = sourceNames.filter(v => !!v);
                     if (!graph || names.length === 0) return [];
                     const nameSet = new Set(names);
-                    return GraphHelpers.getAllNodes(graph).filter(otherNode =>
-                        otherNode.type === 'GetTwinNodes' &&
+                    return GraphHelpers.getNodesByType(graph, 'GetTwinNodes').filter(otherNode =>
                         Array.isArray(otherNode.widgets) &&
                         otherNode.widgets.some(w => {
                             const val = w && w.value != null ? String(w.value).trim() : "";
@@ -600,7 +599,7 @@ app.registerExtension({
                     {
                         content: "Hide all connections",
                         callback: () => {
-                            const allGetters = GraphHelpers.getAllNodes(this.graph).filter(otherNode => otherNode.type === "GetTwinNodes" || otherNode.type === "SetTwinNodes");
+                            const allGetters = GraphHelpers.getNodesByType(this.graph, ["GetTwinNodes", "SetTwinNodes"]);
                             allGetters.forEach(otherNode => {
                                 otherNode.drawConnection = false;
                                 console.log(otherNode);
