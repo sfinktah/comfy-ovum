@@ -94,6 +94,10 @@ app.registerExtension({
 
                 const node = this;
 
+                // Track recent input disconnects and pending timers to detect relinks
+                this.__lastDisconnected = {};
+                this.__pendingDisconnectTimers = {};
+
                 // Helper to compute and set the combined title from connected widgets' values,
                 // and update node color from the first connected typed link
                 this.updateTitle = function () {
@@ -204,6 +208,9 @@ app.registerExtension({
 
                 // Compute and apply abbreviated labels to SetTwinNodes outputs where appropriate
                 this.applyAbbreviatedOutputLabels = function() {
+                    // Allow callers to suppress abbreviation-driven renames temporarily
+                    if (this.__suppressAbbrev) return;
+
                     const items = [];
                     const maxCount = Math.max(
                         this.widgets?.length || 0,
@@ -291,25 +298,50 @@ app.registerExtension({
 
                     // Input disconnected
                     if (slotType === LiteGraph.INPUT && !isChangeConnect) {
-                        if (this.inputs?.[slot]) {
-                            this.inputs[slot].type = '*';
-                            this.inputs[slot].name = '*';
-                            this.inputs[slot].label = '*';
+                        // Capture previous state to allow preserving names on quick relink
+                        const prev = {
+                            prevType: this.inputs?.[slot]?.type,
+                            prevName: this.inputs?.[slot]?.name,
+                            prevLabel: this.inputs?.[slot]?.label,
+                            prevWidgetVal: this.widgets?.[slot]?.value,
+                            ts: Date.now(),
+                        };
+                        if (!this.__lastDisconnected) this.__lastDisconnected = {};
+                        this.__lastDisconnected[slot] = prev;
+
+                        // If a clear is already scheduled for this slot, cancel it first
+                        if (this.__pendingDisconnectTimers?.[slot]) {
+                            clearTimeout(this.__pendingDisconnectTimers[slot]);
+                            delete this.__pendingDisconnectTimers[slot];
                         }
-                        if (this.outputs?.[slot]) {
-                            this.outputs[slot].type = '*';
-                            this.outputs[slot].name = '*';
-                        }
-                        if (this.widgets?.[slot]) {
-                            this.widgets[slot].value = '';
-                        }
-                        // Re-number duplicates among remaining connected inputs
-                        if (typeof this.applyDuplicateNumbering === "function") {
-                            this.applyDuplicateNumbering();
-                        }
-                        this.updateTitle();
-                        propagateToGetters();
-                        this.update();
+
+                        // Defer clearing; if a new link is connected quickly, we will cancel this
+                        this.__pendingDisconnectTimers[slot] = setTimeout(() => {
+                            if (this.inputs?.[slot]) {
+                                this.inputs[slot].type = '*';
+                                this.inputs[slot].name = '*';
+                                this.inputs[slot].label = '*';
+                            }
+                            if (this.outputs?.[slot]) {
+                                this.outputs[slot].type = '*';
+                                this.outputs[slot].name = '*';
+                            }
+                            if (this.widgets?.[slot]) {
+                                this.widgets[slot].value = '';
+                            }
+                            // Re-number duplicates among remaining connected inputs
+                            if (typeof this.applyDuplicateNumbering === "function") {
+                                this.applyDuplicateNumbering();
+                            }
+                            this.updateTitle();
+                            propagateToGetters();
+                            this.update();
+
+                            // Cleanup snapshot and timer after finalizing a real disconnect
+                            if (this.__lastDisconnected) delete this.__lastDisconnected[slot];
+                            if (this.__pendingDisconnectTimers) delete this.__pendingDisconnectTimers[slot];
+                        }, 250);
+
                         return;
                     }
 
@@ -326,10 +358,53 @@ app.registerExtension({
 
                     // Input connected
                     if (link_info && this.graph && slotType === LiteGraph.INPUT && isChangeConnect) {
+                        // If a deferred disconnect cleanup was scheduled, cancel it (this is likely a relink)
+                        if (this.__pendingDisconnectTimers?.[slot]) {
+                            clearTimeout(this.__pendingDisconnectTimers[slot]);
+                            delete this.__pendingDisconnectTimers[slot];
+                        }
+
                         const fromNode = GraphHelpers.getNodeById(this.graph, link_info.origin_id);
                         if (fromNode?.outputs?.[link_info.origin_slot]) {
                             const srcSlot = fromNode.outputs[link_info.origin_slot];
                             const type = srcSlot.type;
+                            const prevSnap = this.__lastDisconnected ? this.__lastDisconnected[slot] : null;
+
+                            // If this is a quick relink and the type hasn't changed, preserve names/labels/widget
+                            if (prevSnap && prevSnap.prevType && type && prevSnap.prevType === type) {
+                                if (this.inputs?.[slot]) {
+                                    const preservedName = prevSnap.prevName || this.inputs[slot].name;
+                                    const preservedLabel = prevSnap.prevLabel || preservedName;
+                                    this.inputs[slot].type = type || '*';
+                                    this.inputs[slot].name = preservedName;
+                                    this.inputs[slot].label = preservedLabel;
+                                }
+                                if (this.widgets?.[slot]) {
+                                    if (!this.widgets[slot].value || this.widgets[slot].value === '*') {
+                                        this.widgets[slot].value = prevSnap.prevWidgetVal || this.widgets[slot].value;
+                                    }
+                                }
+
+                                // Mirror type/name to the corresponding output without renaming
+                                mirrorOutputFromInput(slot);
+
+                                // Do not perform duplicate numbering or abbreviation renames on a same-type relink
+                                const prevFlag = this.__suppressAbbrev;
+                                this.__suppressAbbrev = true;
+                                this.updateTitle();
+                                this.__suppressAbbrev = prevFlag;
+
+                                // Propagate types to getters
+                                propagateToGetters();
+
+                                // Cleanup snapshot
+                                delete this.__lastDisconnected?.[slot];
+
+                                this.update();
+                                return;
+                            }
+
+                            // Otherwise, proceed with normal naming behavior (type changed or no previous link)
                             const basePreferred = this.getPreferredSlotLabel(fromNode, link_info.origin_slot) || type || '*';
 
                             // If the preferred label is a "lame name" (equals type), see if exactly one GetTwinNodes
@@ -398,6 +473,9 @@ app.registerExtension({
                                 const firstTyped = (this.inputs || []).find(i => i?.type && i.type !== '*');
                                 if (firstTyped) setColorAndBgColor.call(this, firstTyped.type);
                             }
+
+                            // Cleanup any snapshot for this slot after a normal connect
+                            if (this.__lastDisconnected) delete this.__lastDisconnected[slot];
                         } else {
                             showAlert("node input undefined.");
                         }
@@ -830,7 +908,7 @@ app.registerExtension({
 
                 // Ensure the number of outputs matches count
                 this.ensureOutputCount = function(count) {
-                    console.log("[GetSetTwinNodes]");
+                    console.log("[GetSetTwinNodes] ensureOutputCount");
                     const min = this.properties?.constCount || 2;
                     count = Math.max(min, count);
                     while ((this.outputs?.length || 0) < count) this.addOutput("*", "*");

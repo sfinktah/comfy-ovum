@@ -146,8 +146,8 @@ app.registerExtension({
                         console.debug("[Timer] Created new current_run_id:", Timer.current_run_id);
                     }
                     if (queuedText && Timer.current_run_id) {
-                        const existing = Timer.run_notes[Timer.current_run_id] || "";
-                        const combined = existing ? `${queuedText}\n${existing}` : queuedText;
+                        const existing = String(Timer.run_notes[Timer.current_run_id] || "");
+                        const combined = String(existing ? `${queuedText}\n${existing}` : queuedText);
                         Timer.run_notes[Timer.current_run_id] = combined.trim();
                         console.debug("[Timer] Updated run_notes for run:", Timer.current_run_id, "combined:", combined);
                     }

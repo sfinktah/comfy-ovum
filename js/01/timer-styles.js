@@ -167,6 +167,15 @@ export const timerStyles = `
     text-align: right;
 }
 
+.cg-timer-table td.run-n.cudnn-off {
+    color: #daa;
+}
+
+.cg-timer-table td.run-n.cudnn-on {
+    color: #ada;
+}
+
+
 /* notes (moved inline styles from HTML) */
 .cg-timer-notes-list-wrapper {
     margin-top: 10px; /* from HTML */

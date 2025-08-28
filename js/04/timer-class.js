@@ -30,6 +30,9 @@ export class Timer {
     static maxRuns = 100; // Maximum saved & displayed runs
     static queuedNotesByPromptId = {}; // prompt_id -> queued note string (captured at queue time)
     static cudnn_enabled = null;
+    // Cache for node names: id -> { name: string, updatedAt: number }
+    static nodeNameCache = {};
+    static NAME_CACHE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
     static isHidden(key, where) {
         // where: 'display' | 'copy'
@@ -44,6 +47,9 @@ export class Timer {
 
     static saveToLocalStorage() {
         try {
+            // Prune old cached names before saving
+            Timer.pruneOldCachedNames();
+
             localStorage.setItem(LOCALSTORAGE_KEY, JSON.stringify(Timer.all_times));
             localStorage.setItem(LOCALSTORAGE_KEY + '.settings', JSON.stringify({
                 last_n_runs: Timer.last_n_runs
@@ -51,6 +57,7 @@ export class Timer {
             localStorage.setItem(LOCALSTORAGE_KEY + '.run_notes', JSON.stringify(Timer.run_notes));
             localStorage.setItem(LOCALSTORAGE_KEY + '.run_history', JSON.stringify(Timer.run_history));
             localStorage.setItem(LOCALSTORAGE_KEY + '.runs_since_clear', JSON.stringify(Timer.runs_since_clear));
+            localStorage.setItem(LOCALSTORAGE_KEY + '.node_name_cache', JSON.stringify(Timer.nodeNameCache));
         } catch (e) {
             console.warn('Failed to save timer history:', e);
         }
@@ -116,6 +123,31 @@ export class Timer {
                     Timer.runs_since_clear = v;
                 }
             }
+
+            // Load node name cache
+            const nameCacheData = localStorage.getItem(LOCALSTORAGE_KEY + '.node_name_cache');
+            if (nameCacheData) {
+                try {
+                    const parsedCache = JSON.parse(nameCacheData);
+                    if (parsedCache && typeof parsedCache === 'object') {
+                        Timer.nodeNameCache = {};
+                        const now = Date.now();
+                        for (const [id, entry] of Object.entries(parsedCache)) {
+                            if (entry && typeof entry === 'object' && 'name' in entry) {
+                                const updatedAt = typeof entry.updatedAt === 'number' ? entry.updatedAt : now;
+                                Timer.nodeNameCache[id] = { name: String(entry.name), updatedAt };
+                            } else if (typeof entry === 'string') {
+                                // Legacy value: cache held plain name
+                                Timer.nodeNameCache[id] = { name: entry, updatedAt: now };
+                            }
+                        }
+                        // Recycle old entries on load
+                        Timer.pruneOldCachedNames();
+                    }
+                } catch (err) {
+                    console.warn('Failed to parse node name cache:', err);
+                }
+            }
         } catch (e) {
             console.warn('Failed to load timer history:', e);
         }
@@ -139,6 +171,7 @@ export class Timer {
             localStorage.removeItem(LOCALSTORAGE_KEY + '.run_notes');
             localStorage.removeItem(LOCALSTORAGE_KEY + '.run_history');
             localStorage.removeItem(LOCALSTORAGE_KEY + '.runs_since_clear');
+            localStorage.removeItem(LOCALSTORAGE_KEY + '.node_name_cache');
 
             console.log('Timer data cleared from storage');
         } catch (e) {
@@ -263,6 +296,61 @@ export class Timer {
         return Timer.run_history[runId]?.nodes[id]?.totalTime || 0;
     }
 
+    // Wrapper around getNodeNameById that caches and persists node names
+    static getNodeNameByIdCached(id) {
+        try {
+            const name = getNodeNameById(id);
+            const now = Date.now();
+            if (name) {
+                if (!Timer.nodeNameCache || typeof Timer.nodeNameCache !== 'object') {
+                    Timer.nodeNameCache = {};
+                }
+                Timer.nodeNameCache[id] = { name, updatedAt: now };
+                // Recycle old entries and persist just the cache
+                Timer.pruneOldCachedNames(now);
+                try {
+                    localStorage.setItem(LOCALSTORAGE_KEY + '.node_name_cache', JSON.stringify(Timer.nodeNameCache));
+                } catch (e) {
+                    console.warn('Failed to persist node name cache:', e);
+                }
+            }
+            return name;
+        } catch (err) {
+            console.warn('Failed to get node name by id:', err);
+            // Fallback to direct call
+            return getNodeNameById(id);
+        }
+    }
+
+    // Remove cached names older than NAME_CACHE_MAX_AGE_MS
+    static pruneOldCachedNames(nowTs) {
+        try {
+            const now = typeof nowTs === 'number' ? nowTs : Date.now();
+            const cutoff = now - Timer.NAME_CACHE_MAX_AGE_MS;
+            if (!Timer.nodeNameCache || typeof Timer.nodeNameCache !== 'object') {
+                Timer.nodeNameCache = {};
+                return;
+            }
+            let changed = false;
+            for (const [id, entry] of Object.entries(Timer.nodeNameCache)) {
+                const ts = (entry && typeof entry.updatedAt === 'number') ? entry.updatedAt : 0;
+                if (ts < cutoff) {
+                    delete Timer.nodeNameCache[id];
+                    changed = true;
+                }
+            }
+            if (changed) {
+                try {
+                    localStorage.setItem(LOCALSTORAGE_KEY + '.node_name_cache', JSON.stringify(Timer.nodeNameCache));
+                } catch (e) {
+                    console.warn('Failed to persist pruned node name cache:', e);
+                }
+            }
+        } catch (err) {
+            console.warn('Failed to prune node name cache:', err);
+        }
+    }
+
     static add_timing(id, dt) {
         // Update aggregated timing data
         var this_node_data = Timer.all_times.find((node_data) => node_data.id === id);
@@ -302,7 +390,7 @@ export class Timer {
         let detail = e.detail;
 
         if (detail === Timer?.currentNodeId) return;
-        const node_name = getNodeNameById(detail);
+        const node_name = Timer.getNodeNameByIdCached(detail);
 
         const t = LiteGraph.getTime();
         const unix_t = Math.floor(t / 1000);
@@ -344,7 +432,7 @@ export class Timer {
             if (match && match[1]) {
                 const group1 = match[1]; // Contains true or false
                 // Process extracted group1 value
-                Timer.cudnn_enabled = group1 == 'true'
+                Timer.cudnn_enabled = group1 === 'True'
             }
         })
     }
@@ -565,7 +653,7 @@ export class Timer {
             for (const [k, v] of Object.entries(nodes)) {
                 const start = v.startTimes?.[0] ?? 0;
                 //const title = app.graph.getNodeById(k)?.getTitle();
-                const title = getNodeNameById(k);
+                const title = Timer.getNodeNameByIdCached(k);
                 if (title && start && v.totalTime > 10000) {
                     acc.push({start: start, node: title, total: v.totalTime});
                 }
@@ -614,14 +702,14 @@ export class Timer {
                 let re;
                 try {
                     re = new RegExp(Timer.searchTerm, "i");
-                    filterFunc = (node_data) => re.test(getNodeNameById(node_data.id));
+                    filterFunc = (node_data) => re.test(Timer.getNodeNameByIdCached(node_data.id));
                 } catch {
                     filterFunc = () => true; // Don't filter if regex is broken
                 }
             } else {
                 const searchLower = Timer.searchTerm.toLowerCase();
                 filterFunc = (node_data) =>
-                    getNodeNameById(node_data.id).toLowerCase().includes(searchLower);
+                    Timer.getNodeNameByIdCached(node_data.id).toLowerCase().includes(searchLower);
             }
         }
 
@@ -630,7 +718,7 @@ export class Timer {
             const t = node_data.id;
 
             const rowCells = [
-                $el("td", {className: "node", textContent: getNodeNameById(node_data.id)})
+                $el("td", {className: "node", textContent: Timer.getNodeNameByIdCached(node_data.id)})
             ];
             if (!Timer.isHidden('runs', 'display')) rowCells.push($el("td", {className: "runs", "textContent": node_data.runs.toString()}));
             if (!Timer.isHidden('per-run', 'display')) rowCells.push($el("td", {className: "per-run", "textContent": Timer._format(node_data.avgPerRun)}));
@@ -648,10 +736,10 @@ export class Timer {
                 const trueRunNumber = allRunIdsAsc.indexOf(runId) + 1;
                 const runTime = runId && Timer.run_history[runId]?.nodes[t]?.totalTime || 0;
                 var extraClasses;
-                if (Timer.run_history[runId]?.nodes[t]?.totalTime === false) {
+                if (Timer.run_history[runId]?.nodes[t]?.cudnn === false) {
                     extraClasses = "cudnn-off";
                 }
-                else if (Timer.run_history[runId]?.nodes[t]?.totalTime === true) {
+                else if (Timer.run_history[runId]?.nodes[t]?.cudnn === true) {
                     extraClasses = "cudnn-on";
                 }
                 else {
