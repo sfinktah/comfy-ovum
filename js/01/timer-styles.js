@@ -163,7 +163,7 @@ export const timerStyles = `
 .cg-timer-table .per-flow,
 .cg-timer-table .current-run,
 .cg-timer-table .run-n {
-    min-width: 100px;
+    min-width: 70px;
     text-align: right;
 }
 

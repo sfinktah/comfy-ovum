@@ -220,7 +220,10 @@ export class Timer {
         if (isNaN(number) || number === 0.0) {
             return " ";
         }
-        return `${(number / 1000).toFixed(dp)}`
+        return (number / 1000).toLocaleString(undefined, {
+            minimumFractionDigits: dp,
+            maximumFractionDigits: dp
+        });
     }
 
     // Convert any input value into a safe string for notes
