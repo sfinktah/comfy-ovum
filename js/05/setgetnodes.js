@@ -94,10 +94,6 @@ app.registerExtension({
 
                 const node = this;
 
-                // Track recent input disconnects and pending timers to detect relinks
-                this.__lastDisconnected = {};
-                this.__pendingDisconnectTimers = {};
-
                 // Helper to compute and set the combined title from connected widgets' values,
                 // and update node color from the first connected typed link
                 this.updateTitle = function () {
@@ -298,50 +294,25 @@ app.registerExtension({
 
                     // Input disconnected
                     if (slotType === LiteGraph.INPUT && !isChangeConnect) {
-                        // Capture previous state to allow preserving names on quick relink
-                        const prev = {
-                            prevType: this.inputs?.[slot]?.type,
-                            prevName: this.inputs?.[slot]?.name,
-                            prevLabel: this.inputs?.[slot]?.label,
-                            prevWidgetVal: this.widgets?.[slot]?.value,
-                            ts: Date.now(),
-                        };
-                        if (!this.__lastDisconnected) this.__lastDisconnected = {};
-                        this.__lastDisconnected[slot] = prev;
-
-                        // If a clear is already scheduled for this slot, cancel it first
-                        if (this.__pendingDisconnectTimers?.[slot]) {
-                            clearTimeout(this.__pendingDisconnectTimers[slot]);
-                            delete this.__pendingDisconnectTimers[slot];
+                        if (this.inputs?.[slot]) {
+                            this.inputs[slot].type = '*';
+                            this.inputs[slot].name = '*';
+                            this.inputs[slot].label = '*';
                         }
-
-                        // Defer clearing; if a new link is connected quickly, we will cancel this
-                        this.__pendingDisconnectTimers[slot] = setTimeout(() => {
-                            if (this.inputs?.[slot]) {
-                                this.inputs[slot].type = '*';
-                                this.inputs[slot].name = '*';
-                                this.inputs[slot].label = '*';
-                            }
-                            if (this.outputs?.[slot]) {
-                                this.outputs[slot].type = '*';
-                                this.outputs[slot].name = '*';
-                            }
-                            if (this.widgets?.[slot]) {
-                                this.widgets[slot].value = '';
-                            }
-                            // Re-number duplicates among remaining connected inputs
-                            if (typeof this.applyDuplicateNumbering === "function") {
-                                this.applyDuplicateNumbering();
-                            }
-                            this.updateTitle();
-                            propagateToGetters();
-                            this.update();
-
-                            // Cleanup snapshot and timer after finalizing a real disconnect
-                            if (this.__lastDisconnected) delete this.__lastDisconnected[slot];
-                            if (this.__pendingDisconnectTimers) delete this.__pendingDisconnectTimers[slot];
-                        }, 250);
-
+                        if (this.outputs?.[slot]) {
+                            this.outputs[slot].type = '*';
+                            this.outputs[slot].name = '*';
+                        }
+                        if (this.widgets?.[slot]) {
+                            this.widgets[slot].value = '';
+                        }
+                        // Re-number duplicates among remaining connected inputs
+                        if (typeof this.applyDuplicateNumbering === "function") {
+                            this.applyDuplicateNumbering();
+                        }
+                        this.updateTitle();
+                        propagateToGetters();
+                        this.update();
                         return;
                     }
 
@@ -405,67 +376,111 @@ app.registerExtension({
                             }
 
                             // Otherwise, proceed with normal naming behavior (type changed or no previous link)
-                            const basePreferred = this.getPreferredSlotLabel(fromNode, link_info.origin_slot) || type || '*';
 
-                            // If the preferred label is a "lame name" (equals type), see if exactly one GetTwinNodes
-                            // has a starred constant and an output typed to this 'type'. If so, adopt that label,
-                            // but DO NOT adopt the trailing '*'. Also update the remote origin output label.
-                            let preferred = basePreferred;
-                            if (basePreferred === type) {
-                                const candidates = (this.graph?._nodes || []).filter(n => {
-                                    if (n.type !== 'GetTwinNodes') return false;
-                                    const hasUnlinked = Array.isArray(n.widgets) && n.widgets.some(w => typeof w?.value === 'string' && isUnlinkedName(w.value.trim()));
-                                    const matchesType = Array.isArray(n.outputs) && n.outputs.some(out => out?.type === type);
-                                    return hasUnlinked && matchesType;
-                                });
-                                if (candidates.length === 1) {
-                                    const unlinkedVal = candidates[0].widgets.find(w => typeof w?.value === 'string' && isUnlinkedName(w.value.trim()))?.value;
-                                    if (unlinkedVal) {
-                                        const destarred = stripUnlinkedPrefix(String(unlinkedVal));
-                                        preferred = destarred || basePreferred;
+                                    // Detect relink: there was already a link on this input
+                                    const hadLink = !!(this.inputs?.[slot]?.link != null);
+                                    const prevType = this.inputs?.[slot]?.type;
 
-                                        // Update the remote origin (fromNode) output label/name to the new de-unlinked name
-                                        if (fromNode.outputs?.[link_info.origin_slot]) {
-                                            fromNode.outputs[link_info.origin_slot].label = preferred;
-                                            fromNode.outputs[link_info.origin_slot].name = preferred;
-                                            if (app?.canvas?.setDirty) app.canvas.setDirty(true, true);
+                                    // If relinking and type didn't change, don't auto-rename input/output/widget
+                                    if (hadLink && prevType && prevType === type) {
+                                        // Ensure type is updated and mirror to output, but keep names/labels/values unchanged
+                                        if (this.inputs?.[slot]) {
+                                            this.inputs[slot].type = type || '*';
+                                        }
+                                        if (this.outputs?.[slot]) {
+                                            this.outputs[slot].type = type || '*';
                                         }
 
-                                        // Also update the GetTwinNodes widget value to the de-unlinked name
-                                        const gwidgets = candidates[0].widgets || [];
-                                        const starredIdx = gwidgets.findIndex(w => typeof w?.value === 'string' && isUnlinkedName(w.value.trim()));
-                                        if (starredIdx !== -1) {
-                                            gwidgets[starredIdx].value = destarred;
-                                            if (app?.canvas?.setDirty) app.canvas.setDirty(true, true);
+                                        // Propagate updated types to getters without altering names
+                                        const propagateToGetters = () => {
+                                            const types = (this.inputs || []).map(inp => inp?.type || '*');
+                                            const getters = this.findGetters(this.graph);
+                                            getters.forEach(getter => {
+                                                if (getter.setTypesArray) {
+                                                    getter.setTypesArray(types);
+                                                } else if (getter.setTypes) {
+                                                    getter.setTypes(types[0] || '*', types[1] || '*');
+                                                }
+                                            });
+                                        };
+                                        propagateToGetters();
+
+                                        this.update();
+                                        return;
+                                    }
+
+                                    const basePreferred = this.getPreferredSlotLabel(fromNode, link_info.origin_slot) || type || '*';
+
+                                    // If the preferred label is a "lame name" (equals type), see if exactly one GetTwinNodes
+                                    // has a starred constant and an output typed to this 'type'. If so, adopt that label,
+                                    // but DO NOT adopt the trailing '*'. Also update the remote origin output label.
+                                    let preferred = basePreferred;
+                                    if (basePreferred === type) {
+                                        const candidates = (this.graph?._nodes || []).filter(n => {
+                                            if (n.type !== 'GetTwinNodes') return false;
+                                            const hasUnlinked = Array.isArray(n.widgets) && n.widgets.some(w => typeof w?.value === 'string' && isUnlinkedName(w.value.trim()));
+                                            const matchesType = Array.isArray(n.outputs) && n.outputs.some(out => out?.type === type);
+                                            return hasUnlinked && matchesType;
+                                        });
+                                        if (candidates.length === 1) {
+                                            const unlinkedVal = candidates[0].widgets.find(w => typeof w?.value === 'string' && isUnlinkedName(w.value.trim()))?.value;
+                                            if (unlinkedVal) {
+                                                const destarred = stripUnlinkedPrefix(String(unlinkedVal));
+                                                preferred = destarred || basePreferred;
+
+                                                // Update the remote origin (fromNode) output label/name to the new de-unlinked name
+                                                if (fromNode.outputs?.[link_info.origin_slot]) {
+                                                    fromNode.outputs[link_info.origin_slot].label = preferred;
+                                                    fromNode.outputs[link_info.origin_slot].name = preferred;
+                                                    if (app?.canvas?.setDirty) app.canvas.setDirty(true, true);
+                                                }
+
+                                                // Also update the GetTwinNodes widget value to the de-unlinked name
+                                                const gwidgets = candidates[0].widgets || [];
+                                                const starredIdx = gwidgets.findIndex(w => typeof w?.value === 'string' && isUnlinkedName(w.value.trim()));
+                                                if (starredIdx !== -1) {
+                                                    gwidgets[starredIdx].value = destarred;
+                                                    if (app?.canvas?.setDirty) app.canvas.setDirty(true, true);
+                                                }
+                                            }
                                         }
                                     }
-                                }
-                            }
 
-                            // Always reflect the connected (possibly adopted) label on the input
-                            this.inputs[slot].type = type || '*';
-                            this.inputs[slot].name = preferred;
-                            this.inputs[slot].label = preferred;
+                                    // Always reflect the connected (possibly adopted) label on the input
+                                    this.inputs[slot].type = type || '*';
+                                    this.inputs[slot].name = preferred;
+                                    this.inputs[slot].label = preferred;
 
-                            // Auto-name the corresponding widget for this slot if empty or '*'
-                            if (this.widgets?.[slot] && (!this.widgets[slot].value || this.widgets[slot].value === '*')) {
-                                this.widgets[slot].value = preferred;
-                                // Enforce graph-wide uniqueness for this widget index
-                                if (typeof this.validateWidgetName === "function") {
-                                    this.validateWidgetName(this.graph, slot);
-                                }
-                            }
+                                    // Auto-name the corresponding widget for this slot if empty or '*'
+                                    if (this.widgets?.[slot] && (!this.widgets[slot].value || this.widgets[slot].value === '*')) {
+                                        this.widgets[slot].value = preferred;
+                                        // Enforce graph-wide uniqueness for this widget index
+                                        if (typeof this.validateWidgetName === "function") {
+                                            this.validateWidgetName(this.graph, slot);
+                                        }
+                                    }
 
-                            // Mirror type/name to the corresponding output
-                            mirrorOutputFromInput(slot);
+                                    // Mirror type/name to the corresponding output
+                                    mirrorOutputFromInput(slot);
 
-                            // Normalize duplicates among all connected inputs
-                            if (typeof this.applyDuplicateNumbering === "function") {
-                                this.applyDuplicateNumbering();
-                            }
+                                    // Normalize duplicates among all connected inputs
+                                    if (typeof this.applyDuplicateNumbering === "function") {
+                                        this.applyDuplicateNumbering();
+                                    }
 
-                            // Update title/color and propagate
-                            this.updateTitle();
+                                    // Update title/color and propagate
+                                    this.updateTitle();
+                                    const propagateToGetters = () => {
+                                        const types = (this.inputs || []).map(inp => inp?.type || '*');
+                                        const getters = this.findGetters(this.graph);
+                                        getters.forEach(getter => {
+                                            if (getter.setTypesArray) {
+                                                getter.setTypesArray(types);
+                                            } else if (getter.setTypes) {
+                                                getter.setTypes(types[0] || '*', types[1] || '*');
+                                            }
+                                        });
+                                    };
                             propagateToGetters();
 
                             // Note: we don't actually have a settings panel yet
