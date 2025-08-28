@@ -41,7 +41,7 @@ class CUDNNToggleOvum:
         else:
             print(f"[OVUM_CDDN_TOGGLE] torch.backends.cudnn.benchmark still set to {enable_cudnn}")
 
-        return_tuple = (model, conditioning, latent, audio, image, wan_model, any_input, prev_cudnn)
+        return_tuple = (any_input, prev_cudnn)
         return return_tuple
 
 CLAZZES = [CUDNNToggleOvum]
