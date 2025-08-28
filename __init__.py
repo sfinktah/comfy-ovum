@@ -19,7 +19,11 @@ for module in [os.path.splitext(f)[0] for f in os.listdir(module_root_directory)
         for clazz in imported_module.CLAZZES:
             name = clazz.__name__
             NODE_CLASS_MAPPINGS[name] = clazz
-            NODE_DISPLAY_NAME_MAPPINGS[name] = pretty(name)
+            display_name = getattr(clazz, "NAME", None)
+            if isinstance(display_name, str) and display_name.strip():
+                NODE_DISPLAY_NAME_MAPPINGS[name] = display_name
+            else:
+                NODE_DISPLAY_NAME_MAPPINGS[name] = pretty(name)
 
 WEB_DIRECTORY = "./js"
 __all__ = ['NODE_CLASS_MAPPINGS', 'NODE_DISPLAY_NAME_MAPPINGS', 'WEB_DIRECTORY']
