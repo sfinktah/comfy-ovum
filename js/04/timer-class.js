@@ -618,11 +618,13 @@ export class Timer {
         const allRunIdsAsc = Object.keys(Timer.run_history).sort(); // chronological list of all runs
 
         // Add individual columns for each of the last n runs
-        const runIds = Object.keys(Timer.run_history).sort().reverse().slice(0, Timer.last_n_runs - 1); // -1 to exclude the current run
-        const actualRuns = Math.min(runIds.length, Timer.last_n_runs - 1);
+        const lastNRunIds = Object.keys(Timer.run_history).sort().reverse().slice(0, Timer.last_n_runs - 1); // -1 to exclude the current run
+        console.log('lastNRunIds', lastNRunIds);
+        const actualRuns = Math.min(lastNRunIds.length, Timer.last_n_runs - 1);
+        console.log('actualRuns', allRunIdsAsc);
         let runNumber = 1;
         for (let i = actualRuns - 1; i >= 0; i--) {
-            const runId = runIds[i];
+            const runId = lastNRunIds[i];
 
             // Compute the true chronological run number (1-based)
             const trueRunNumber = allRunIdsAsc.indexOf(runId) + 1;
@@ -684,7 +686,7 @@ export class Timer {
 
 
         // Total up the time taken by each node in our recent run history
-        const startTimes = runIds.reduce((acc, id) => {
+        const startTimes = lastNRunIds.reduce((acc, id) => {
             const nodes = Timer.run_history[id]?.nodes;
             if (!nodes) return acc;
 
@@ -700,7 +702,7 @@ export class Timer {
         }, []);
 
 
-        const currentRunHistory = runIds.reduce((acc, id) => {
+        const currentRunHistory = lastNRunIds.reduce((acc, id) => {
             const nodes = Timer.run_history[id]?.nodes;
             acc.push(nodes);
             return acc;
@@ -736,7 +738,7 @@ export class Timer {
                 averages[k] = counts[k] ? sums[k] / counts[k] : 0;
             }
             return averages;
-        })(runIds);
+        })(lastNRunIds);
 
         // Sort by aggregated totals (desc), defaulting to 0 when missing
         Timer.all_times.sort((a, b) => (averagesByK[b.id] ?? 0) - (averagesByK[a.id] ?? 0));
@@ -750,7 +752,7 @@ export class Timer {
                     re = new RegExp(Timer.searchTerm, "i");
                     filterFunc = (node_data) => re.test(Timer.getNodeNameByIdCached(node_data.id));
                 } catch {
-                    filterFunc = () => true; // Don't filter if regex is broken
+                    // filterFunc = () => true; // Don't filter if regex is broken
                 }
             } else {
                 const searchLower = Timer.searchTerm.toLowerCase();
@@ -777,7 +779,7 @@ export class Timer {
 
             // Add cells for actual runs
             for (let i = actualRuns - 1; i >= 0; i--) {
-                const runId = runIds[i];
+                const runId = lastNRunIds[i];
                 // Compute the true chronological run number (1-based)
                 const trueRunNumber = allRunIdsAsc.indexOf(runId) + 1;
                 const runTime = runId && Timer.run_history[runId]?.nodes[t]?.totalTime || 0;
