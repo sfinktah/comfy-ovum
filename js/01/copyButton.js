@@ -153,3 +153,52 @@ export function onCopyGraphData(e) {
 
 }
 
+export async function onUploadGraphData(e = null) {
+    try {
+        const runNotes = getRunNoteTimes();
+        const startTimes = getStartTimes();
+        const payload = { runNotes, startTimes };
+        const json = JSON.stringify(payload);
+
+        let headers = { Accept: 'application/json' };
+        let body;
+        // Fallback: regular JSON
+        headers['Content-Type'] = 'application/json';
+        body = json;
+
+        const res = await fetch('/ovum/update-timing', {
+            method: 'POST',
+            headers,
+            body
+        });
+
+        if (!res.ok) {
+            throw new Error(`Upload failed: ${res.status}`);
+        }
+        console.log("[Timer] Upload successful: ", res.status)
+
+        // Optional: read response to ensure completion
+        // const result = await res.json().catch(() => ({}));
+
+        // Visual feedback that upload worked
+        const button = e?.currentTarget;
+        if (button && typeof button.textContent === 'string') {
+            const originalText = button.textContent;
+            button.textContent = 'Uploaded!';
+            setTimeout(() => {
+                button.textContent = originalText;
+            }, 1500);
+        }
+    } catch (err) {
+        console.error('Failed to upload timing data:', err);
+        const button = e?.currentTarget;
+        if (button && typeof button.textContent === 'string') {
+            const originalText = button.textContent;
+            button.textContent = 'Upload failed';
+            setTimeout(() => {
+                button.textContent = originalText;
+            }, 2000);
+        }
+    }
+}
+

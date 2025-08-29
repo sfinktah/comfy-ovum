@@ -8,7 +8,7 @@ import {$el} from "../../../scripts/ui.js";
 import { removeEmojis, getNodeNameById, graphGetNodeById, findNodesByTypeName, findTimerNodes } from '../01/graphHelpers.js';
 import { chainCallback, stripTrailingId } from '../01/utility.js';
 import { ensureTooltipLib, attachTooltip } from '../01/tooltipHelpers.js';
-import { onCopyGraphData, onCopyButton } from "../01/copyButton.js";
+import { onUploadGraphData, onCopyGraphData, onCopyButton } from "../01/copyButton.js";
 import { bestConfigTracker } from "../01/best-config-tracker.js";
 
 const LOCALSTORAGE_KEY = 'ovum.timer.history';
@@ -261,23 +261,6 @@ export class Timer {
         return currentRun.nodes[id].totalTime;
     }
 
-    // Wrapper used by ovum-timer.js to handle the 'execution_success' event.
-    // Calls the original executionSuccess (if defined) and then appends best-config notes.
-    static async onExecutionSuccess(e) {
-        console.log("[Timer] onExecutionSuccess:", e);
-        // Call the original handler if present
-        try {
-            if (typeof Timer.executionSuccess === "function") {
-                const maybePromise = Timer.executionSuccess(e);
-                if (maybePromise && typeof maybePromise.then === "function") {
-                    await maybePromise;
-                }
-            }
-        } catch (err) {
-            console.warn("[Timer] executionSuccess handler threw:", err);
-        }
-    }
-
     static getLastNRunsAvg(id, n = null) {
         if (n === null) n = Timer.last_n_runs;
         const runIds = Object.keys(Timer.run_history).sort().reverse().slice(0, n);
@@ -386,6 +369,50 @@ export class Timer {
     }
 
     /**
+     * Returns a unique list of node IDs seen across the current graph, aggregated timings, and run history.
+     * Pseudo-IDs like "total" and "startup" are excluded.
+     * @returns {string[]}
+     */
+    static getUniqueNodeIds(runHistory = null) {
+        try {
+            const ids = new Set();
+
+            // From aggregated timing data
+            // if (Array.isArray(Timer.all_times)) {
+            //     for (const entry of Timer.all_times) {
+            //         if (entry && entry.id != null) ids.add(String(entry.id));
+            //     }
+            // }
+
+            // From run history
+            if (runHistory) {
+                for (const run of Object.values(Timer.run_history)) {
+                    if (run && run.nodes && typeof run.nodes === 'object') {
+                        for (const k of Object.keys(run.nodes)) {
+                            if (k != null) ids.add(String(k));
+                        }
+                    }
+                }
+            }
+
+            // From current graph, if available
+            const g = app?.graph;
+            if (g && Array.isArray(g._nodes)) {
+                for (const n of g._nodes) {
+                    if (n && n.id != null) ids.add(String(n.id));
+                }
+            }
+
+            // Remove pseudo-IDs
+            ids.delete("startup");
+
+            return Array.from(ids);
+        } catch {
+            return [];
+        }
+    }
+
+    /**
      * Handles execution tick events from ComfyApi.
      * @param {ComfyTickEvent} e
      */
@@ -475,6 +502,8 @@ export class Timer {
 
             // Persist complete history after completion
             Timer.saveToStorage();
+            // Trigger upload of timing data at end of execution
+            onUploadGraphData().catch(err => console.warn('Upload timing failed:', err));
         }
     }
 
@@ -556,6 +585,12 @@ export class Timer {
             textContent: "Copy Graph Data",
             onclick: onCopyGraphData
         }); // onCopyGraphData
+
+        const uploadGraphDataButton = $el("button", {
+            textContent: "Upload Graph Data",
+            onclick: onUploadGraphData
+        });
+
 
         const regexCheckbox = $el("input", {
             type: "checkbox",
@@ -664,6 +699,14 @@ export class Timer {
             return acc;
         }, []);
 
+
+        const currentRunHistory = runIds.reduce((acc, id) => {
+            const nodes = Timer.run_history[id]?.nodes;
+            acc.push(nodes);
+            return acc;
+        }, [])
+        const currentNodeIds = this.getUniqueNodeIds(currentRunHistory);
+
         const averagesByK = (function averageByK(runIds) {
             const sums = Object.create(null);
             const counts = Object.create(null);
@@ -699,7 +742,7 @@ export class Timer {
         Timer.all_times.sort((a, b) => (averagesByK[b.id] ?? 0) - (averagesByK[a.id] ?? 0));
 
         // Build filter
-        let filterFunc = () => true;
+        let filterFunc = (node_data) => ~currentNodeIds.indexOf(node_data.id);
         if (Timer.searchTerm) {
             if (Timer.searchRegex) {
                 let re;
@@ -831,6 +874,7 @@ export class Timer {
                 ]),
                 copyButton,
                 copyGraphDataButton,
+                uploadGraphDataButton,
             ]),
             $el("div", {
                 className: "cg-timer-widget",
