@@ -9,12 +9,27 @@ export function getStartTimes() {
         const nodes = Timer.run_history[id]?.nodes;
         if (!nodes) return acc;
 
-        for (const [k, v] of Object.entries(nodes)) {
-            const start = v.startTimes?.[0] ?? 0;
-            const title = app.graph.getNodeById(k)?.getTitle();
-            if (title && start && (v.totalTime > 5000 || title.startsWith('Video Combine'))) {
-                acc.push({start: start, node: title, total: v.totalTime});
+        let previousTitle = "";
+        let previousCudnn = undefined;
+
+        for (const [id, node] of Object.entries(nodes)) {
+            const start = node.startTimes?.[0] ?? 0;
+
+            const title = String(app.graph.getNodeById(id)?.getTitle() ?? "");
+            if (
+                title &&
+                start &&
+                (
+                    node.totalTime > 2000 ||
+                    ~previousTitle.indexOf('code') ||
+                    node.cudnn !== previousCudnn
+                )
+            ) {
+                acc.push({ start: start, node: title, total: node.totalTime >>> 0, cudnn: node.cudnn});
             }
+
+            previousTitle = title;
+            previousCudnn = node.cudnn;
         }
         return acc;
     }, []);
