@@ -66,18 +66,69 @@ export function analyzeNamesForAbbrev(names) {
     });
 
     // Ensure we have at least something for each short name
-    const shortNames = shortTokensPer.map((toks, idx) => {
-        const fallback = tokenLists[idx].length ? [tokenLists[idx][0]] : [];
-        const useToks = toks.length ? toks : fallback;
+    const shortNames = shortTokensPer.map((toks) => {
+        const useToks = toks.length ? toks : ['na'];
         return useToks.join('_');
     });
 
     let titleText;
     if (mode === 'suffix') {
-        titleText = `${shortNames.join('/')}${suffix.length ? ' ' + suffix.join('_') : ''}`;
+        titleText = `${shortNames.join('/')}${suffix.length ? ' ' + suffix.join(' ') : ''}`;
     } else {
-        titleText = `${prefix.join('_')}${shortNames.length ? ' ' + shortNames.join('/') : ''}`;
+        titleText = `${prefix.join(' ')}${shortNames.length ? ' ' + shortNames.join('/') : ''}`;
     }
 
     return { use: true, mode, common, shortNames, titleText };
+}
+
+/**
+ * Build a compact node title for Get/Set twin nodes from a list of names.
+ * - Falls back to "<kind>TwinNodes" if no names
+ * - Uses analyzeNamesForAbbrev for compact titles when beneficial
+ * - Applies optional "Get_/Set_" prefix unless disablePrefix is true
+ * @param {string[]} names
+ * @param {"Get"|"Set"} kind
+ * @param {boolean} [disablePrefix=false]
+ * @returns {string}
+ */
+export function computeTwinNodeTitle(names, kind, disablePrefix = false) {
+    const normalized = Array.isArray(names)
+        ? names.map(n => (n == null ? '' : String(n).trim())).filter(Boolean)
+        : [];
+    const baseTitle = `${kind}TwinNodes`;
+    if (normalized.length === 0) return baseTitle;
+
+    const analysis = analyzeNamesForAbbrev(normalized);
+    if (analysis && analysis.use) {
+        return (disablePrefix ? "" : `${kind}_`) + analysis.titleText;
+    }
+    const joined = normalized.join(" & ");
+    return (disablePrefix ? "" : `${kind}_`) + joined;
+}
+
+/**
+ * Extract widget names from a node in a standardized way.
+ * Options:
+ *  - connectedOnly: when true, include only indices whose input slot has a link (useful for Set nodes)
+ * Always returns unique names (first occurrence kept) in original order.
+ * @param {{widgets?: Array<{value?: any}>, inputs?: Array<{link?: any}>}} node
+ * @param {{connectedOnly?: boolean}} [options]
+ * @returns {string[]}
+ */
+export function extractWidgetNames(node, options = {}) {
+    const { connectedOnly = false } = options;
+    const result = [];
+    const widgets = Array.isArray(node?.widgets) ? node.widgets : [];
+    for (let i = 0; i < widgets.length; i++) {
+        if (connectedOnly) {
+            const link = node?.inputs?.[i]?.link;
+            if (link == null) continue;
+        }
+        const raw = widgets[i]?.value;
+        const val = raw != null ? String(raw).trim() : "";
+        if (val) result.push(val);
+    }
+    // Deduplicate preserving order
+    const seen = new Set();
+    return result.filter(n => (seen.has(n) ? false : (seen.add(n), true)));
 }

@@ -1,13 +1,24 @@
+/// <reference lib="es2015.collection" />
+/** @typedef {import("@comfyorg/litegraph/dist/LGraphNode").LGraphNode} LGraphNode */
+/** @typedef {import("@comfyorg/litegraph/dist/LLink").LLink} LLink */
+/** @typedef {import("@comfyorg/litegraph/dist/interfaces").INodeInputSlot} INodeInputSlot */
+/** @typedef {import("@comfyorg/litegraph/dist/interfaces").INodeOutputSlot} INodeOutputSlot */
+/** @typedef {import("@comfyorg/litegraph/dist/interfaces").ISlotType} ISlotType */
+/** @typedef {import("@comfyorg/litegraph/dist/litegraph").LiteGraph} LiteGraph */
+/** @typedef {import("@comfyorg/litegraph/dist/types/serialisation").SubgraphIO} SubgraphIO */
 /** @typedef {import('@comfyorg/comfyui-frontend-types').ComfyApp} ComfyApp */
+/** @typedef {import('@comfyorg/litegraph/dist/litegraph').LGraphCanvas} LGraphCanvas */
 /** @typedef {import('@comfyorg/litegraph/dist/litegraph').LGraph} LGraph */
-/** @typedef {import('@comfyorg/litegraph/dist/litegraph').Subgraph} Subgraph */
 /** @typedef {import('@comfyorg/litegraph/dist/litegraph').LLink} LLink */
 /** @typedef {import('@comfyorg/litegraph/dist/litegraph').NodeInputSlot} NodeInputSlot */
 /** @typedef {import('@comfyorg/litegraph/dist/litegraph').NodeOutputSlot} NodeOutputSlot */
+/** @typedef {import('@comfyorg/litegraph/dist/litegraph').Subgraph} Subgraph */
+/** @typedef {import("../../typings/ComfyNode").ComfyNode} ComfyNode */
+/** @typedef {import("../common/graphHelpersForTwinNodes.js").GraphHelpers} GraphHelpers */
 
 import { app } from "../../../scripts/app.js";
 import { GraphHelpers } from "../common/graphHelpersForTwinNodes.js";
-import { analyzeNamesForAbbrev } from "../01/stringHelper.js";
+import { analyzeNamesForAbbrev, computeTwinNodeTitle, extractWidgetNames } from "../01/stringHelper.js";
 
 // mostly written by GPT-5
 // based on KJ's SetGet: https://github.com/kj-comfy/ComfyUI-extensions which was
@@ -70,6 +81,74 @@ function makeUnlinkedName(name) {
     return `${base}`;
 }
 
+// Hook the 'value' setter to record the previous value on change
+function wrapWidgetValueSetter(widget) {
+    try {
+        if (!widget || typeof widget !== 'object') return;
+        if (widget.__previousHooked) return;
+
+        // Find the accessor descriptor up the prototype chain
+        let proto = widget;
+        let desc = null;
+        while (proto && !desc) {
+            desc = Object.getOwnPropertyDescriptor(proto, 'value');
+            proto = Object.getPrototypeOf(proto);
+        }
+        if (!desc || typeof desc.set !== 'function') {
+            widget.__previousHooked = true; // avoid repeated attempts
+            return;
+        }
+        const origGet = typeof desc.get === 'function' ? desc.get : null;
+        const origSet = desc.set;
+
+        Object.defineProperty(widget, 'value', {
+            configurable: true,
+            enumerable: desc.enumerable ?? true,
+            get: function () {
+                return origGet ? origGet.call(this) : undefined;
+            },
+            set: function (v) {
+                const current = origGet ? origGet.call(this) : undefined;
+                // Consider invalid a string that is empty (after trim) or equals '*'
+                const vt = (typeof v === 'string') ? v.trim() : v;
+                const isInvalidString = (typeof v === 'string') && (vt === '' || vt === '*');
+
+                if (current !== v && !isInvalidString) {
+                    try {
+                        // Store previous value on change
+                        this["#previous"] = current;
+                    } catch (_e) {
+                        // ignore if we cannot set
+                    }
+                }
+                return origSet.call(this, v);
+            }
+        });
+
+        // Expose a method to fetch the previous name/value
+        if (typeof widget.getPreviousName !== 'function') {
+            Object.defineProperty(widget, 'getPreviousName', {
+                value: function () {
+                    return this["#previous"];
+                },
+                writable: false,
+                enumerable: false,
+                configurable: true
+            });
+        }
+
+        Object.defineProperty(widget, '__previousHooked', {
+            value: true,
+            writable: false,
+            enumerable: false,
+            configurable: false
+        });
+    } catch (_err) {
+        // best-effort; ignore errors
+    }
+}
+
+
 // Note: we don't actually have a settings , so lets use Kijai's
 let disablePrefix = app.ui.settings.getSettingValue("KJNodes.disablePrefix")
 const LGraphNode = LiteGraph.LGraphNode
@@ -82,6 +161,146 @@ function showAlert(message) {
         life: 5000,
     })
 }
+
+// function findSetter(node) {
+//     if (!(node instanceof LGraphNode)) {
+//         throw new Error("node parameter must be instance of LGraphNode");
+//     }
+//     const chosen = (node.widgets || []).map(w => w?.value).map(v => (v ? String(v).trim() : "")).filter(v => !!v);
+//     if (chosen.length === 0) return null;
+//     const sourceNames = (Array.isArray(node.widgets) ? node.widgets.map(w => (w && w.value != null ? String(w.value).trim() : "")) : []).filter(v => !!v);
+//     const setters = GraphHelpers.getNodesByType(node.graph, 'SetTwinNodes');
+//     console.log("[findSetter]", { node: node, chosen: chosen, sourceNames: sourceNames, setters: setters });
+//     if (sourceNames.length === 0) return null;
+//
+//     // Match any setter that contains all chosen constants, regardless of position
+//     let found = setters.find(s => {
+//         const sw = (s.widgets || []).map(w => (w?.value ? String(w.value).trim() : ""));
+//         return chosen.every(v => sw.includes(v));
+//     });
+//
+//     // TODO: Check - fallback prioritizes the first chosen constant
+//     // Fallback: match any setter that contains at least the first chosen value
+//     if (!found && chosen[0]) {
+//         console.log("[findSetter] fallback", { node: node, chosen: chosen, setters: setters });
+//         found = setters.find(s => (s.widgets || []).some(w => String(w?.value || "").trim() === chosen[0]));
+//     }
+//     else if (found) {
+//         console.log("[findSetter] found", {node: node, chosen: chosen, setters: setters, found: found});
+//     }
+//     return found || null;
+// };
+
+function findSetters(node, name = undefined) {
+    // noinspection DuplicatedCode
+    if (!(node instanceof LGraphNode)) {
+        throw new Error("node parameter must be instance of LGraphNode");
+    }
+    const sourceNames = Array.isArray(node.widgets) ? node.widgets.map(w => (w && w.value != null ? String(w.value).trim() : "")) : [];
+    const names = name ? [name] : sourceNames.filter(v => !!v);
+    console.log("[findSetters]", { node: node, names: names });
+    if (names.length === 0) return [];
+    const nameSet = new Set(names);
+    return GraphHelpers.getNodesByType(node.graph, ['SetTwinNodes', 'SetNode']).filter(otherNode =>
+        Array.isArray(otherNode.widgets) &&
+        otherNode.widgets.some(widget => {
+            console.log("[findSetters] widget", { widget: widget });
+            const widgetValue = widget && widget.value != null ? String(widget.value).trim() : "";
+            return widgetValue && nameSet.has(widgetValue);
+        })
+    );
+}
+
+/**
+ * @param {GetTwinNodes|ComfyNode} node - The input node containing widgets and a graph. This node is used to determine
+ *                        the set of values to filter getter nodes against. The `node` object is expected
+ *                        to have the properties `widgets` (an array) and `graph` (a reference to the graph instance).
+ * @return {ComfyNode} - An array of getter nodes that meet the matching criteria. If no matches or values are found,
+ *                   an empty array is returned.
+ */
+function findSetter(node, name = undefined) {
+    const setters = findSetters(node, name);
+    if (setters.length) {
+        return setters[0];
+    }
+    return null;
+}
+
+// Match GetTwinNodes if they share at least one name with this node
+// If checkForPreviousName is true, use the previousNames snapshot; otherwise use current widget values.
+function findGetters(node, checkForPreviousName) {
+    if (!(node instanceof LGraphNode)) {
+        throw new Error("node parameter must be instance of LGraphNode");
+    }
+    const sourceNames = checkForPreviousName
+        ? (Array.isArray(node.properties.previousNames) ? node.properties.previousNames : [])
+        : (Array.isArray(node.widgets) ? node.widgets.map(w => (w && w.value != null ? String(w.value).trim() : "")) : []);
+    const names = sourceNames.filter(v => !!v);
+    console.log("[findGetters]", { node: node, checkForPreviousName: checkForPreviousName, names: names });
+    if (!node.graph || names.length === 0) return [];
+    const nameSet = new Set(names);
+    return GraphHelpers.getNodesByType(node.graph, 'GetTwinNodes').filter(otherNode =>
+        Array.isArray(otherNode.widgets) &&
+        otherNode.widgets.some(w => {
+            const val = w && w.value != null ? String(w.value).trim() : "";
+            return val && nameSet.has(val);
+        })
+    );
+}
+
+/**
+ * Identifies and returns a list of getter nodes from the graph that match certain criteria
+ * based on the values of the widgets in the provided node.
+ *
+ * The method first extracts widget values from the input node, processes them into a list of
+ * constants, and then searches for getter nodes in the graph that match all or some of these constants.
+ * If no exact match is found, a fallback mechanism is applied where getter nodes containing
+ * at least the first selected constant are considered.
+ *
+ * @param {SetTwinNodes|LGraphNode|ComfyNode} node - The input node containing widgets and a graph. This node is used to determine
+ *                        the set of values to filter getter nodes against. The `node` object is expected
+ *                        to have the properties `widgets` (an array) and `graph` (a reference to the graph instance).
+ * @return {Array} - An array of getter nodes that meet the matching criteria. If no matches or values are found,
+ *                   an empty array is returned.
+ */
+// function findGetters(node) {
+//     if (!(node instanceof LGraphNode)) {
+//         throw new Error("node parameter must be instance of LGraphNode");
+//     }
+//
+//     const chosen = (node.widgets || []).map(w => w?.value).map(v => (v ? String(v).trim() : "")).filter(v => !!v);
+//     const getters = GraphHelpers.getNodesByType(node.graph, 'GetTwinNodes');
+//     console.log("[findGetters]", { node: node, chosen: chosen, getters: getters });
+//     if (chosen.length === 0) return [];
+//
+//     // Match any setter that contains all chosen constants, regardless of position
+//     let found = getters.filter(setterNode => {
+//         const setterWidgets = (setterNode.widgets || []).map(w => (w?.value ? String(w.value).trim() : ""));
+//         return chosen.every(v => setterWidgets.includes(v));
+//     });
+//
+//     // TODO: Check - fallback prioritizes the first chosen constant
+//     // Fallback: match any getter that contains at least the first chosen value
+//     console.log("[findGetters] fallback", { node: node, chosen: chosen, getters: getters });
+//     if (!found && chosen[0]) {
+//         found = getters.filter(s => (s.widgets || []).some(w => String(w?.value || "").trim() === chosen[0]));
+//     }
+//     console.log("[findGetters] found", { node: node, chosen: chosen, getters: getters, found: found });
+//     return found || [];
+// }
+
+function propagateToGetters(node) {
+    const types = (node.inputs || []).map(input => input?.type || '*');
+    const getters = findGetters(node);
+    getters.forEach(/** GetTwinNodes */ getter => {
+        if (getter.setTypesArray) {
+            getter.setTypesArray(types);
+        } else if (getter.setTypes) {
+            getter.setTypes(types[0] || '*', types[1] || '*');
+        }
+    });
+}
+
 app.registerExtension({
     name: "SetTwinNodes",
     registerCustomNodes() {
@@ -106,32 +325,16 @@ app.registerExtension({
 
                 const node = this;
 
+                // Storage for deferred disconnect handling and relink detection
+                this.__disconnectTimers = this.__disconnectTimers || Object.create(null);
+                this.__pendingRelinkInfo = this.__pendingRelinkInfo || Object.create(null);
+
                 // Helper to compute and set the combined title from connected widgets' values,
                 // and update node color from the first connected typed link
                 this.updateTitle = function () {
-                    const names = [];
-                    const widgetCount = (this.widgets?.length || 0);
-                    for (let i = 0; i < widgetCount; i++) {
-                        const connected = this.inputs?.[i]?.link != null;
-                        if (!connected) continue;
-                        const raw = this.widgets?.[i]?.value;
-                        const val = (raw && String(raw).trim())
-                            ? String(raw).trim()
-                            : (i === 0 ? "Itchy" : i === 1 ? "Scratchy" : `Constant ${i + 1}`);
-                        names.push(val);
-                    }
-
-                    if (names.length === 0) {
-                        this.title = "SetTwinNodes";
-                    } else {
-                        const analysis = analyzeNamesForAbbrev(names);
-                        if (analysis && analysis.use) {
-                            this.title = (!disablePrefix ? "Set_" : "") + analysis.titleText;
-                        } else {
-                            const joined = names.join(" & ");
-                            this.title = (!disablePrefix ? "Set_" : "") + joined;
-                        }
-                    }
+                    console.log("[SetTwinNodes] updateTitle");
+                    const names = extractWidgetNames(this, { connectedOnly: true });
+                    this.title = computeTwinNodeTitle(names, "Set", disablePrefix);
 
                     // Determine color from the first connected link with a known color
                     let pickedType = null;
@@ -159,6 +362,7 @@ app.registerExtension({
 
                 // Ensure there are N inputs and outputs matching widget count
                 this.ensureSlotCount = function(count) {
+                    console.log("[SetTwinNodes] ensureSlotCount");
                     // grow inputs/outputs
                     while ((this.inputs?.length || 0) < count) this.addInput("*", "*");
                     while ((this.outputs?.length || 0) < count) this.addOutput("*", "*");
@@ -169,6 +373,7 @@ app.registerExtension({
 
                 // Get a human-friendly label from the connected output: prefer label, then name, then type
                 this.getPreferredSlotLabel = function(fromNode, originSlotIndex) {
+                    console.log("[SetTwinNodes] getPreferredSlotLabel");
                     const srcSlot = fromNode?.outputs?.[originSlotIndex];
                     const lbl = srcSlot?.label || srcSlot?.name || srcSlot?.type;
                     return (lbl && String(lbl).trim()) || "";
@@ -177,6 +382,7 @@ app.registerExtension({
                 // Normalize labels without adding numbers; keep duplicates as-is.
                 // Sync outputs to inputs and fill empty widget values from labels.
                 this.applyDuplicateNumbering = function() {
+                    console.log("[SetTwinNodes] applyDuplicateNumbering");
                     const count = this.inputs?.length || 0;
                     for (let i = 0; i < count; i++) {
                         if (!this.inputs?.[i] || this.inputs[i].link == null) continue;
@@ -211,8 +417,7 @@ app.registerExtension({
 
                 // Compute and apply abbreviated labels to SetTwinNodes outputs where appropriate
                 this.applyAbbreviatedOutputLabels = function() {
-                    // Allow callers to suppress abbreviation-driven renames temporarily
-                    if (this.__suppressAbbrev) return;
+                    console.log("[SetTwinNodes] applyAbbreviatedOutputLabels");
 
                     const items = [];
                     const maxCount = Math.max(
@@ -252,43 +457,55 @@ app.registerExtension({
                 const initialCount = this.properties.constCount || 2;
                 for (let i = 0; i < initialCount; i++) {
                     const idx = i;
-                    this.addWidget(
+                    const created = this.addWidget(
                         "text",
                         `Constant ${idx + 1}`,
                         '',
-                        () => {
-                            // Ensure unique name for this specific widget index
-                            node.validateWidgetName(node.graph, idx);
-                            this.updateTitle();
-                            this.update();
-                        },
+                        callback,
                         {}
                     );
+                    // Hook the value setter to track previous value
+                    wrapWidgetValueSetter(created);
+
+                    // callback?(value: any, canvas?: LGraphCanvas, node?: LGraphNode, pos?: Point, e?: CanvasPointerEvent): void;
+                    function callback(value, canvas, node, pos, e) {
+                        console.log("[SetTwinNodes] widget callback", {
+                            value: value,
+                            old_value: node.widgets[idx]?.value,
+                            canvas: canvas,
+                            node: node,
+                            pos: pos,
+                            e: e
+                        });
+                        if (node && node.graph) {
+                            node.validateWidgetName(node.graph, idx);
+                            node.properties.previousNames[idx] = value;
+                            node.updateTitle();
+                            node.update();
+                        }
+                    }
                 }
                 this.ensureSlotCount(initialCount);
                 // Initialize previousNames snapshot to current widget values
                 this.properties.previousNames = (this.widgets || []).map(w => (w && w.value != null ? String(w.value).trim() : ""));
                 this.updateTitle();
 
+                /**
+                 * @this {ComfyNode}
+                 * @param {ISlotType} type
+                 * @param {number} index
+                 * @param {boolean} isConnected
+                 * @param {LLink|null|undefined} link_info
+                 * @param {INodeInputSlot|INodeOutputSlot|SubgraphIO} inputOrOutput
+                 */
                 this.onConnectionsChange = function(
-                    slotType,	//1 = input, 2 = output
-                    slot,
-                    isChangeConnect,
+                    type,	//1 = input, 2 = output
+                    index,
+                    isConnected,
                     link_info,
-                    output
+                    inputOrOutput
                 ) {
-                    const propagateToGetters = () => {
-                        const types = (this.inputs || []).map(inp => inp?.type || '*');
-                        const getters = this.findGetters(this.graph);
-                        getters.forEach(getter => {
-                            if (getter.setTypesArray) {
-                                getter.setTypesArray(types);
-                            } else if (getter.setTypes) {
-                                getter.setTypes(types[0] || '*', types[1] || '*');
-                            }
-                        });
-                    };
-
+                    console.log("[SetTwinNodes] onConnectionsChange", { type, index, isConnected, link_info, inputOrOutput });
                     const mirrorOutputFromInput = (s) => {
                         if (this.inputs && this.outputs && this.inputs[s] && this.outputs[s]) {
                             this.outputs[s].type = this.inputs[s].type || '*';
@@ -304,32 +521,56 @@ app.registerExtension({
                     };
 
                     // Input disconnected
-                    if (slotType === LiteGraph.INPUT && !isChangeConnect) {
-                        if (this.inputs?.[slot]) {
-                            this.inputs[slot].type = '*';
-                            this.inputs[slot].name = '*';
-                            this.inputs[slot].label = '*';
+                    if (type === LiteGraph.INPUT && !isConnected) {
+                        const slotKey = `${type}:${index}`;
+                        // Capture the previous type at the moment of disconnect
+                        const prevTypeAtDisconnect = this.inputs?.[index]?.type;
+
+                        // Clear any existing timer for this slot
+                        if (this.__disconnectTimers && this.__disconnectTimers[slotKey]) {
+                            clearTimeout(this.__disconnectTimers[slotKey]);
+                            delete this.__disconnectTimers[slotKey];
                         }
-                        if (this.outputs?.[slot]) {
-                            this.outputs[slot].type = '*';
-                            this.outputs[slot].name = '*';
-                        }
-                        if (this.widgets?.[slot]) {
-                            this.widgets[slot].value = '';
-                        }
-                        // Re-number duplicates among remaining connected inputs
-                        this.applyDuplicateNumbering();
-                        this.updateTitle();
-                        propagateToGetters();
-                        this.update();
+
+                        // Store relink info so a fast reconnection can be treated as a relink
+                        if (!this.__pendingRelinkInfo) this.__pendingRelinkInfo = Object.create(null);
+                        this.__pendingRelinkInfo[slotKey] = { hadLink: true, prevType: prevTypeAtDisconnect };
+
+                        // Schedule the actual disconnect logic after 500ms unless a reconnection cancels it
+                        if (!this.__disconnectTimers) this.__disconnectTimers = Object.create(null);
+                        this.__disconnectTimers[slotKey] = setTimeout(() => {
+                            // If not canceled by a reconnection, perform the original disconnect work
+                            if (this.inputs?.[index]) {
+                                this.inputs[index].type = '*';
+                                this.inputs[index].name = '*';
+                                this.inputs[index].label = '*';
+                            }
+                            if (this.outputs?.[index]) {
+                                this.outputs[index].type = '*';
+                                this.outputs[index].name = '*';
+                            }
+                            if (this.widgets?.[index]) {
+                                this.widgets[index].value = '';
+                            }
+                            // Re-number duplicates among remaining connected inputs
+                            this.applyDuplicateNumbering();
+                            this.updateTitle();
+                            propagateToGetters(this);
+                            this.update();
+
+                            // Cleanup
+                            if (this.__disconnectTimers) delete this.__disconnectTimers[slotKey];
+                            if (this.__pendingRelinkInfo) delete this.__pendingRelinkInfo[slotKey];
+                        }, 500);
+
                         return;
                     }
 
                     // Output disconnected
-                    if (slotType === LiteGraph.OUTPUT && !isChangeConnect) {
-                        if (this.outputs?.[slot]) {
-                            this.outputs[slot].type = '*';
-                            this.outputs[slot].name = '*';
+                    if (type === LiteGraph.OUTPUT && !isConnected) {
+                        if (this.outputs?.[index]) {
+                            this.outputs[index].type = '*';
+                            this.outputs[index].name = '*';
                         }
                         this.updateTitle();
                         this.update();
@@ -337,82 +578,43 @@ app.registerExtension({
                     }
 
                     // Input connected
-                    if (link_info && this.graph && slotType === LiteGraph.INPUT && isChangeConnect) {
-                        // If a deferred disconnect cleanup was scheduled, cancel it (this is likely a relink)
-                        if (this.__pendingDisconnectTimers?.[slot]) {
-                            clearTimeout(this.__pendingDisconnectTimers[slot]);
-                            delete this.__pendingDisconnectTimers[slot];
-                        }
-
+                    if (link_info && this.graph && type === LiteGraph.INPUT && isConnected) {
                         const fromNode = GraphHelpers.getNodeById(this.graph, link_info.origin_id);
                         if (fromNode?.outputs?.[link_info.origin_slot]) {
                             const srcSlot = fromNode.outputs[link_info.origin_slot];
                             const type = srcSlot.type;
-                            const prevSnap = this.__lastDisconnected ? this.__lastDisconnected[slot] : null;
 
-                            // If this is a quick relink and the type hasn't changed, preserve names/labels/widget
-                            if (prevSnap && prevSnap.prevType && type && prevSnap.prevType === type) {
-                                if (this.inputs?.[slot]) {
-                                    const preservedName = prevSnap.prevName || this.inputs[slot].name;
-                                    const preservedLabel = prevSnap.prevLabel || preservedName;
-                                    this.inputs[slot].type = type || '*';
-                                    this.inputs[slot].name = preservedName;
-                                    this.inputs[slot].label = preservedLabel;
-                                }
-                                if (this.widgets?.[slot]) {
-                                    if (!this.widgets[slot].value || this.widgets[slot].value === '*') {
-                                        this.widgets[slot].value = prevSnap.prevWidgetVal || this.widgets[slot].value;
-                                    }
-                                }
-
-                                // Mirror type/name to the corresponding output without renaming
-                                mirrorOutputFromInput(slot);
-
-                                // Do not perform duplicate numbering or abbreviation renames on a same-type relink
-                                const prevFlag = this.__suppressAbbrev;
-                                this.__suppressAbbrev = true;
-                                this.updateTitle();
-                                this.__suppressAbbrev = prevFlag;
-
-                                // Propagate types to getters
-                                propagateToGetters();
-
-                                // Cleanup snapshot
-                                delete this.__lastDisconnected?.[slot];
-
-                                this.update();
-                                return;
+                            // Cancel pending disconnect if we quickly reconnected the same slot
+                            const slotKey = `${LiteGraph.INPUT}:${index}`;
+                            if (this.__disconnectTimers && this.__disconnectTimers[slotKey]) {
+                                clearTimeout(this.__disconnectTimers[slotKey]);
+                                delete this.__disconnectTimers[slotKey];
                             }
 
                             // Otherwise, proceed with normal naming behavior (type changed or no previous link)
 
-                            // Detect relink: there was already a link on this input
-                            const hadLink = !!(this.inputs?.[slot]?.link != null);
-                            const prevType = this.inputs?.[slot]?.type;
+                            // Detect relink: consult pending relink info first, else derive from current state
+                            let hadLink, prevType;
+                            if (this.__pendingRelinkInfo && this.__pendingRelinkInfo[slotKey]) {
+                                ({ hadLink, prevType } = this.__pendingRelinkInfo[slotKey]);
+                                delete this.__pendingRelinkInfo[slotKey];
+                            } else {
+                                hadLink = null;
+                                prevType = null;
+                            }
 
                             // If relinking and type didn't change, don't auto-rename input/output/widget
                             if (hadLink && prevType && prevType === type) {
                                 // Ensure type is updated and mirror to output, but keep names/labels/values unchanged
-                                if (this.inputs?.[slot]) {
-                                    this.inputs[slot].type = type || '*';
+                                if (this.inputs?.[index]) {
+                                    this.inputs[index].type = type || '*';
                                 }
-                                if (this.outputs?.[slot]) {
-                                    this.outputs[slot].type = type || '*';
+                                if (this.outputs?.[index]) {
+                                    this.outputs[index].type = type || '*';
                                 }
 
                                 // Propagate updated types to getters without altering names
-                                const propagateToGetters = () => {
-                                    const types = (this.inputs || []).map(inp => inp?.type || '*');
-                                    const getters = this.findGetters(this.graph);
-                                    getters.forEach(getter => {
-                                        if (getter.setTypesArray) {
-                                            getter.setTypesArray(types);
-                                        } else if (getter.setTypes) {
-                                            getter.setTypes(types[0] || '*', types[1] || '*');
-                                        }
-                                    });
-                                };
-                                propagateToGetters();
+                                propagateToGetters(this);
 
                                 this.update();
                                 return;
@@ -456,37 +658,26 @@ app.registerExtension({
                             }
 
                             // Always reflect the connected (possibly adopted) label on the input
-                            this.inputs[slot].type = type || '*';
-                            this.inputs[slot].name = preferred;
-                            this.inputs[slot].label = preferred;
+                            this.inputs[index].type = type || '*';
+                            this.inputs[index].name = preferred;
+                            this.inputs[index].label = preferred;
 
                             // Auto-name the corresponding widget for this slot if empty or '*'
-                            if (this.widgets?.[slot] && (!this.widgets[slot].value || this.widgets[slot].value === '*')) {
-                                this.widgets[slot].value = preferred;
+                            if (this.widgets?.[index] && (!this.widgets[index].value || this.widgets[index].value === '*')) {
+                                this.widgets[index].value = preferred;
                                 // Enforce graph-wide uniqueness for this widget index
-                                this.validateWidgetName(this.graph, slot);
+                                this.validateWidgetName(this.graph, index);
                             }
 
                             // Mirror type/name to the corresponding output
-                            mirrorOutputFromInput(slot);
+                            mirrorOutputFromInput(index);
 
                             // Normalize duplicates among all connected inputs
                             this.applyDuplicateNumbering();
 
                             // Update title/color and propagate
                             this.updateTitle();
-                            const propagateToGetters = () => {
-                                const types = (this.inputs || []).map(inp => inp?.type || '*');
-                                const getters = this.findGetters(this.graph);
-                                getters.forEach(getter => {
-                                    if (getter.setTypesArray) {
-                                        getter.setTypesArray(types);
-                                    } else if (getter.setTypes) {
-                                        getter.setTypes(types[0] || '*', types[1] || '*');
-                                    }
-                                });
-                            };
-                            propagateToGetters();
+                            propagateToGetters(this);
 
                             // Note: we don't actually have a settings panel yet
                             if (app.ui.settings.getSettingValue("KJNodes.nodeAutoColor")) {
@@ -495,7 +686,7 @@ app.registerExtension({
                             }
 
                             // Cleanup any snapshot for this slot after a normal connect
-                            if (this.__lastDisconnected) delete this.__lastDisconnected[slot];
+                            if (this.__lastDisconnected) delete this.__lastDisconnected[index];
                         } else {
                             showAlert("node input undefined.");
                         }
@@ -504,8 +695,8 @@ app.registerExtension({
                     }
 
                     // Output connected
-                    if (link_info && this.graph && slotType === LiteGraph.OUTPUT && isChangeConnect) {
-                        mirrorOutputFromInput(slot);
+                    if (link_info && this.graph && type === LiteGraph.OUTPUT && isConnected) {
+                        mirrorOutputFromInput(index);
                         this.updateTitle();
                         this.update();
                         return;
@@ -545,6 +736,14 @@ app.registerExtension({
                     this.update();
                 }
 
+                // Return the previous name recorded for the widget at index 'idx'
+                this.getPreviousName = function(idx) {
+                    const w = this.widgets && this.widgets[idx];
+                    if (!w) return undefined;
+                    if (typeof w.getPreviousName === 'function') return w.getPreviousName();
+                    return w["#previous"];
+                };
+
                 this.clone = function () {
                     const cloned = SetTwinNodes.prototype.clone.apply(this);
                     // Reset all inputs
@@ -564,31 +763,34 @@ app.registerExtension({
                     if (Array.isArray(this.widgets)) {
                         for (let i = 0; i < this.widgets.length; i++) {
                             this.validateWidgetName(graph, i);
+                            // Hook any pre-existing widget instances
+                            try { wrapWidgetValueSetter(this.widgets[i]); } catch (_e) {}
                         }
                     }
                 }
 
                 this.update = function() {
+                    console.log("[SetTwinNodes] update");
                     if (!node.graph) {
                         return;
                     }
+                    if (node !== this)
+                        console.log("[SetTwinNodes] update (hmmmm)", {
+                            node: node,
+                            this: this
+                        });
 
                     // Propagate types to all getters that share at least one of this node's names
-                    const getters = this.findGetters(node.graph);
-                    const types = (this.inputs || []).map(inp => inp?.type || '*');
-                    getters.forEach(getter => {
-                        if (getter.setTypesArray) {
-                            getter.setTypesArray(types);
-                        } else if (getter.setTypes) {
-                            getter.setTypes(types[0] || '*', types[1] || '*');
-                        }
-                    });
+                    // this line only used for debug output
+                    const getters = findGetters(node);
+                    console.log("[SetTwinNodes] getters (propagation targets)", getters);
+                    propagateToGetters(this, getters);
 
                     // Rename propagation across all widget indices:
                     // compare previousNames snapshot vs current widget values and
                     // update any GetTwinNodes widgets that still reference the old name.
                     const currNames = Array.isArray(this.widgets)
-                        ? this.widgets.map(w => (w && w.value != null ? String(w.value).trim() : ""))
+                        ? this.widgets.map(widget => (widget && widget.value != null ? String(widget.value).trim() : ""))
                         : [];
                     const prevNames = Array.isArray(this.properties.previousNames) ? this.properties.previousNames : [];
 
@@ -597,7 +799,7 @@ app.registerExtension({
                         const curr = currNames[i] || "";
                         if (prev && curr && prev !== curr) {
                             const allGettersForRename = GraphHelpers.getNodesByType(node.graph, "GetTwinNodes");
-                            allGettersForRename.forEach(getter => {
+                            allGettersForRename.forEach(/** ComfyNode */ getter => {
                                 if (!Array.isArray(getter.widgets)) return;
                                 let changed = false;
                                 for (let gi = 0; gi < getter.widgets.length; gi++) {
@@ -614,34 +816,8 @@ app.registerExtension({
                         }
                     }
 
-                    // Refresh combo values for all getters
-                    const allGetters = GraphHelpers.getNodesByType(node.graph, "GetTwinNodes");
-                    allGetters.forEach(otherNode => {
-                        if (otherNode.setComboValues) {
-                            otherNode.setComboValues();
-                        }
-                    });
-
                     // Update the previousNames snapshot
                     this.properties.previousNames = currNames;
-                }
-
-                // Match GetTwinNodes if they share at least one name with this node
-                // If checkForPreviousName is true, use the previousNames snapshot; otherwise use current widget values.
-                this.findGetters = function(graph, checkForPreviousName) {
-                    const sourceNames = checkForPreviousName
-                        ? (Array.isArray(this.properties.previousNames) ? this.properties.previousNames : [])
-                        : (Array.isArray(this.widgets) ? this.widgets.map(w => (w && w.value != null ? String(w.value).trim() : "")) : []);
-                    const names = sourceNames.filter(v => !!v);
-                    if (!graph || names.length === 0) return [];
-                    const nameSet = new Set(names);
-                    return GraphHelpers.getNodesByType(graph, 'GetTwinNodes').filter(otherNode =>
-                        Array.isArray(otherNode.widgets) &&
-                        otherNode.widgets.some(w => {
-                            const val = w && w.value != null ? String(w.value).trim() : "";
-                            return val && nameSet.has(val);
-                        })
-                    );
                 }
 
                 // This node is purely frontend and does not impact the resulting prompt so should not be serialized
@@ -650,78 +826,62 @@ app.registerExtension({
 
 
             onRemoved() {
-                const allGetters = GraphHelpers.getNodesByType(this.graph, "GetTwinNodes");
-                allGetters.forEach((otherNode) => {
-                    if (otherNode.setComboValues) {
-                        otherNode.setComboValues([this]);
-                    }
-                })
+                console.log("[SetTwinNodes] onRemoved (kinda think something should happen here)");
             }
             getExtraMenuOptions(_, options) {
                 // TODO: -
-                //     - Uses this.currentGetters[0].outputs[0].type to derive a color for the “Show connections” highlight.
+                //     - Uses node.currentGetters[0].outputs[0].type to derive a color for the “Show connections” highlight.
                 //     - Rationale: sampling the first getter’s first output only. Probably fine for a quick color, but could be generalized to first connected/typed output
-                this.menuEntry = this.drawConnection ? "Hide connections" : "Show connections";
+                const node = this;
+                let menuEntry = node.drawConnection ? "Hide connections" : "Show connections";
                 options.unshift(
                     {
-                        content: this.menuEntry,
+                        content: menuEntry,
                         callback: () => {
-                            this.currentGetters = this.findGetters(this.graph);
-                            if (this.currentGetters.length == 0) return;
+                            node.currentGetters = findGetters(node);
+                            console.log("[SetTwinNodes] context menu, found getters", node.currentGetters);
+                            if (node.currentGetters.length == 0) return;
                             // Generalize: pick first connected, typed output across all getters
                             let linkType = '*';
-                            for (const g of this.currentGetters) {
+                            for (const g of node.currentGetters) {
                                 const found = (g.outputs || []).find(o => o && o.type && o.type !== '*');
                                 if (found) { linkType = found.type; break; }
                             }
-                            this.slotColor = this.canvas.default_connection_color_byType[linkType]
-                            this.menuEntry = this.drawConnection ? "Hide connections" : "Show connections";
-                            this.drawConnection = !this.drawConnection;
-                            this.canvas.setDirty(true, true);
+                            node.slotColor = node.canvas.default_connection_color_byType[linkType]
+                            menuEntry = node.drawConnection ? "Hide connections" : "Show connections";
+                            node.drawConnection = !node.drawConnection;
+                            node.canvas.setDirty(true, true);
 
-                        },
-                        has_submenu: true,
-                        submenu: {
-                            title: "Color",
-                            options: [
-                                {
-                                    content: "Highlight",
-                                    callback: () => {
-                                        this.slotColor = "orange"
-                                        this.canvas.setDirty(true, true);
-                                    }
-                                }
-                            ],
                         },
                     },
                     {
                         content: "Hide all connections",
                         callback: () => {
-                            const allGetters = GraphHelpers.getNodesByType(this.graph, ["GetTwinNodes", "SetTwinNodes"]);
+                            const allGetters = GraphHelpers.getNodesByType(node.graph, ["GetTwinNodes", "SetTwinNodes"]);
                             allGetters.forEach(otherNode => {
                                 otherNode.drawConnection = false;
                                 console.log(otherNode);
                             });
 
-                            this.menuEntry = "Show connections";
-                            this.drawConnection = false
-                            this.canvas.setDirty(true, true);
+                            menuEntry = "Show connections";
+                            node.drawConnection = false
+                            node.canvas.setDirty(true, true);
 
                         },
 
                     },
                 );
                 // Dynamically add a submenu for all getters
-                this.currentGetters = this.findGetters(this.graph);
-                if (this.currentGetters) {
+                node.currentGetters = findGetters(node);
+                if (node.currentGetters) {
 
-                    let gettersSubmenu = this.currentGetters.map(getter => ({
+                    let gettersSubmenu = node.currentGetters.map(getter => ({
 
                         content: `${getter.title} id: ${getter.id}`,
                         callback: () => {
-                            this.canvas.centerOnNode(getter);
-                            this.canvas.selectNode(getter, false);
-                            this.canvas.setDirty(true, true);
+                            node.canvas.centerOnNode(getter);
+                            node.canvas.selectNode(getter, false);
+                            node.canvas.setDirty(true, true);
 
                         },
                     }));
@@ -730,7 +890,7 @@ app.registerExtension({
                         content: "Getters",
                         has_submenu: true,
                         submenu: {
-                            title: "GetNodes",
+                            title: "GetTwinNodes",
                             options: gettersSubmenu,
                         }
                     });
@@ -906,7 +1066,7 @@ app.registerExtension({
                     const current = this.widgets?.length || 0;
                     for (let i = current; i < count; i++) {
                         const idx = i;
-                        this.addWidget(
+                        const created = this.addWidget(
                             "combo",
                             `Constant ${idx + 1}`,
                             "",
@@ -919,6 +1079,8 @@ app.registerExtension({
                                 }
                             }
                         );
+                        // Hook the value setter to track previous value
+                        wrapWidgetValueSetter(created);
                     }
                     // Normalize widget labels to Constant 1, Constant 2, ...
                     this.normalizeGetterWidgetLabels();
@@ -926,7 +1088,7 @@ app.registerExtension({
 
                 // Ensure the number of outputs matches count
                 this.ensureOutputCount = function(count) {
-                    console.log("[GetSetTwinNodes] ensureOutputCount");
+                    console.log("[GetTwinNodes] ensureOutputCount");
                     const min = this.properties?.constCount || 2;
                     count = Math.max(min, count);
                     while ((this.outputs?.length || 0) < count) this.addOutput("*", "*");
@@ -957,7 +1119,7 @@ app.registerExtension({
 
                 // During deserialization, respect serialized widgets/outputs by suppressing auto-derivation for a tick
                 this.onConfigure = function(_data) {
-                    console.log("[GetSetTwinNodes] onConfigure");
+                    console.log("[GetTwinNodes] onConfigure");
                     this.__restoring = true;
                     // Clear restoration flag shortly after configuration to allow normal behavior thereafter
                     setTimeout(() => { this.__restoring = false; }, 1000);
@@ -971,8 +1133,8 @@ app.registerExtension({
                     output
                 ) {
                     // Respect serialized data on restore: skip auto-derive during deserialization
-                    console.log("[GetSetTwinNodes] onConnectionsChange");
-                    if (this.__restoring) return;
+                    console.log("[GetTwinNodes] onConnectionsChange");
+                    if (this.__restoring) { console.log("[GetTwinNodes] aborted due to __restoring state"); return; }
 
                     this.validateLinks();
 
@@ -1021,7 +1183,7 @@ app.registerExtension({
                         }
 
                         // Attempt to auto-pair remaining constants from a matched setter
-                        const matched = this.findSetter(node.graph);
+                        const matched = findSetter(node);
                         if (matched) {
                             const needed = matched.widgets?.length || 0;
                             const min = this.properties?.constCount || 2;
@@ -1070,10 +1232,17 @@ app.registerExtension({
                     this.setNamesArray([nameA, nameB]);
                 }
 
+
+                /* During a reload:
+                    [GetTwinNodes] onConnectionsChange
+                    [GetTwinNodes] onRename
+                    [GetTwinNodes] ensureOutputCount
+                    [GetTwinNodes] onConfigure
+                 */
                 this.onRename = function() {
                     // Respect serialized data on restore: skip auto-derive during deserialization
-                    console.log("[GetSetTwinNodes] onRename");
-                    if (this.__restoring) return;
+                    console.log("[GetTwinNodes] onRename");
+                    if (this.__restoring) { console.log("[GetTwinNodes] aborted due to __restoring state"); return; }
 
                     // Support "(unset)" option: clear widget value and possibly remove the first extra unset widget and its output
                     const RESET_LABEL = "(unset)";
@@ -1134,7 +1303,7 @@ app.registerExtension({
                         this.ensureOutputCount(this.widgets?.length || 0);
                     }
 
-                    const setter = this.findSetter(node.graph);
+                    const setter = findSetter(node);
                     // Gather current selections
                     const selected = (this.widgets || []).map(w => (w?.value ? String(w.value).trim() : ""));
                     const anySelected = selected.some(v => !!v);
@@ -1207,27 +1376,6 @@ app.registerExtension({
                             }
                         }
 
-                        // Build title from selected widget values; prefer compact form if names share common parts
-                        const namesForTitle = [];
-                        const wCount = this.widgets?.length || 0;
-                        for (let i = 0; i < wCount; i++) {
-                            const raw = this.widgets?.[i]?.value;
-                            if (!raw) continue;
-                            const name = String(raw).trim();
-                            if (name) namesForTitle.push(name);
-                        }
-                        if (namesForTitle.length === 0) {
-                            this.title = "GetTwinNodes";
-                        } else {
-                            const analysis = analyzeNamesForAbbrev(namesForTitle);
-                            if (analysis && analysis.use) {
-                                this.title = (!disablePrefix ? "Get_" : "") + analysis.titleText;
-                            } else {
-                                const joined = namesForTitle.join(" & ");
-                                this.title = (!disablePrefix ? "Get_" : "") + joined;
-                            }
-                        }
-
                         // Note: we don't actually have a settings panel yet
                         // Only colorize when a constant is selected; follow same rule as SetTwinNodes (based on constant type)
                         const autoColor = app.ui.settings.getSettingValue("KJNodes.nodeAutoColor");
@@ -1259,30 +1407,15 @@ app.registerExtension({
                                 this.outputs[i].type = '*';
                             }
                         }
-                        const namesForTitle = [];
-                        const wCount = this.widgets?.length || 0;
-                        for (let i = 0; i < wCount; i++) {
-                            const raw = this.widgets?.[i]?.value;
-                            if (!raw) continue;
-                            const name = String(raw).trim();
-                            if (name) namesForTitle.push(name);
-                        }
-                        if (namesForTitle.length === 0) {
-                            this.title = "GetTwinNodes";
-                        } else {
-                            const analysis = analyzeNamesForAbbrev(namesForTitle);
-                            if (analysis && analysis.use) {
-                                this.title = (!disablePrefix ? "Get_" : "") + analysis.titleText;
-                            } else {
-                                const joined = namesForTitle.join(" & ");
-                                this.title = (!disablePrefix ? "Get_" : "") + joined;
-                            }
-                        }
 
                         // No selection or unknown type: reset color
                         this.color = undefined;
                         this.bgcolor = undefined;
                     }
+
+                    // Build title from selected widget values once, outside the if/else
+                    const namesForTitle = extractWidgetNames(this);
+                    this.title = computeTwinNodeTitle(namesForTitle, "Get", disablePrefix);
 
                     // Finally, validate existing links against updated types
                     this.validateLinks();
@@ -1302,11 +1435,19 @@ app.registerExtension({
                                 const link = GraphHelpers.getLink(node.graph, linkId);
                                 return link && (!link.type.split(",").includes(this.outputs[i].type) && link.type !== '*');
                             }).forEach(linkId => {
-                                console.log("[GetSetTwinNodes] Removing invalid link", linkId);
+                                console.log("[GetTwinNodes] Removing invalid link", linkId);
                                 GraphHelpers.removeLink(node.graph, linkId);
                             });
                         }
                     }
+                };
+
+                // Return the previous name recorded for the widget at index 'idx'
+                this.getPreviousName = function(idx) {
+                    const w = this.widgets && this.widgets[idx];
+                    if (!w) return undefined;
+                    if (typeof w.getPreviousName === 'function') return w.getPreviousName();
+                    return w["#previous"];
                 };
 
                 // Support arbitrary number of types
@@ -1339,27 +1480,8 @@ app.registerExtension({
                     this.validateLinks();
                 }
 
-                this.findSetter = function(graph) {
-                    const chosen = (this.widgets || []).map(w => w?.value).map(v => (v ? String(v).trim() : "")).filter(v => !!v);
-                    const setters = GraphHelpers.getNodesByType(graph, 'SetTwinNodes');
-                    if (chosen.length === 0) return null;
-
-                    // Match any setter that contains all chosen constants, regardless of position
-                    let found = setters.find(s => {
-                        const sw = (s.widgets || []).map(w => (w?.value ? String(w.value).trim() : ""));
-                        return chosen.every(v => sw.includes(v));
-                    });
-
-                    // TODO: Check - fallback prioritizes the first chosen constant
-                    // Fallback: match any setter that contains at least the first chosen value
-                    if (!found && chosen[0]) {
-                        found = setters.find(s => (s.widgets || []).some(w => String(w?.value || "").trim() === chosen[0]));
-                    }
-                    return found || null;
-                };
-
                 this.goToSetter = function() {
-                    const setter = this.findSetter(this.graph);
+                    const setter = findSetter(this);
                     if (setter) {
                         this.canvas.centerOnNode(setter);
                         this.canvas.selectNode(setter, false);
@@ -1370,8 +1492,9 @@ app.registerExtension({
                 this.isVirtualNode = true;
             }
 
+            // TODO: This function doesn't work for shit on the second widget, because findSetter isn't that smart
             getInputLink(slot) {
-                const setter = this.findSetter(this.graph);
+                const setter = findSetter(this, this.widgets[slot].value);
 
                 if (setter) {
                     const slotInfo = setter.inputs[slot];
@@ -1384,32 +1507,40 @@ app.registerExtension({
                 }
             }
             onAdded(graph) {
+                if (Array.isArray(this.widgets)) {
+                    for (let i = 0; i < this.widgets.length; i++) {
+                        try { wrapWidgetValueSetter(this.widgets[i]); } catch (_e) {}
+                    }
+                }
             }
+
             getExtraMenuOptions(_, options) {
-                let menuEntry = this.drawConnection ? "Hide connections" : "Show connections";
+                const node = this;
+                let menuEntry = node.drawConnection ? "Hide connections" : "Show connections";
 
                 options.unshift(
                     {
                         content: "Go to setter",
                         callback: () => {
-                            this.goToSetter();
+                            node.goToSetter();
                         },
                     },
                     {
                         content: menuEntry,
                         callback: () => {
-                            this.currentSetter = this.findSetter(this.graph);
-                            if (!this.currentSetter) return;
+                            node.currentSetter = findSetter(node);
+                            console.log("[GetTwinNodes] context menu, found setters", node.currentSetter);
+                            if (!node.currentSetter) return;
                             // Generalize: pick first typed input on setter
                             let linkType = '*';
-                            if (Array.isArray(this.currentSetter.inputs)) {
-                                const fin = this.currentSetter.inputs.find(i => i && i.type && i.type !== '*');
+                            if (Array.isArray(node.currentSetter.inputs)) {
+                                const fin = node.currentSetter.inputs.find(i => i && i.type && i.type !== '*');
                                 if (fin) linkType = fin.type;
                             }
-                            this.drawConnection = !this.drawConnection;
-                            this.slotColor = this.canvas.default_connection_color_byType[linkType]
-                            menuEntry = this.drawConnection ? "Hide connections" : "Show connections";
-                            this.canvas.setDirty(true, true);
+                            node.drawConnection = !node.drawConnection;
+                            node.slotColor = node.canvas.default_connection_color_byType[linkType]
+                            menuEntry = node.drawConnection ? "Hide connections" : "Show connections";
+                            node.canvas.setDirty(true, true);
                         },
                     },
                 );

@@ -30,16 +30,20 @@ export const GraphHelpers = {
     },
 
     /**
-     * @param {LGraph | Subgraph} graph
-     * @param {number} linkId
-     * @returns {LLink | null}
+     * Retrieves a link from the given graph based on the provided link ID.
+     *
+     * @param {Object} graph - The graph object containing the links or a method to access links.
+     * @param {string|number} linkId - The unique identifier for the link to be retrieved.
+     * @return {Object|null} The link object if found, or null if the link does not exist or an error occurs.
      */
     getLink(graph, linkId) {
         if (!graph || linkId == null) return null;
         if (typeof graph.getLink === "function") {
             try {
                 return graph.getLink(linkId) || null;
-            } catch (_) {}
+            } catch (_) {
+                console.log(`[TwinNodes] getLink: exception while calling graph.getLink: ${_}`);
+            }
         }
         console.log("[TwinNodes] getLink: using fallback");
         return graph?.links?.[linkId] ?? null;
@@ -87,7 +91,7 @@ export const GraphHelpers = {
             if (t == null) continue;
 
             // Call without the 'result' parameter so each call returns a fresh array (the native impl clears 'result')
-            const newMatches = graph.findNodesByType(t) || [];
+            const newMatches = graph.findNodesByType(t, []) || [];
             matches.push(...newMatches);
         }
 
