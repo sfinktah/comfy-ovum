@@ -9,6 +9,7 @@ import {$el} from "../../../scripts/ui.js";
 import { graphGetNodeById  } from '../01/graphHelpers.js';
 import { chainCallback } from '../01/utility.js';
 import { ensureTooltipLib } from '../01/tooltipHelpers.js';
+import { ensureDynamicInputsImpl} from "../01/dynamicInputHelpers.js";
 import { Timer } from '../04/timer-class.js';
 
 window.Timer = Timer;
@@ -196,69 +197,9 @@ app.registerExtension({
                 // Store references for later use
                 Timer.activeNotesWidget = textareaWidget;
 
-                const getDynamicInputs = () => {
-                    const inputs = Array.isArray(node.inputs) ? node.inputs : [];
-                    return inputs
-                        .map((inp, idx) => ({ inp, idx }))
-                        .filter(o => o.inp && typeof o.inp.name === "string" && /^arg\d+$/.test(o.inp.name))
-                        .sort((a, b) => {
-                            const an = parseInt(a.inp.name.substring(3), 10);
-                            const bn = parseInt(b.inp.name.substring(3), 10);
-                            return an - bn;
-                        });
-                };
                 // ---- Dynamic inputs: arg1, arg2, ... ----
                 const ensureDynamicInputs = (isConnecting = true) => {
-                    try {
-                        let dyn = getDynamicInputs();
-
-                        // Ensure at least arg0 exists (backend should add it, but be defensive)
-                        if (dyn.length === 0) {
-                            node.addInput("arg0", "*", { label: "arg0", forceInput: true });
-                            dyn = getDynamicInputs();
-                        }
-
-                        // Normalize labels for existing dynamic inputs
-                        for (const { inp } of dyn) {
-                            const n = inp.name.substring(3);
-                            if (!inp.label) {
-                                const t = inp.type || "*";
-                                inp.label = (t && t !== "*") ? `arg${n} ${t}` : `arg${n}`;
-                            }
-                        }
-
-                        // If the last dynamic input has a link, append a new trailing argN
-                        let last = dyn[dyn.length - 1]?.inp;
-                        if (last && last.link != null) {
-                            const lastNum = parseInt(last.name.substring(3), 10);
-                            const nextNum = lastNum + 1;
-                            node.addInput(`arg${nextNum}`, "*", { label: `arg${nextNum}` });
-                            return; // addInput already dirties the canvas
-                        }
-
-                        // When disconnecting, trim trailing unused inputs leaving exactly one empty at the end
-                        if (!isConnecting) {
-                            // Repeatedly remove the last input if the last two are both unlinked
-                            // This keeps one unlinked trailing input
-                            while (true) {
-                                dyn = getDynamicInputs();
-                                if (dyn.length < 2) break;
-                                const lastInp = dyn[dyn.length - 1].inp;
-                                const prevInp = dyn[dyn.length - 2].inp;
-                                if (lastInp.link == null && prevInp.link == null) {
-                                    // Remove the last one
-                                    // Recompute index each loop to avoid stale indices after removal
-                                    const fresh = getDynamicInputs();
-                                    const lastIdx = fresh[fresh.length - 1].idx;
-                                    node.removeInput(lastIdx);
-                                } else {
-                                    break;
-                                }
-                            }
-                        }
-                    } catch (err) {
-                        console.warn("[formatter] ensureDynamicInputs failed:", err);
-                    }
+                    ensureDynamicInputsImpl(node, isConnecting);
                 };
 
                 // Initialize dynamic inputs
