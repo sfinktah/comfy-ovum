@@ -299,6 +299,34 @@ function propagateToGetters(node) {
             getter.setTypes(types[0] || '*', types[1] || '*');
         }
     });
+
+    // Broadcast rename events so getters can update their widget values
+    try {
+        const g = node && node.graph;
+        if (g && typeof g.sendEventToAll === "function") {
+            const currNames = Array.isArray(node.widgets)
+                ? node.widgets.map(w => (w && w.value != null ? String(w.value).trim() : ""))
+                : [];
+            const prevNames = Array.isArray(node.properties?.previousNames)
+                ? node.properties.previousNames
+                : [];
+            const maxLen = Math.max(prevNames.length, currNames.length);
+            for (let i = 0; i < maxLen; i++) {
+                const prev = (prevNames[i] || "").trim();
+                const next = (currNames[i] || "").trim();
+                if (prev && next && prev !== next) {
+                    g.sendEventToAll("setnodeNameChange", {
+                        prev,
+                        next,
+                        index: i,
+                        setterId: node.id
+                    });
+                }
+            }
+        }
+    } catch (_e) {
+        // ignore broadcast errors
+    }
 }
 
 app.registerExtension({
@@ -1448,6 +1476,29 @@ app.registerExtension({
                     if (!w) return undefined;
                     if (typeof w.getPreviousName === 'function') return w.getPreviousName();
                     return w["#previous"];
+                };
+
+                // Listen for broadcast rename events and update matching widget values
+                this.onAction = function(action, param) {
+                    if (action !== "setnodeNameChange" || !param) return;
+                    const prev = (param.prev != null) ? String(param.prev).trim() : "";
+                    const next = (param.next != null) ? String(param.next).trim() : "";
+                    if (!prev || !next || prev === next) return;
+
+                    let changed = false;
+                    if (Array.isArray(this.widgets)) {
+                        for (let i = 0; i < this.widgets.length; i++) {
+                            const val = this.widgets[i]?.value != null ? String(this.widgets[i].value).trim() : "";
+                            if (val && val === prev) {
+                                this.widgets[i].value = next;
+                                changed = true;
+                            }
+                        }
+                    }
+                    if (changed) {
+                        if (typeof this.onRename === "function") this.onRename();
+                        if (app?.canvas?.setDirty) app.canvas.setDirty(true, true);
+                    }
                 };
 
                 // Support arbitrary number of types
