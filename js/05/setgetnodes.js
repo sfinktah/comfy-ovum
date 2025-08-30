@@ -28,6 +28,17 @@ import { analyzeNamesForAbbrev, computeTwinNodeTitle, extractWidgetNames } from 
  * @param {string} type
  */
 function setColorAndBgColor(type) {
+    /*
+black : {color: '#222', bgcolor: '#000', groupcolor: '#444'}
+blue : {color: '#223', bgcolor: '#335', groupcolor: '#88A'}
+brown : {color: '#332922', bgcolor: '#593930', groupcolor: '#b06634'}
+cyan : {color: '#233', bgcolor: '#355', groupcolor: '#8AA'}
+green : {color: '#232', bgcolor: '#353', groupcolor: '#8A8'}
+pale_blue : {color: '#2a363b', bgcolor: '#3f5159', groupcolor: '#3f789e'}
+purple : {color: '#323', bgcolor: '#535', groupcolor: '#a1309b'}
+red : {color: '#322', bgcolor: '#533', groupcolor: '#A88'}
+yellow : {color: '#432', bgcolor: '#653', groupcolor: '#b58b2a'}
+     */
     const colorMap = {
         "MODEL": LGraphCanvas.node_colors.blue,
         "LATENT": LGraphCanvas.node_colors.purple,
@@ -38,6 +49,7 @@ function setColorAndBgColor(type) {
         "IMAGE": LGraphCanvas.node_colors.pale_blue,
         "CLIP": LGraphCanvas.node_colors.yellow,
         "FLOAT": LGraphCanvas.node_colors.green,
+        "STRING": { color: "#880", bgcolor: "#660"},
         "MASK": { color: "#1c5715", bgcolor: "#1f401b"},
         "INT": { color: "#1b4669", bgcolor: "#29699c"},
         "CONTROL_NET": { color: "#156653", bgcolor: "#1c453b"},
@@ -45,7 +57,6 @@ function setColorAndBgColor(type) {
         "GUIDER": { color: "#3c7878", bgcolor: "#1c453b"},
         "SAMPLER": { color: "#614a4a", bgcolor: "#3b2c2c"},
         "SIGMAS": { color: "#485248", bgcolor: "#272e27"},
-
     };
 
     let colors = colorMap[type];
