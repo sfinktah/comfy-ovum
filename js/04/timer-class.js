@@ -59,7 +59,7 @@ export class Timer {
             localStorage.setItem(LOCALSTORAGE_KEY + '.runs_since_clear', JSON.stringify(Timer.runs_since_clear));
             localStorage.setItem(LOCALSTORAGE_KEY + '.node_name_cache', JSON.stringify(Timer.nodeNameCache));
         } catch (e) {
-            console.warn('Failed to save timer history:', e);
+            console.warn('[Timer] Failed to save timer history:', e);
         }
     }
 
@@ -68,7 +68,7 @@ export class Timer {
             // Local-only persistence
             Timer.saveToLocalStorage();
         } catch (e) {
-            console.warn('Failed to save timer data to storage:', e);
+            console.warn('[Timer] Failed to save timer data to storage:', e);
         }
     }
 
@@ -145,11 +145,11 @@ export class Timer {
                         Timer.pruneOldCachedNames();
                     }
                 } catch (err) {
-                    console.warn('Failed to parse node name cache:', err);
+                    console.warn('[Timer] Failed to parse node name cache:', err);
                 }
             }
         } catch (e) {
-            console.warn('Failed to load timer history:', e);
+            console.warn('[Timer] Failed to load timer history:', e);
         }
     }
 
@@ -159,7 +159,7 @@ export class Timer {
             Timer.loadFromLocalStorage();
             if (Timer.onChange) Timer.onChange();
         } catch (e) {
-            console.warn('Failed to load timer data from storage:', e);
+            console.warn('[Timer] Failed to load timer data from storage:', e);
         }
     }
 
@@ -173,9 +173,9 @@ export class Timer {
             localStorage.removeItem(LOCALSTORAGE_KEY + '.runs_since_clear');
             localStorage.removeItem(LOCALSTORAGE_KEY + '.node_name_cache');
 
-            console.log('Timer data cleared from storage');
+            console.log('[Timer] Timer data cleared from storage');
         } catch (e) {
-            console.warn('Failed to clear timer data from storage:', e);
+            console.warn('[Timer] Failed to clear timer data from storage:', e);
         }
     }
 
@@ -293,12 +293,12 @@ export class Timer {
                 try {
                     localStorage.setItem(LOCALSTORAGE_KEY + '.node_name_cache', JSON.stringify(Timer.nodeNameCache));
                 } catch (e) {
-                    console.warn('Failed to persist node name cache:', e);
+                    console.warn('[Timer] Failed to persist node name cache:', e);
                 }
             }
             return name;
         } catch (err) {
-            console.warn('Failed to get node name by id:', err);
+            console.warn('[Timer] Failed to get node name by id:', err);
             // Fallback to direct call
             return getNodeNameById(id);
         }
@@ -325,11 +325,11 @@ export class Timer {
                 try {
                     localStorage.setItem(LOCALSTORAGE_KEY + '.node_name_cache', JSON.stringify(Timer.nodeNameCache));
                 } catch (e) {
-                    console.warn('Failed to persist pruned node name cache:', e);
+                    console.warn('[Timer] Failed to persist pruned node name cache:', e);
                 }
             }
         } catch (err) {
-            console.warn('Failed to prune node name cache:', err);
+            console.warn('[Timer] Failed to prune node name cache:', err);
         }
     }
 
@@ -499,7 +499,7 @@ export class Timer {
             // Persist complete history after completion
             Timer.saveToStorage();
             // Trigger upload of timing data at end of execution
-            onUploadGraphData().catch(err => console.warn('Upload timing failed:', err));
+            onUploadGraphData().catch(err => console.warn('[Timer] Upload timing failed:', err));
         }
     }
 
@@ -614,9 +614,9 @@ export class Timer {
 
         // Add individual columns for each of the last n runs
         const lastNRunIds = Object.keys(Timer.run_history).sort().reverse().slice(0, Timer.last_n_runs); // -1 to exclude the current run
-        console.log('lastNRunIds', lastNRunIds);
+        console.log('[Timer] lastNRunIds', lastNRunIds);
         const lastNRunCount = Math.min(lastNRunIds.length, Timer.last_n_runs);
-        console.log('lastNRunCount', allRunIdsAsc);
+        console.log('[Timer] lastNRunCount', allRunIdsAsc);
         let displayedRunNumber = 1;
         for (let i = lastNRunCount - 1; i >= 0; i--) {
             const runId = lastNRunIds[i];
