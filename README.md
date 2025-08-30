@@ -11,6 +11,8 @@ by me, and one has been made entirely by AI.
 
 A pair of graph-cleaning utility nodes designed to “tunnel” connections and reduce visual clutter without sacrificing clarity or type-safety.
 
+Effortless to type one-handed: enter SETTW or GETTW to locate these nodes fast—so your right hand can stay on the mouse (because where else would your right hand be?)
+
 All the functionality of Kijai's Set/Get nodes, easier to use than easyUse SetNodes, twice as many connections, and unbelievably more automated.
 
 - SetTwinNodes accepts an arbitrary number (two... more coming soon) of inputs and exposes matching outputs, letting you collect and forward values by meaningful constant names rather than raw wires.
