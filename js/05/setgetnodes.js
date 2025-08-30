@@ -25,9 +25,9 @@ import { analyzeNamesForAbbrev, computeTwinNodeTitle, extractWidgetNames } from 
 // based on diffus3's SetGet: https://github.com/diffus3/ComfyUI-extensions
 
 /**
- * @param {string} type
+ * @param {string[]|string} types - Array of types to evaluate for color mapping; if string provided, it will be treated as a single-item array.
  */
-function setColorAndBgColor(type) {
+function setColorAndBgColor(types) {
     /*
 black : {color: '#222', bgcolor: '#000', groupcolor: '#444'}
 blue : {color: '#223', bgcolor: '#335', groupcolor: '#88A'}
@@ -48,8 +48,8 @@ yellow : {color: '#432', bgcolor: '#653', groupcolor: '#b58b2a'}
         "EMBEDS": LGraphCanvas.node_colors.orange,
         "IMAGE": LGraphCanvas.node_colors.pale_blue,
         "CLIP": LGraphCanvas.node_colors.yellow,
-        "FLOAT": LGraphCanvas.node_colors.green,
-        "STRING": { color: "#880", bgcolor: "#660"},
+        "FLOAT": LGraphCanvas.node_colors.green, 
+        "STRING": { color: "#433922", bgcolor: "#695930"},
         "MASK": { color: "#1c5715", bgcolor: "#1f401b"},
         "INT": { color: "#1b4669", bgcolor: "#29699c"},
         "CONTROL_NET": { color: "#156653", bgcolor: "#1c453b"},
@@ -59,21 +59,49 @@ yellow : {color: '#432', bgcolor: '#653', groupcolor: '#b58b2a'}
         "SIGMAS": { color: "#485248", bgcolor: "#272e27"},
     };
 
-    let colors = colorMap[type];
-    if (!colors) {
-        for (const key in colorMap) {
-            if (~type.indexOf(key)) {
-                this.color = colorMap[key].color || colorMap[key];
-                this.bgcolor = colorMap[key].bgcolor;
-                return;
+    const list = Array.isArray(types) ? types : (types != null ? [types] : []);
+    const matches = [];
+
+    for (const tRaw of list) {
+        const t = (tRaw != null) ? String(tRaw) : "";
+        if (!t) continue;
+
+        // Prefer exact match
+        if (colorMap[t]) {
+            matches.push(colorMap[t]);
+        } else {
+            // Fallback: partial match (substring)
+            for (const key in colorMap) {
+                if (t.indexOf(key) !== -1) {
+                    matches.push(colorMap[key]);
+                    break;
+                }
             }
         }
+
+        if (matches.length >= 2) break;
+    }
+
+    if (matches.length === 0) {
         return;
     }
-    if (colors) {
-        this.color = colors.color;
-        this.bgcolor = colors.bgcolor;
+
+    const first = matches[0];
+    const firstFg = (first && typeof first === 'object') ? first.color : first;
+    const firstBg = (first && typeof first === 'object') ? first.bgcolor : undefined;
+
+    if (matches.length === 1) {
+        this.color = firstFg;
+        this.bgcolor = firstBg;
+        return;
     }
+
+    const second = matches[1];
+    const secondBg = (second && typeof second === 'object') ? second.bgcolor : undefined;
+
+    // Foreground from first match; Background from second match (fallback to first if missing)
+    this.color = firstFg;
+    this.bgcolor = secondBg || firstBg;
 }
 
 // Helpers for handling "unlinked" markers (star-suffix)
@@ -375,20 +403,15 @@ app.registerExtension({
                     const names = extractWidgetNames(this, { connectedOnly: true });
                     this.title = computeTwinNodeTitle(names, "Set", disablePrefix);
 
-                    // Determine color from the first connected link with a known color
-                    let pickedType = null;
-                    if (this.inputs) {
-                        for (let i = 0; i < this.inputs.length; i++) {
-                            if (this.inputs[i]?.link != null && this.inputs[i]?.type && this.inputs[i].type !== '*') {
-                                pickedType = this.inputs[i].type;
-                                break;
-                            }
-                        }
-                    }
+                    // Determine colors using all connected input types in order
+                    const typesArr = (this.inputs || [])
+                        .filter(inp => inp?.link != null && inp?.type && inp.type !== '*')
+                        .map(inp => inp.type);
+
                     // Note: we don't actually have a settings panel yet
                     const autoColor = app.ui.settings.getSettingValue("KJNodes.nodeAutoColor");
-                    if (pickedType && autoColor) {
-                        setColorAndBgColor.call(this, pickedType);
+                    if (typesArr.length && autoColor) {
+                        setColorAndBgColor.call(this, typesArr);
                     } else {
                         // reset to default look if nothing connected or auto-color disabled
                         this.color = undefined;
@@ -720,8 +743,10 @@ app.registerExtension({
 
                             // Note: we don't actually have a settings panel yet
                             if (app.ui.settings.getSettingValue("KJNodes.nodeAutoColor")) {
-                                const firstTyped = (this.inputs || []).find(i => i?.type && i.type !== '*');
-                                if (firstTyped) setColorAndBgColor.call(this, firstTyped.type);
+                                const typesArr = (this.inputs || [])
+                                    .filter(i => i?.type && i.type !== '*')
+                                    .map(i => i.type);
+                                if (typesArr.length) setColorAndBgColor.call(this, typesArr);
                             }
 
                             // Cleanup any snapshot for this slot after a normal connect
@@ -1416,10 +1441,11 @@ app.registerExtension({
                         }
 
                         // Note: we don't actually have a settings panel yet
-                        // Only colorize when a constant is selected; follow same rule as SetTwinNodes (based on constant type)
+                        // Only colorize when a constant is selected; follow same rule as SetTwinNodes (based on types)
                         const autoColor = app.ui.settings.getSettingValue("KJNodes.nodeAutoColor");
-                        if (anySelected && pickedType && autoColor) {
-                            setColorAndBgColor.call(this, pickedType);
+                        const typesArr = (this.outputs || []).map(o => o?.type).filter(t => t && t !== '*');
+                        if (anySelected && autoColor && typesArr.length) {
+                            setColorAndBgColor.call(this, typesArr);
                         } else {
                             // reset to default look if no selection, unknown type, or auto-color disabled
                             this.color = undefined;
