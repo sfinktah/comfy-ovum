@@ -278,16 +278,12 @@ export class Timer {
         return count > 0 ? totalTime / count : 0;
     }
 
-    static getRunTime(id, runId) {
-        return Timer.run_history[runId]?.nodes[id]?.totalTime || 0;
-    }
-
     // Wrapper around getNodeNameById that caches and persists node names
     static getNodeNameByIdCached(id) {
         try {
             const name = getNodeNameById(id);
             const now = Date.now();
-            if (name) {
+            if (name && !name.startsWith('id:')) {
                 if (!Timer.nodeNameCache || typeof Timer.nodeNameCache !== 'object') {
                     Timer.nodeNameCache = {};
                 }
@@ -320,7 +316,7 @@ export class Timer {
             let changed = false;
             for (const [id, entry] of Object.entries(Timer.nodeNameCache)) {
                 const ts = (entry && typeof entry.updatedAt === 'number') ? entry.updatedAt : 0;
-                if (ts < cutoff) {
+                if (ts < cutoff || entry.name.startsWith('id:')) {
                     delete Timer.nodeNameCache[id];
                     changed = true;
                 }
@@ -386,7 +382,7 @@ export class Timer {
 
             // From run history
             if (runHistory) {
-                for (const run of Object.values(Timer.run_history)) {
+                for (const run of Object.values(runHistory)) {
                     if (run && run.nodes && typeof run.nodes === 'object') {
                         for (const k of Object.keys(run.nodes)) {
                             if (k != null) ids.add(String(k));
@@ -554,16 +550,16 @@ export class Timer {
             placeholder: "Quick search...",
             value: Timer.searchTerm,
             oninput: e => {
-                console.log('html.search.oninput');
+                // console.log('html.search.oninput');
                 Timer.searchTerm = e.target.value;
                 if (Timer.onChange) Timer.onChange();
             },
             onenter: e => {
-                console.log('html.search.onenter');
+                // console.log('html.search.onenter');
             },
             // Prevent ComfyUI/global key handlers while typing here
             onkeydown: e => {
-                console.log('html.search.onkeydown');
+                // console.log('html.search.onkeydown');
                 if (e.key === "Enter" || e.key === "Escape")
                     e.stopPropagation();
             },
@@ -614,16 +610,15 @@ export class Timer {
         if (!Timer.isHidden('current-run', 'display')) tableHeader.push($el('th', {className: "current-run", "textContent": "Current run"}));
 
         // Prepare attributes for header <tr> that map displayed run indices to true run numbers
-        const headerAttrs = {};
         const allRunIdsAsc = Object.keys(Timer.run_history).sort(); // chronological list of all runs
 
         // Add individual columns for each of the last n runs
-        const lastNRunIds = Object.keys(Timer.run_history).sort().reverse().slice(0, Timer.last_n_runs - 1); // -1 to exclude the current run
+        const lastNRunIds = Object.keys(Timer.run_history).sort().reverse().slice(0, Timer.last_n_runs); // -1 to exclude the current run
         console.log('lastNRunIds', lastNRunIds);
-        const actualRuns = Math.min(lastNRunIds.length, Timer.last_n_runs - 1);
-        console.log('actualRuns', allRunIdsAsc);
-        let runNumber = 1;
-        for (let i = actualRuns - 1; i >= 0; i--) {
+        const lastNRunCount = Math.min(lastNRunIds.length, Timer.last_n_runs);
+        console.log('lastNRunCount', allRunIdsAsc);
+        let displayedRunNumber = 1;
+        for (let i = lastNRunCount - 1; i >= 0; i--) {
             const runId = lastNRunIds[i];
 
             // Compute the true chronological run number (1-based)
@@ -632,7 +627,8 @@ export class Timer {
             /** @type {HTMLTableCellElement} */
             const th = $el('th', {
                 className: "run-n",
-                textContent: Timer.run_notes[runId] ?  `* Run ${runNumber}` : `Run ${runNumber}`,
+                textContent: Timer.run_notes[runId] ?  `* Run ${displayedRunNumber}` : `Run ${displayedRunNumber}`,
+                dataset: { trueRunNumber },
                 onmouseenter: ev => {
                     ev.currentTarget.style.cursor = (ev.ctrlKey || Timer.ctrlDown) ? 'not-allowed' : '';
                 },
@@ -646,7 +642,6 @@ export class Timer {
                     if (Timer.onChange) Timer.onChange();
                 }
             });
-            th.setAttribute('data-run-number', String(trueRunNumber));
 
             // Tooltip showing run notes after 1 second hover
             const notesText = Timer.run_notes[runId] || "No run notes";
@@ -658,19 +653,19 @@ export class Timer {
             });
 
             tableHeader.push(th);
-            runNumber += 1;
+            displayedRunNumber += 1;
         }
 
         // Add empty cells for missing runs
-        for (let i = actualRuns; i < Timer.last_n_runs; i++) {
-            tableHeader.push($el('th', {className: "run-n", "textContent": `Run ${runNumber}`}));
-            runNumber += 1;
+        for (let i = lastNRunCount; i < Timer.last_n_runs; i++) {
+            tableHeader.push($el('th', {className: "run-n", "textContent": `Run ${displayedRunNumber}`}));
+            displayedRunNumber += 1;
         }
 
         // If we have fewer actual runs than the setting, add placeholder columns
-        // for (let i = actualRuns; i < Timer.last_n_runs; i++) {
-        //     const runNumber = i + 1;
-        //     tableHeader.push($el('th', {className: "run-" + runNumber, "textContent": `Run ${runNumber}`}));
+        // for (let i = lastNRunCount; i < Timer.last_n_runs; i++) {
+        //     const displayedRunNumber = i + 1;
+        //     tableHeader.push($el('th', {className: "run-" + displayedRunNumber, "textContent": `Run ${displayedRunNumber}`}));
         // }
 
         const table = $el("table", {
@@ -707,13 +702,15 @@ export class Timer {
             acc.push(nodes);
             return acc;
         }, [])
+        console.log("[Timer] currentRunHistory: ", currentRunHistory);
         const currentNodeIds = this.getUniqueNodeIds(currentRunHistory);
+        console.log("[Timer] currentNodeIds: ", currentNodeIds);
 
-        const averagesByK = (function averageByK(runIds) {
+        const averagesByK = (function averageByK(lastNRunIds) {
             const sums = Object.create(null);
             const counts = Object.create(null);
 
-            for (const id of runIds) {
+            for (const id of lastNRunIds) {
                 const nodes = Timer.run_history[id]?.nodes;
                 if (!nodes) {
                     console.log(`[Timer] [averagesByK] No nodes found for run ${id}`);
@@ -739,6 +736,7 @@ export class Timer {
             }
             return averages;
         })(lastNRunIds);
+        // console.log("[Timer] averagesByK: ", averagesByK);
 
         // Sort by aggregated totals (desc), defaulting to 0 when missing
         Timer.all_times.sort((a, b) => (averagesByK[b.id] ?? 0) - (averagesByK[a.id] ?? 0));
@@ -752,6 +750,7 @@ export class Timer {
                     re = new RegExp(Timer.searchTerm, "i");
                     filterFunc = (node_data) => re.test(Timer.getNodeNameByIdCached(node_data.id));
                 } catch {
+                    Timer.errorInStatus("Invalid regex: " + Timer.searchTerm);
                     // filterFunc = () => true; // Don't filter if regex is broken
                 }
             } else {
@@ -763,45 +762,64 @@ export class Timer {
 
         Timer.all_times.forEach((node_data) => {
             if (!filterFunc(node_data)) return;
-            const t = node_data.id;
+            const nodeId = node_data.id;
+            const drawingActiveNode = Timer.currentNodeId === nodeId;
 
             const rowCells = [
                 $el("td", {className: "node", textContent: Timer.getNodeNameByIdCached(node_data.id)})
             ];
-            if (!Timer.isHidden('runs', 'display')) rowCells.push($el("td", {className: "runs", "textContent": node_data.runs.toString()}));
-            if (!Timer.isHidden('per-run', 'display')) rowCells.push($el("td", {className: "per-run", "textContent": Timer._format(node_data.avgPerRun)}));
-            if (!Timer.isHidden('per-flow', 'display')) rowCells.push($el("td", {className: "per-flow", "textContent": Timer._format(node_data.avgPerFlow)}));
-            if (!Timer.isHidden('current-run', 'display')) rowCells.push($el('td', {className: "current-run", "textContent": Timer._format(Timer.getCurrentRunTime(t))}));
+            if (!Timer.isHidden('runs', 'display')) rowCells.push($el("td", {
+                className: "runs",
+                "textContent": node_data.runs.toString()
+            }));
+            if (!Timer.isHidden('per-run', 'display')) rowCells.push($el("td", {
+                className: "per-run",
+                "textContent": Timer._format(node_data.avgPerRun)
+            }));
+            if (!Timer.isHidden('per-flow', 'display')) rowCells.push($el("td", {
+                className: "per-flow",
+                "textContent": Timer._format(node_data.avgPerFlow)
+            }));
+            if (!Timer.isHidden('current-run', 'display')) rowCells.push($el('td', {
+                className: "current-run",
+                "textContent": Timer._format(Timer.getCurrentRunTime(nodeId))
+            }));
 
             // Add individual cells for each of the last n runs
             // const runIds = Object.keys(Timer.run_history).sort().reverse().slice(0, Timer.last_n_runs);
-            // const actualRuns = Math.min(runIds.length, Timer.last_n_runs - 1);
+            // const lastNRunCount = Math.min(runIds.length, Timer.last_n_runs - 1);
 
             // Add cells for actual runs
-            for (let i = actualRuns - 1; i >= 0; i--) {
+            for (let i = lastNRunCount - 1; i >= 0; i--) {
                 const runId = lastNRunIds[i];
+                const drawingLiveRun = (runId === Timer.current_run_id);
                 // Compute the true chronological run number (1-based)
                 const trueRunNumber = allRunIdsAsc.indexOf(runId) + 1;
-                const runTime = runId && Timer.run_history[runId]?.nodes[t]?.totalTime || 0;
-                var extraClasses;
-                if (Timer.run_history[runId]?.nodes[t]?.cudnn === false) {
-                    extraClasses = "cudnn-off";
+                const runTime = runId && Timer.run_history[runId]?.nodes[nodeId]?.totalTime || 0;
+                const extraClasses = ['run-n'];
+                if (Timer.run_history[runId]?.nodes[nodeId]?.cudnn === false) {
+                    extraClasses.push('cudnn-off');
+                } else if (Timer.run_history[runId]?.nodes[nodeId]?.cudnn === true) {
+                    extraClasses.push('cudnn-on');
                 }
-                else if (Timer.run_history[runId]?.nodes[t]?.cudnn === true) {
-                    extraClasses = "cudnn-on";
+                if (drawingLiveRun === true) {
+                    extraClasses.push('live-run');
                 }
-                else {
-                    extraClasses = '';
-                }
-                rowCells.push($el('td', {className: `run-n ${extraClasses}`.trim(), "textContent": Timer._format(runTime)}));
+                rowCells.push($el('td', {
+                    className: extraClasses.join(' '),
+                    textContent: Timer._format(runTime),
+                    dataset: { trueRunNumber }
+                }));
             }
 
             // Add empty cells for missing runs
-            for (let i = actualRuns; i < Timer.last_n_runs; i++) {
-                rowCells.push($el('td', {className: "run-n", "textContent": "-"}));
+            for (let i = lastNRunCount; i < Timer.last_n_runs; i++) {
+                rowCells.push($el('td', {
+                    className: "run-n run-empty",
+                    textContent: "-"
+                }));
             }
-
-            table.append($el("tr", rowCells));
+            table.append($el("tr", {className: drawingActiveNode ? "live-node" : ""}, rowCells));
         });
 
         // Return just the table if scope is "table"
@@ -815,6 +833,9 @@ export class Timer {
         let rn = 1;
         for (let i = 0; i < allRunIdsAsc.length; i++) {
             const runId = allRunIdsAsc[i];
+            if (!Timer.run_notes[runId]) {
+                continue;
+            }
             const header = $el("div", {
                 className: "cg-run-note-header",
                 textContent: `RUN ${rn}`,
@@ -911,5 +932,16 @@ export class Timer {
                 })
             ])
         ]);
+    }
+
+    static errorInStatus(s) {
+        const statusLeft = document.querySelector('.cg-status-left');
+        if (statusLeft) {
+            const previousInnerText = statusLeft.innerText;
+            statusLeft.innerText = s;
+            setTimeout(() => {
+                statusLeft.innerText = previousInnerText;
+            }, 5000);
+        }
     }
 }
