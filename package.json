@@ -12,7 +12,8 @@
   },
   "private": false,
   "devDependencies": {
-    "@comfyorg/comfyui-frontend-types": "^1.24.4",
-    "@comfyorg/litegraph": "^0.8.26"
+    "@comfyorg/comfyui-frontend-types": "^1.25.10",
+    "@comfyorg/litegraph": "^0.8.100",
+    "typescript": "^5.9.2"
   }
 }
