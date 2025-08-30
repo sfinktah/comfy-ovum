@@ -1,6 +1,6 @@
 
 /**
- * @typedef {Object} ComfyNode
+ * @typedef {Object} ComfyNodeSimple
  * @property {string} type
  * @property {string} name
  * @property {string} title

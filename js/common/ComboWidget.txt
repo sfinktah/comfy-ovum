@@ -1,0 +1,101 @@
+=== Analysis of ComboWidget ===
+
+Inheritance Chain:
+ComboWidget (instance)
+  |- ComboWidget (prototype)
+    |- BaseSteppedWidget (prototype)
+      |- BaseWidget (prototype)
+
+Functions:
+callback()
+  () => {
+      }
+canDecrement() [ComboWidget (prototype)]
+  canDecrement() {
+      return this.#canUseButton(false);
+    }
+canIncrement() [ComboWidget (prototype)]
+  canIncrement() {
+      return this.#canUseButton(true);
+    }
+createCopyForNode(node2) [BaseWidget (prototype)]
+  createCopyForNode(node2) {
+      const cloned = new this.constructor(this, node2);
+      cloned.value = this.value;
+      return cloned;
+    }
+decrementValue(options2) [ComboWidget (prototype)]
+  decrementValue(options2) {
+      this.#tryChangeValue(-1, options2);
+    }
+drawArrowButtons(ctx, width2) [BaseSteppedWidget (prototype)]
+drawTruncatingText({
+    ctx, width: width2, leftPadding = 5, rightPadding = 20
+  }) [BaseWidget (prototype)]
+drawWidget(ctx, options2) [BaseSteppedWidget (prototype)]
+drawWidgetShape(ctx, { width: width2, showText }) [BaseWidget (prototype)]
+incrementValue(options2) [ComboWidget (prototype)]
+  incrementValue(options2) {
+      this.#tryChangeValue(1, options2);
+    }
+onClick({ e: e2, node: node2, canvas: canvas2 }) [ComboWidget (prototype)]
+setValue(value, { e: e2, node: node2, canvas: canvas2 }) [BaseWidget (prototype)]
+
+Getters:
+_displayValue [ComboWidget (prototype)]
+background_color [BaseWidget (prototype)]
+  get background_color() {
+      return LiteGraph.WIDGET_BGCOLOR;
+    }
+disabledTextColor [BaseWidget (prototype)]
+  get disabledTextColor() {
+      return LiteGraph.WIDGET_DISABLED_TEXT_COLOR;
+    }
+displayName [BaseWidget (prototype)]
+  get displayName() {
+      return this.label || this.name;
+    }
+height [BaseWidget (prototype)]
+  get height() {
+      return LiteGraph.NODE_WIDGET_HEIGHT;
+    }
+labelBaseline [BaseWidget (prototype)]
+  get labelBaseline() {
+      return this.y + this.height * 0.7;
+    }
+node [BaseWidget (prototype)]
+  get node() {
+      return this.#node;
+    }
+outline_color [BaseWidget (prototype)]
+  get outline_color() {
+      return this.advanced ? LiteGraph.WIDGET_ADVANCED_OUTLINE_COLOR : LiteGraph.WIDGET_OUTLINE_COLOR;
+    }
+secondary_text_color [BaseWidget (prototype)]
+  get secondary_text_color() {
+      return LiteGraph.WIDGET_SECONDARY_TEXT_COLOR;
+    }
+text_color [BaseWidget (prototype)]
+  get text_color() {
+      return LiteGraph.WIDGET_TEXT_COLOR;
+    }
+value [BaseWidget (prototype)]
+  get value() {
+      return this.#value;
+    }
+
+Setters:
+value [BaseWidget (prototype)]
+  set value(value) {
+      this.#value = value;
+    }
+
+Summary:
+  |- Total members: 24
+  |- Functions: 12
+  |- Getters: 11
+  |- Setters: 1
+  |- Own members: 1
+  |- Inherited members: 23
+  |- Async members: 0
+  |- With source code: 17
