@@ -15,6 +15,7 @@
 /** @typedef {import('@comfyorg/litegraph/dist/litegraph').Subgraph} Subgraph */
 /** @typedef {import("../../typings/ComfyNode").ComfyNode} ComfyNode */
 /** @typedef {import("../common/graphHelpersForTwinNodes.js").GraphHelpers} GraphHelpers */
+/** @typedef {import("@comfyorg/litegraph/dist/types/widgets").IWidget} IWidget */
 
 import { app } from "../../../scripts/app.js";
 import { GraphHelpers } from "../common/graphHelpersForTwinNodes.js";
@@ -342,7 +343,7 @@ function propagateToGetters(node) {
     // Broadcast rename events so getters can update their widget values
     try {
         const g = node && node.graph;
-        if (g && typeof g.sendEventToAll === "function") {
+        if (g && typeof g.sendEventToAllNodes === "function") {
             const currNames = Array.isArray(node.widgets)
                 ? node.widgets.map(w => (w && w.value != null ? String(w.value).trim() : ""))
                 : [];
@@ -354,7 +355,7 @@ function propagateToGetters(node) {
                 const prev = (prevNames[i] || "").trim();
                 const next = (currNames[i] || "").trim();
                 if (prev && next && prev !== next) {
-                    g.sendEventToAll("setnodeNameChange", {
+                    g.sendEventToAllNodes("setnodeNameChange", {
                         prev,
                         next,
                         index: i,
@@ -553,6 +554,29 @@ app.registerExtension({
                 this.updateTitle();
 
                 /**
+                 * Callback invoked by {@link connect} to override the target slot index.
+                 * Its return value overrides the target index selection.
+                 * @this {ComfyNode}
+                 * @param {number} target_slot The current input slot index
+                 * @param {number|string} requested_slot The originally requested slot index - could be negative, or if using (deprecated) name search, a string
+                 * @returns {number|false|null} If a number is returned, the connection will be made to that input index.
+                 * If an invalid index or non-number (false, null, NaN etc) is returned, the connection will be cancelled.
+                 */
+                this.onBeforeConnectInput = function (target_slot, requested_slot) {
+                    console.log("[SetTwinNodes] onBeforeConnectInput", { target_slot, requested_slot });
+                }
+                this.onWidgetChanged = function (name, value, old_value, w) {
+                    // [SetTwinNodes] onWidgetChanged {name: 'Constant 2', value: 'con2', old_value: 'IMAGE', w: TextWidget}
+                    console.log("[SetTwinNodes] onWidgetChanged", {name, value, old_value, w});
+                    node.graph.sendEventToAllNodes("setnodeNameChange", {
+                        old_value,
+                        value,
+                        index: node.widgets.indexOf(w),
+                        setterId: node.id
+                    });
+                }
+
+                /**
                  * @this {ComfyNode}
                  * @param {ISlotType} type
                  * @param {number} index
@@ -587,6 +611,7 @@ app.registerExtension({
                         const slotKey = `${type}:${index}`;
                         // Capture the previous type at the moment of disconnect
                         const prevTypeAtDisconnect = this.inputs?.[index]?.type;
+                        console.log("[SetTwinNodes] onConnectionsChange input disconnected", { slotKey, prevTypeAtDisconnect });
 
                         // Clear any existing timer for this slot
                         if (this.__disconnectTimers && this.__disconnectTimers[slotKey]) {
@@ -1516,10 +1541,10 @@ app.registerExtension({
                 };
 
                 // Listen for broadcast rename events and update matching widget values
-                this.onAction = function(action, param) {
-                    if (action !== "setnodeNameChange" || !param) return;
-                    const prev = (param.prev != null) ? String(param.prev).trim() : "";
-                    const next = (param.next != null) ? String(param.next).trim() : "";
+                this.setnodeNameChange = function(old_value, value, widgetIndex, senderNodeId) {
+                    console.log("[GetTwinNodes] setnodeNameChange", old_value, value);
+                    const prev = (old_value != null) ? String(old_value).trim() : "";
+                    const next = (value != null) ? String(value).trim() : "";
                     if (!prev || !next || prev === next) return;
 
                     let changed = false;
