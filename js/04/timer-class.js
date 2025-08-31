@@ -174,7 +174,7 @@ export class Timer {
             localStorage.removeItem(LOCALSTORAGE_KEY + '.runs_since_clear');
             localStorage.removeItem(LOCALSTORAGE_KEY + '.node_name_cache');
 
-            console.log('[Timer] Timer data cleared from storage');
+            if (Timer.debug) console.log('[Timer] Timer data cleared from storage');
         } catch (e) {
             console.warn('[Timer] Failed to clear timer data from storage:', e);
         }
@@ -462,7 +462,7 @@ export class Timer {
             const m = msg.match(/torch\.backends\.cudnn\.enabled (?:still )?set to (true|false)/i);
             if (m) {
                 Timer.cudnn_enabled = m[1].toLowerCase() === "true";
-                console.log('[Timer] cudnn enabled:', Timer.cudnn_enabled);
+                if (Timer.debug) console.log('[Timer] cudnn enabled:', Timer.cudnn_enabled);
             }
         });
     }
@@ -615,9 +615,9 @@ export class Timer {
 
         // Add individual columns for each of the last n runs
         const lastNRunIds = Object.keys(Timer.run_history).sort().reverse().slice(0, Timer.last_n_runs); // -1 to exclude the current run
-        console.log('[Timer] lastNRunIds', lastNRunIds);
+        if (Timer.debug) console.log('[Timer] lastNRunIds', lastNRunIds);
         const lastNRunCount = Math.min(lastNRunIds.length, Timer.last_n_runs);
-        console.log('[Timer] lastNRunCount', lastNRunCount);
+        if (Timer.debug) console.log('[Timer] lastNRunCount', lastNRunCount);
         let displayedRunNumber = 1;
         for (let i = lastNRunCount - 1; i >= 0; i--) {
             const runId = lastNRunIds[i];
@@ -703,9 +703,9 @@ export class Timer {
             acc.push(nodes);
             return acc;
         }, [])
-        console.log("[Timer] currentRunHistory: ", currentRunHistory);
+        if (Timer.debug) console.log("[Timer] currentRunHistory: ", currentRunHistory);
         const currentNodeIds = this.getUniqueNodeIds(currentRunHistory);
-        console.log("[Timer] currentNodeIds: ", currentNodeIds);
+        if (Timer.debug) console.log("[Timer] currentNodeIds: ", currentNodeIds);
 
         const averagesByK = (function averageByK(lastNRunIds) {
             const sums = Object.create(null);
@@ -714,7 +714,7 @@ export class Timer {
             for (const id of lastNRunIds) {
                 const nodes = Timer.run_history[id]?.nodes;
                 if (!nodes) {
-                    console.log(`[Timer] [averagesByK] No nodes found for run ${id}`);
+                    if (Timer.debug) console.log(`[Timer] [averagesByK] No nodes found for run ${id}`);
                     continue;
                 }
 
