@@ -29,35 +29,49 @@ import { analyzeNamesForAbbrev, computeTwinNodeTitle, extractWidgetNames } from 
  * @param {string[]|string} types - Array of types to evaluate for color mapping; if string provided, it will be treated as a single-item array.
  */
 function setColorAndBgColor(types) {
-    /*
-black : {color: '#222', bgcolor: '#000', groupcolor: '#444'}
-blue : {color: '#223', bgcolor: '#335', groupcolor: '#88A'}
-brown : {color: '#332922', bgcolor: '#593930', groupcolor: '#b06634'}
-cyan : {color: '#233', bgcolor: '#355', groupcolor: '#8AA'}
-green : {color: '#232', bgcolor: '#353', groupcolor: '#8A8'}
-pale_blue : {color: '#2a363b', bgcolor: '#3f5159', groupcolor: '#3f789e'}
-purple : {color: '#323', bgcolor: '#535', groupcolor: '#a1309b'}
-red : {color: '#322', bgcolor: '#533', groupcolor: '#A88'}
-yellow : {color: '#432', bgcolor: '#653', groupcolor: '#b58b2a'}
-     */
+    const node_colors = {
+        // litegraph colors
+        red:       { color: "#322",    bgcolor: "#533",    groupcolor: "#a88"    },
+        brown:     { color: "#332922", bgcolor: "#593930", groupcolor: "#b06634" },
+        green:     { color: "#232",    bgcolor: "#353",    groupcolor: "#8a8"    },
+        blue:      { color: "#223",    bgcolor: "#335",    groupcolor: "#88a"    },
+        pale_blue: { color: "#2a363b", bgcolor: "#3f5159", groupcolor: "#3f789e" },
+        cyan:      { color: "#233",    bgcolor: "#355",    groupcolor: "#8aa"    },
+        purple:    { color: "#323",    bgcolor: "#535",    groupcolor: "#a1309b" },
+        yellow:    { color: "#432",    bgcolor: "#653",    groupcolor: "#b58b2a" },
+        black:     { color: "#222",    bgcolor: "#000",    groupcolor: "#444"    },
+        // extra colors
+        indigo1:   { color: '#334',    bgcolor: '#446',    groupcolor: '#88a'    },
+        indigo2:   { color: '#434',    bgcolor: '#646',    groupcolor: '#a8a'    },
+        magenta1:  { color: '#424',    bgcolor: '#636',    groupcolor: '#a8a'    },
+        magenta2:  { color: '#524',    bgcolor: '#735',    groupcolor: '#a88'    },
+        olive:     { color: '#332',    bgcolor: '#553',    groupcolor: '#aa8'    },
+        orange:    { color: '#532',    bgcolor: '#743',    groupcolor: '#a88'    },
+        teal:      { color: '#244',    bgcolor: '#366',    groupcolor: '#8aa'    },
+
+    }
     const colorMap = {
-        "MODEL": LGraphCanvas.node_colors.blue,
-        "LATENT": LGraphCanvas.node_colors.purple,
-        "VAE": LGraphCanvas.node_colors.red,
-        "WANVAE": LGraphCanvas.node_colors.red,
-        "CONDITIONING": LGraphCanvas.node_colors.brown,
-        "EMBEDS": LGraphCanvas.node_colors.orange,
-        "IMAGE": LGraphCanvas.node_colors.pale_blue,
-        "CLIP": LGraphCanvas.node_colors.yellow,
-        "FLOAT": LGraphCanvas.node_colors.green, 
-        "STRING": { color: "#433922", bgcolor: "#695930"},
-        "MASK": { color: "#1c5715", bgcolor: "#1f401b"},
-        "INT": { color: "#1b4669", bgcolor: "#29699c"},
-        "CONTROL_NET": { color: "#156653", bgcolor: "#1c453b"},
-        "NOISE": { color: "#2e2e2e", bgcolor: "#242121"},
-        "GUIDER": { color: "#3c7878", bgcolor: "#1c453b"},
-        "SAMPLER": { color: "#614a4a", bgcolor: "#3b2c2c"},
-        "SIGMAS": { color: "#485248", bgcolor: "#272e27"},
+        'CLIP':         { color: '#432',    bgcolor: '#653',     }, // yellow, kjnodes
+        'CONDITIONING': { color: '#332922', bgcolor: '#593930',  }, // brown, kjnodes
+        'FLOAT':        { color: '#232',    bgcolor: '#353',     }, // green, kjnodes
+        'IMAGE':        { color: '#2a363b', bgcolor: '#3f5159',  }, // pale_blue, kjnodes
+        'LATENT':       { color: '#323',    bgcolor: '#535',     }, // purple, kjnodes
+        'MODEL':        { color: '#223',    bgcolor: '#335',     }, // blue, kjnodes
+        'VAE':          { color: '#322',    bgcolor: '#533',     }, // red, kjnodes
+
+        'NOISE':        { color: '#2e2e2e', bgcolor: '#242121'   }, // custom, kjnodes
+        'SAMPLER':      { color: '#614a4a', bgcolor: '#3b2c2c'   }, // custom, kjnodes
+        'SIGMAS':       { color: '#485248', bgcolor: '#272e27'   }, // custom, kjnodes
+        'MASK':         { color: '#1c5715', bgcolor: '#1f401b'   }, // custom, kjnodes
+        'GUIDER':       { color: '#3c7878', bgcolor: '#1c453b'   }, // custom, kjnodes
+        'CONTROL_NET':  { color: '#156653', bgcolor: '#1c453b'   }, // custom, kjnodes
+        'INT':          { color: '#1b4669', bgcolor: '#29699c'   }, // custom, kjnodes
+
+        'ARGS':         { color: '#434',    bgcolor: '#646',     }, // indigo2
+        'EMBED':        { color: '#532',    bgcolor: '#743',     }, // orange
+        'BOOLEAN':      { color: '#334',    bgcolor: '#446',     }, // indigo1
+        'STRING':       { color: '#332',    bgcolor: '#553',     }, // olive
+        'TEXT':         { color: '#332',    bgcolor: '#553',     }, // olive
     };
 
     const list = Array.isArray(types) ? types : (types != null ? [types] : []);
@@ -1130,6 +1144,21 @@ app.registerExtension({
                 }
                 this.properties.showOutputText = GetTwinNodes.defaultVisibility;
                 const node = this;
+
+                // Determine colors using all connected input types in order
+                const typesArr = (this.outputs || [])
+                    .filter(inp => inp?.link != null && inp?.type && inp.type !== '*')
+                    .map(inp => inp.type);
+
+                // Note: we don't actually have a settings panel yet
+                const autoColor = app.ui.settings.getSettingValue("KJNodes.nodeAutoColor");
+                if (typesArr.length && autoColor) {
+                    setColorAndBgColor.call(this, typesArr);
+                } else {
+                    // reset to default look if nothing connected or auto-color disabled
+                    this.color = undefined;
+                    this.bgcolor = undefined;
+                }
 
                 // Return combined constant names from SetTwinNodes and Kijai's SetNode (prefixed)
                 this.getCombinedConstantNames = function() {
