@@ -158,6 +158,19 @@ export const timerStyles = `
     text-overflow: ellipsis;
     min-width: 200px;
 }
+
+.cg-timer-table td.run-n.live-run {
+    background-color: #4442
+}
+
+.cg-timer-table tr.live-node {
+    background-color: #6662;
+}
+
+.cg-timer-table tr.live-node td.live-run {
+    background-color: #6662;
+}
+
 .cg-timer-table .runs,
 .cg-timer-table .per-run,
 .cg-timer-table .per-flow,

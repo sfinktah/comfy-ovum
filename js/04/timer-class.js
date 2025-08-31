@@ -450,17 +450,20 @@ export class Timer {
         /*
         detail.entries = [{m: message, t: timestamp}]
          */
-        e.detail.entries.forEach(entry => {
-            const timpstamp = bestConfigTracker.parseTimestampToMs(entry.t);
-            const msg = entry.m;
-            // Extract regex group if it matches test pattern
-            const match = msg.match(/torch\.backends\.cudnn\.enabled (?:still )?set to (\w+)/);
-            if (match && match[1]) {
-                const group1 = match[1]; // Contains true or false
-                // Process extracted group1 value
-                Timer.cudnn_enabled = group1 === 'True'
+        const entries = e?.detail?.entries;
+        if (!Array.isArray(entries)) return;
+
+        entries.forEach((entry) => {
+            const msg = typeof entry?.m === "string" ? entry.m : "";
+            if (!msg) return;
+
+            // Match explicit booleans case-insensitively
+            const m = msg.match(/torch\.backends\.cudnn\.enabled (?:still )?set to (true|false)/i);
+            if (m) {
+                Timer.cudnn_enabled = m[1].toLowerCase() === "true";
+                console.log('[Timer] cudnn enabled:', Timer.cudnn_enabled);
             }
-        })
+        });
     }
 
     static executionSuccess(e) {
@@ -616,7 +619,7 @@ export class Timer {
         const lastNRunIds = Object.keys(Timer.run_history).sort().reverse().slice(0, Timer.last_n_runs); // -1 to exclude the current run
         console.log('[Timer] lastNRunIds', lastNRunIds);
         const lastNRunCount = Math.min(lastNRunIds.length, Timer.last_n_runs);
-        console.log('[Timer] lastNRunCount', allRunIdsAsc);
+        console.log('[Timer] lastNRunCount', lastNRunCount);
         let displayedRunNumber = 1;
         for (let i = lastNRunCount - 1; i >= 0; i--) {
             const runId = lastNRunIds[i];
