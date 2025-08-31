@@ -7,7 +7,7 @@ import {app} from "../../../scripts/app.js";
 import {$el} from "../../../scripts/ui.js";
 
 import { graphGetNodeById  } from '../01/graphHelpers.js';
-import { chainCallback } from '../01/utility.js';
+import {chainCallback, debounce} from '../01/utility.js';
 import { ensureTooltipLib } from '../01/tooltipHelpers.js';
 import { ensureDynamicInputsImpl} from "../01/dynamicInputHelpers.js";
 import { Timer } from '../04/timer-class.js';
@@ -238,14 +238,9 @@ app.registerExtension({
                 });
                 // ---- End dynamic inputs ----
 
-                /**
-                 * @var {BaseDOMWidgetImpl} widget
-                 */
-                let widget;
-
                 const inputEl = Timer.html();
 
-                widget = this.addDOMWidget(name, 'textmultiline', inputEl, {
+                const widget = this.addDOMWidget(name, 'textmultiline', inputEl, {
                     getValue() {
                         return inputEl.value
                     },
@@ -253,7 +248,7 @@ app.registerExtension({
                         inputEl.value = v
                     },
                 })
-                widget.inputEl = inputEl
+                widget.element = inputEl
                 widget.onRemove = () => {
                     inputEl.remove()
                 }
@@ -269,7 +264,7 @@ app.registerExtension({
                     this.__sizeInitialized = true;
                 }
 
-                Timer.onChange = function () {
+                Timer.onChange = debounce(function () {
                     const existingTable = widget.inputEl.querySelector('.cg-timer-table');
                     if (existingTable) {
                         existingTable.parentNode.replaceChild(Timer.html('table'), existingTable);
@@ -280,7 +275,7 @@ app.registerExtension({
                     } else {
                         widget.inputEl.replaceChild(Timer.html(), widget.inputEl.firstChild);
                     }
-                }
+                }, 500);
                 setTimeout(() => {
                     Timer.onChange();
                     // Forward wheel events to canvas when Ctrl is pressed

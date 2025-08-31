@@ -30,3 +30,27 @@ export function chainCallback(object, property, callback) {
 export function stripTrailingId(title) {
     return title.replace(/ \(\d+\)$/, '');
 }
+
+export function debounce(fn, wait = 0) {
+    let timeoutId;
+    function debounced(...args) {
+        const context = this;
+        clearTimeout(timeoutId);
+        timeoutId = setTimeout(() => {
+            timeoutId = null;
+            fn.apply(context, args);
+        }, wait);
+    }
+    debounced.cancel = () => {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+    };
+    debounced.flush = () => {
+        if (timeoutId) {
+            clearTimeout(timeoutId);
+            timeoutId = null;
+            fn();
+        }
+    };
+    return debounced;
+}

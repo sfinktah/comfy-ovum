@@ -14,6 +14,7 @@ import { bestConfigTracker } from "../01/best-config-tracker.js";
 const LOCALSTORAGE_KEY = 'ovum.timer.history';
 
 export class Timer {
+    static debug = false;
     static all_times = [];
     static run_history = {}; // Store timings for each run
     static pending_run_notes = null;
