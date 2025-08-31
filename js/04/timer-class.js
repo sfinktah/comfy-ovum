@@ -834,41 +834,30 @@ export class Timer {
         // Build list of all run notes
         // const allRunIdsAsc = Object.keys(Timer.run_history).sort(); // chronological by id
         const notesListEl = $el("div", { className: "cg-timer-notes-list" });
-        let rn = 1;
-        for (let i = 0; i < allRunIdsAsc.length; i++) {
-            const runId = allRunIdsAsc[i];
-            if (!Timer.run_notes[runId]) {
-                continue;
+
+        const runIds = Object.keys(Timer.run_history).sort().reverse().slice(0, Timer.last_n_runs);
+        let runNumber = 1;
+        for (let i = runIds.length - 1; i >= 0; i--) {
+            const runId = runIds[i];
+            if (Timer.run_notes[runId]) {
+                const header = $el("div", {
+                    className: "cg-run-note-header",
+                    textContent: `RUN ${rn}`,
+                });
+                const noteText = Timer.run_notes[runId] || "";
+                const body = $el("div", {
+                    className: "cg-run-note-body",
+                    textContent: noteText,
+                });
+
+                // Wrap header and body into a flex container; styling handled via CSS
+                const row = $el("div", {
+                    className: "cg-run-note",
+                }, [header, body]);
+
+                notesListEl.append(row);
             }
-            const header = $el("div", {
-                className: "cg-run-note-header",
-                textContent: `RUN ${rn}`,
-                onmouseenter: ev => {
-                    ev.currentTarget.style.cursor = (ev.ctrlKey || Timer.ctrlDown) ? 'not-allowed' : '';
-                },
-                onmousemove: ev => {
-                    ev.currentTarget.style.cursor = (ev.ctrlKey || Timer.ctrlDown) ? 'not-allowed' : '';
-                },
-                onclick: ev => {
-                    if (!ev.ctrlKey) return;
-                    if (Timer.run_history[runId]) delete Timer.run_history[runId];
-                    if (Timer.run_notes[runId]) delete Timer.run_notes[runId];
-                    if (Timer.onChange) Timer.onChange();
-                }
-            });
-            const noteText = Timer.run_notes[runId] || "";
-            const body = $el("div", {
-                className: "cg-run-note-body",
-                textContent: noteText,
-            });
-
-            // Wrap header and body into a flex container; styling handled via CSS
-            const row = $el("div", {
-                className: "cg-run-note",
-            }, [header, body]);
-
-            notesListEl.append(row);
-            rn++;
+            runNumber++;
         }
 
         // Header for the notes section
