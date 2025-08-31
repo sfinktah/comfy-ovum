@@ -554,16 +554,13 @@ export class Timer {
             placeholder: "Quick search...",
             value: Timer.searchTerm,
             oninput: e => {
-                // console.log('html.search.oninput');
                 Timer.searchTerm = e.target.value;
                 if (Timer.onChange) Timer.onChange();
             },
             onenter: e => {
-                // console.log('html.search.onenter');
             },
             // Prevent ComfyUI/global key handlers while typing here
             onkeydown: e => {
-                // console.log('html.search.onkeydown');
                 if (e.key === "Enter" || e.key === "Escape")
                     e.stopPropagation();
             },
@@ -842,7 +839,7 @@ export class Timer {
             if (Timer.run_notes[runId]) {
                 const header = $el("div", {
                     className: "cg-run-note-header",
-                    textContent: `RUN ${rn}`,
+                    textContent: `RUN ${runNumber}`,
                 });
                 const noteText = Timer.run_notes[runId] || "";
                 const body = $el("div", {
