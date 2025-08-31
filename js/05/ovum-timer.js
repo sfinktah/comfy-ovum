@@ -265,21 +265,21 @@ app.registerExtension({
                 }
 
                 Timer.onChange = debounce(function () {
-                    const existingTable = widget.inputEl.querySelector('.cg-timer-table');
+                    const existingTable = widget.element.querySelector('.cg-timer-table');
                     if (existingTable) {
                         existingTable.parentNode.replaceChild(Timer.html('table'), existingTable);
-                        const existingNotes = widget.inputEl.querySelector('.cg-timer-notes-list-wrapper');
+                        const existingNotes = widget.element.querySelector('.cg-timer-notes-list-wrapper');
                         if (existingNotes) {
                             existingNotes.parentNode.replaceChild(Timer.html('cg-timer-notes-list-wrapper'), existingNotes);
                         }
                     } else {
-                        widget.inputEl.replaceChild(Timer.html(), widget.inputEl.firstChild);
+                        widget.element.replaceChild(Timer.html(), widget.element.firstChild);
                     }
                 }, 500);
                 setTimeout(() => {
                     Timer.onChange();
                     // Forward wheel events to canvas when Ctrl is pressed
-                    forwardWheelToCanvas(widget.inputEl, app.canvas.canvas);
+                    forwardWheelToCanvas(widget.element, app.canvas.canvas);
                 }, 100);
             });
         }
