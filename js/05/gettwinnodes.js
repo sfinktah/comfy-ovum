@@ -29,6 +29,11 @@ import {
     showAlert,
     findSetters,
     findSetter,
+    ensureOutputSlots,
+    ensureWidgetCount,
+    normalizeWidgetLabels,
+    validateNodeLinks,
+    getPreviousWidgetName
 } from "../01/twinnodeHelpers.js";
 
 // mostly written by GPT-5
@@ -152,25 +157,13 @@ app.registerExtension({
 
                 // Ensure there are at least N combo widgets for constants, each with a values provider
                 this.ensureGetterWidgetCount = function(count) {
-                    const current = this.widgets?.length || 0;
-                    for (let i = current; i < count; i++) {
-                        const idx = i;
-                        const created = this.addWidget(
-                            "combo",
-                            `Constant ${idx + 1}`,
-                            "",
-                            () => {
-                                this.onRename();
-                            },
-                            {
-                                values: () => {
-                                    return this.getCombinedConstantNames();
-                                }
-                            }
-                        );
-                        // Hook the value setter to track previous value
-                        wrapWidgetValueSetter(created);
-                    }
+                    ensureWidgetCount(this, count, "combo", "Constant", () => {
+                        this.onRename();
+                    }, {
+                        values: () => {
+                            return this.getCombinedConstantNames();
+                        }
+                    });
                     // Normalize widget labels to Constant 1, Constant 2, ...
                     this.normalizeGetterWidgetLabels();
                 };
@@ -180,18 +173,12 @@ app.registerExtension({
                     console.log("[GetTwinNodes] ensureOutputCount");
                     const min = this.properties?.constCount || 2;
                     count = Math.max(min, count);
-                    while ((this.outputs?.length || 0) < count) this.addOutput("*", "*");
-                    while ((this.outputs?.length || 0) > count) this.removeOutput(this.outputs.length - 1);
+                    ensureOutputSlots(this, count);
                 };
 
                 // Normalize widget labels to "Constant N"
                 this.normalizeGetterWidgetLabels = function() {
-                    if (!Array.isArray(this.widgets)) return;
-                    for (let i = 0; i < this.widgets.length; i++) {
-                        if (this.widgets[i] && typeof this.widgets[i].name !== "undefined") {
-                            this.widgets[i].name = `Constant ${i + 1}`;
-                        }
-                    }
+                    normalizeWidgetLabels(this, "Constant");
                 };
 
                 // ~Start with one selector; expand after matching a setter~
@@ -518,26 +505,12 @@ app.registerExtension({
                 };
 
                 this.validateLinks = function() {
-                    // Validate both outputs
-                    for (let i = 0; i < this.outputs.length; i++) {
-                        if (this.outputs[i].type !== '*' && this.outputs[i].links) {
-                            this.outputs[i].links.filter(linkId => {
-                                const link = GraphHelpers.getLink(node.graph, linkId);
-                                return link && (!link.type.split(",").includes(this.outputs[i].type) && link.type !== '*');
-                            }).forEach(linkId => {
-                                console.log("[GetTwinNodes] Removing invalid link", linkId);
-                                GraphHelpers.removeLink(node.graph, linkId);
-                            });
-                        }
-                    }
+                    validateNodeLinks(this);
                 };
 
                 // Return the previous name recorded for the widget at index 'idx'
                 this.getPreviousName = function(idx) {
-                    const w = this.widgets && this.widgets[idx];
-                    if (!w) return undefined;
-                    if (typeof w.getPreviousName === 'function') return w.getPreviousName();
-                    return w["#previous"];
+                    return getPreviousWidgetName(this, idx);
                 };
 
                 // Listen for broadcast rename events and update matching widget values

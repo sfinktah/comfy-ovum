@@ -28,7 +28,11 @@ import {
     wrapWidgetValueSetter, 
     showAlert, 
     findGetters,
-    propagateToGetters 
+    propagateToGetters,
+    ensureSlotCounts,
+    validateWidgetName,
+    getPreferredSlotLabel,
+    getPreviousWidgetName
 } from "../01/twinnodeHelpers.js";
 
 // mostly written by GPT-5
@@ -96,20 +100,13 @@ app.registerExtension({
                 // Ensure there are N inputs and outputs matching widget count
                 this.ensureSlotCount = function(count) {
                     console.log("[SetTwinNodes] ensureSlotCount");
-                    // grow inputs/outputs
-                    while ((this.inputs?.length || 0) < count) this.addInput("*", "*");
-                    while ((this.outputs?.length || 0) < count) this.addOutput("*", "*");
-                    // shrink inputs/outputs if needed
-                    while ((this.inputs?.length || 0) > count) this.removeInput(this.inputs.length - 1);
-                    while ((this.outputs?.length || 0) > count) this.removeOutput(this.outputs.length - 1);
+                    ensureSlotCounts(this, count);
                 };
 
                 // Get a human-friendly label from the connected output: prefer label, then name, then type
                 this.getPreferredSlotLabel = function(fromNode, originSlotIndex) {
                     console.log("[SetTwinNodes] getPreferredSlotLabel");
-                    const srcSlot = fromNode?.outputs?.[originSlotIndex];
-                    const lbl = srcSlot?.label || srcSlot?.name || srcSlot?.type;
-                    return (lbl && String(lbl).trim()) || "";
+                    return getPreferredSlotLabel(fromNode, originSlotIndex);
                 };
 
                 // Normalize labels without adding numbers; keep duplicates as-is.
@@ -465,42 +462,12 @@ app.registerExtension({
                 // Ensure a widget's name is unique across all SetTwinNodes widgets in the graph.
                 // If a collision is found, append _0, _1, ... to the original base.
                 this.validateWidgetName = function(graph, idx) {
-                    if (!graph || !this.widgets || !this.widgets[idx]) return;
-                    let base = String(this.widgets[idx].value || "").trim();
-                    if (!base) return;
-
-                    // Collect every widget value from all SetTwinNodes (excluding this exact widget)
-                    const existingValues = new Set();
-                    graph._nodes.forEach(otherNode => {
-                        if (otherNode && otherNode.type === 'SetTwinNodes' && Array.isArray(otherNode.widgets)) {
-                            otherNode.widgets.forEach((w, wi) => {
-                                if (!w) return;
-                                if (otherNode === this && wi === idx) return; // skip self at same index
-                                const v = (w.value != null) ? String(w.value).trim() : "";
-                                if (v) existingValues.add(v);
-                            });
-                        }
-                    });
-
-                    // If base collides, append _0, _1, ...
-                    if (existingValues.has(base)) {
-                        let tries = 0;
-                        let candidate = `${base}_${tries}`;
-                        while (existingValues.has(candidate)) {
-                            tries++;
-                            candidate = `${base}_${tries}`;
-                        }
-                        this.widgets[idx].value = candidate;
-                    }
-                    this.update();
+                    validateWidgetName(this, graph, idx);
                 }
 
                 // Return the previous name recorded for the widget at index 'idx'
                 this.getPreviousName = function(idx) {
-                    const w = this.widgets && this.widgets[idx];
-                    if (!w) return undefined;
-                    if (typeof w.getPreviousName === 'function') return w.getPreviousName();
-                    return w["#previous"];
+                    return getPreviousWidgetName(this, idx);
                 };
 
                 this.clone = function () {

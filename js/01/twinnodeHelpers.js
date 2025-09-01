@@ -320,3 +320,116 @@ export function propagateToGetters(node) {
         // ignore broadcast errors
     }
 }
+
+// Slot management helper functions
+export function ensureInputSlots(node, count) {
+    console.log("[ensureInputSlots] count:", count);
+    while ((node.inputs?.length || 0) < count) node.addInput("*", "*");
+    while ((node.inputs?.length || 0) > count) node.removeInput(node.inputs.length - 1);
+}
+
+export function ensureOutputSlots(node, count) {
+    console.log("[ensureOutputSlots] count:", count);
+    while ((node.outputs?.length || 0) < count) node.addOutput("*", "*");
+    while ((node.outputs?.length || 0) > count) node.removeOutput(node.outputs.length - 1);
+}
+
+export function ensureSlotCounts(node, count) {
+    console.log("[ensureSlotCounts] count:", count);
+    ensureInputSlots(node, count);
+    ensureOutputSlots(node, count);
+}
+
+// Widget management helper functions
+export function ensureWidgetCount(node, count, widgetType, namePrefix, callback, options) {
+    console.log("[ensureWidgetCount] count:", count, "type:", widgetType);
+    const current = node.widgets?.length || 0;
+    for (let i = current; i < count; i++) {
+        const idx = i;
+        const created = node.addWidget(
+            widgetType,
+            `${namePrefix} ${idx + 1}`,
+            "",
+            callback ? (...args) => callback(idx, ...args) : undefined,
+            options || {}
+        );
+        // Hook the value setter to track previous value
+        wrapWidgetValueSetter(created);
+    }
+}
+
+export function normalizeWidgetLabels(node, namePrefix) {
+    console.log("[normalizeWidgetLabels] namePrefix:", namePrefix);
+    if (!Array.isArray(node.widgets)) return;
+    for (let i = 0; i < node.widgets.length; i++) {
+        if (node.widgets[i] && typeof node.widgets[i].name !== "undefined") {
+            node.widgets[i].name = `${namePrefix} ${i + 1}`;
+        }
+    }
+}
+
+// Link validation helper function
+export function validateNodeLinks(node) {
+    console.log("[validateNodeLinks]");
+    if (!node.outputs) return;
+
+    for (let i = 0; i < node.outputs.length; i++) {
+        if (node.outputs[i].type !== '*' && node.outputs[i].links) {
+            node.outputs[i].links.filter(linkId => {
+                const link = GraphHelpers.getLink(node.graph, linkId);
+                return link && (!link.type.split(",").includes(node.outputs[i].type) && link.type !== '*');
+            }).forEach(linkId => {
+                console.log("[validateNodeLinks] Removing invalid link", linkId);
+                GraphHelpers.removeLink(node.graph, linkId);
+            });
+        }
+    }
+}
+
+// Widget name validation helper function
+export function validateWidgetName(node, graph, idx) {
+    if (!graph || !node.widgets || !node.widgets[idx]) return;
+    let base = String(node.widgets[idx].value || "").trim();
+    if (!base) return;
+
+    // Collect every widget value from all SetTwinNodes (excluding this exact widget)
+    const existingValues = new Set();
+    graph._nodes.forEach(otherNode => {
+        if (otherNode && otherNode.type === 'SetTwinNodes' && Array.isArray(otherNode.widgets)) {
+            otherNode.widgets.forEach((w, wi) => {
+                if (!w) return;
+                if (otherNode === node && wi === idx) return; // skip self at same index
+                const v = (w.value != null) ? String(w.value).trim() : "";
+                if (v) existingValues.add(v);
+            });
+        }
+    });
+
+    // If base collides, append _0, _1, ...
+    if (existingValues.has(base)) {
+        let tries = 0;
+        let candidate = `${base}_${tries}`;
+        while (existingValues.has(candidate)) {
+            tries++;
+            candidate = `${base}_${tries}`;
+        }
+        node.widgets[idx].value = candidate;
+    }
+    node.update();
+}
+
+// Slot label helper function
+export function getPreferredSlotLabel(fromNode, originSlotIndex) {
+    console.log("[getPreferredSlotLabel]");
+    const srcSlot = fromNode?.outputs?.[originSlotIndex];
+    const lbl = srcSlot?.label || srcSlot?.name || srcSlot?.type;
+    return (lbl && String(lbl).trim()) || "";
+}
+
+// Previous name helper function
+export function getPreviousWidgetName(node, idx) {
+    const w = node.widgets && node.widgets[idx];
+    if (!w) return undefined;
+    if (typeof w.getPreviousName === 'function') return w.getPreviousName();
+    return w["#previous"];
+}
