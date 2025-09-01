@@ -1,0 +1,39 @@
+function() {
+      setActivePinia(pinia2);
+      const args = Array.from(arguments);
+      const afterCallbackList = [];
+      const onErrorCallbackList = [];
+      function after(callback) {
+        afterCallbackList.push(callback);
+      }
+      __name(after, "after");
+      function onError(callback) {
+        onErrorCallbackList.push(callback);
+      }
+      __name(onError, "onError");
+      triggerSubscriptions(actionSubscriptions, {
+        args,
+        name: wrappedAction[ACTION_NAME],
+        store,
+        after,
+        onError
+      });
+      let ret;
+      try {
+        ret = fn.apply(this && this.$id === $id ? this : store, args);
+      } catch (error2) {
+        triggerSubscriptions(onErrorCallbackList, error2);
+        throw error2;
+      }
+      if (ret instanceof Promise) {
+        return ret.then((value) => {
+          triggerSubscriptions(afterCallbackList, value);
+          return value;
+        }).catch((error2) => {
+          triggerSubscriptions(onErrorCallbackList, error2);
+          return Promise.reject(error2);
+        });
+      }
+      triggerSubscriptions(afterCallbackList, ret);
+      return ret;
+    }

@@ -27,9 +27,7 @@ import {
     makeUnlinkedName, 
     wrapWidgetValueSetter, 
     showAlert, 
-    findSetters, 
-    findSetter, 
-    findGetters, 
+    findGetters,
     propagateToGetters 
 } from "../01/twinnodeHelpers.js";
 

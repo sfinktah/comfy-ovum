@@ -29,8 +29,6 @@ import {
     showAlert,
     findSetters,
     findSetter,
-    findGetters,
-    propagateToGetters
 } from "../01/twinnodeHelpers.js";
 
 // mostly written by GPT-5
@@ -612,12 +610,20 @@ app.registerExtension({
                 const setter = findSetter(this, this.widgets[slot].value);
 
                 if (setter) {
-                    const slotInfo = setter.inputs[slot];
-                    const link = GraphHelpers.getLink(this.graph, slotInfo.link);
+                    const input = setter.inputs[slot];
+                    const link = GraphHelpers.getLink(this.graph, input.link);
                     return link;
                 } else {
-                    const errorMessage = "No SetTwinNodes found for " + this.widgets[0].value + "(" + this.type + ")";
-                    showAlert(errorMessage);
+                    // No SetTwinNodes found for BOOLEAN(GetTwinNodes). Most likely you're missing custom nodes
+                    const errorMessage = "No SetTwinNode found for the first input (" + this.widgets[slot].value + ") of the GetTwinNodes titled " + this.title;
+                    showAlert(errorMessage, {
+                        summary: "GetTwinNodes Error",
+                        severity: "error",
+                        detail: errorMessage,
+                    });
+
+                    this.canvas.centerOnNode(this);
+                    this.canvas.selectNode(this, false);
                     //throw new Error(errorMessage);
                 }
             }

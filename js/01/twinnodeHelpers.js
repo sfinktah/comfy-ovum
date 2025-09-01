@@ -7,6 +7,7 @@
 /** @typedef {import("@comfyorg/litegraph/dist/litegraph").LiteGraph} LiteGraph */
 /** @typedef {import("@comfyorg/litegraph/dist/types/serialisation").SubgraphIO} SubgraphIO */
 /** @typedef {import('@comfyorg/comfyui-frontend-types').ComfyApp} ComfyApp */
+/** @typedef {import('@comfyorg/comfyui-frontend-types').ToastMessageOptions} ToastMessageOptions */
 /** @typedef {import('@comfyorg/litegraph/dist/litegraph').LGraphCanvas} LGraphCanvas */
 /** @typedef {import('@comfyorg/litegraph/dist/litegraph').LGraph} LGraph */
 /** @typedef {import('@comfyorg/litegraph/dist/litegraph').LLink} LLink */
@@ -199,12 +200,26 @@ export function wrapWidgetValueSetter(widget) {
     }
 }
 
-export function showAlert(message) {
-    app.extensionManager.toast.add({
+/**
+ * Display a toast message with a custom icon and color.
+ * @param detail
+ * @param {ToastMessageOptions} options - Toast message configuration options
+ * @param {'success' | 'info' | 'warn' | 'error' | 'secondary' | 'contrast'} [options.severity='info'] - Severity level of the message.
+ * @param {string} [options.summary] - Summary content of the message.
+ * @param {*} [options.detail] - Detail content of the message.
+ * @param {boolean} [options.closable=true] - Whether the message can be closed manually using the close icon.
+ * @param {number} [options.life] - Delay in milliseconds to close the message automatically.
+ * @param {string} [options.group] - Key of the Toast to display the message.
+ * @param {*} [options.styleClass] - Style class of the message.
+ * @param {*} [options.contentStyleClass] - Style class of the content.
+ */
+export function showAlert(detail, options = {}) {
+    return app.extensionManager.toast.add({
         severity: 'warn',
         summary: "Get/SetTwinNodes",
-        detail: `${message}. Most likely you're missing custom nodes`,
+        detail: detail,
         life: 5000,
+        ...options
     })
 }
 
