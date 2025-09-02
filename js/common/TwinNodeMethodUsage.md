@@ -11,23 +11,16 @@ I'll first search for the methods defined in both files to create the comparison
 | `onRemoved`                    | ✅                       | ❌                       | ✅                    |
 | `getInputLink`                 | ❌                       | ✅                       | ✅                    |
 | `onConfigure`                  | ❌                       | ✅                       | ✅                    |
-| `getPreviousName`              | ✅                       | ✅                       | ❌                    |
 | `_drawVirtualLinks`            | ✅                       | ❌                       | ❌                    |
 | `applyAbbreviatedOutputLabels` | ✅                       | ❌                       | ❌                    |
 | `applyDuplicateNumbering`      | ✅                       | ❌                       | ❌                    |
-| `ensureSlotCount`              | ✅                       | ❌                       | ❌                    |
-| `getPreferredSlotLabel`        | ✅                       | ❌                       | ❌                    |
 | `onBeforeConnectInput`         | ✅                       | ❌                       | ❌                    |
 | `onWidgetChanged`              | ✅                       | ❌                       | ❌                    |
 | `updateTitle`                  | ✅                       | ❌                       | ❌                    |
 | `update`                       | ✅                       | ❌                       | ❌                    |
-| `validateWidgetName`           | ✅                       | ❌                       | ❌                    |
 | `_drawVirtualLink`             | ❌                       | ✅                       | ❌                    |
-| `ensureGetterWidgetCount`      | ❌                       | ✅                       | ❌                    |
-| `ensureOutputCount`            | ❌                       | ✅                       | ❌                    |
 | `getCombinedConstantNames`     | ❌                       | ✅                       | ❌                    |
 | `goToSetter`                   | ❌                       | ✅                       | ❌                    |
-| `normalizeGetterWidgetLabels`  | ❌                       | ✅                       | ❌                    |
 | `onRename`                     | ❌                       | ✅                       | ❌                    |
 | `setName`                      | ❌                       | ✅                       | ❌                    |
 | `setNamesArray`                | ❌                       | ✅                       | ❌                    |
@@ -173,12 +166,14 @@ I'll first search for the methods defined in both files to create the comparison
 
 This table shows the distribution of methods across the three contexts:
 
-- **SetTwinNodes unique methods (14)**: Methods specifically for managing Set functionality like `updateTitle`, `validateWidgetName`, `ensureSlotCount`, `applyDuplicateNumbering`, etc.
+- **SetTwinNodes unique methods (7)**: Methods specifically for managing Set functionality like `updateTitle`, `applyDuplicateNumbering`, `_drawVirtualLinks`, etc.
 
-- **GetTwinNodes unique methods (15)**: Methods specifically for managing Get functionality like `getCombinedConstantNames`, `ensureGetterWidgetCount`, `onRename`, `setName`, `setTypes`, `validateLinks`, etc.
+- **GetTwinNodes unique methods (10)**: Methods specifically for managing Get functionality like `getCombinedConstantNames`, `goToSetter`, `onRename`, `setName`, `setTypes`, etc.
 
 - **ComfyNode-only methods (90+)**: Most of the inherited functionality from the base LGraphNode/ComfyNode classes that both SetTwinNodes and GetTwinNodes use but don't override.
 
 - **Common overridden methods (7)**: Both classes override `constructor`, `clone`, `onAdded`, `onConnectionsChange`, `onDrawForeground`, `getExtraMenuOptions`, and `getPreviousName`.
 
-The table demonstrates that while both classes share the same inheritance structure, they implement distinct specialized functionality for their respective roles in the twin node system.
+**Refactored to shared helpers (8)**: Functions like `ensureSlotCount`, `ensureOutputCount`, `validateWidgetName`, `validateLinks`, `getPreviousName`, `getPreferredSlotLabel`, `ensureGetterWidgetCount`, and `normalizeGetterWidgetLabels` have been moved to `twinnodeHelpers.js` to reduce code duplication.
+
+The table demonstrates that while both classes share the same inheritance structure, they implement distinct specialized functionality for their respective roles in the twin node system. Common functionality has been refactored into shared helper functions to improve maintainability.

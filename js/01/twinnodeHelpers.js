@@ -334,10 +334,12 @@ export function ensureOutputSlots(node, count) {
     while ((node.outputs?.length || 0) > count) node.removeOutput(node.outputs.length - 1);
 }
 
-export function ensureSlotCounts(node, count) {
-    console.log("[ensureSlotCounts] count:", count);
-    ensureInputSlots(node, count);
-    ensureOutputSlots(node, count);
+/** @param {TwinNodes} node */
+export function ensureSlotCounts(node) {
+    const inputCount = node.numberOfInputSlots;
+    const outputCount = node.numberOfOutputSlots;
+    ensureInputSlots(node, inputCount);
+    ensureOutputSlots(node, outputCount);
 }
 
 // Widget management helper functions

@@ -1,4 +1,5 @@
 /** @typedef {import('@comfyorg/comfyui-frontend-types').ComfyApp} ComfyApp */
+/** @typedef {import('@comfyorg/litegraph').LiteGraph} LiteGraph */
 /** @typedef {import('../01/typedefs.js').INodeInputSlot} INodeInputSlot */
 
 import {api} from "../../../scripts/api.js";
@@ -157,7 +158,7 @@ app.registerExtension({
                 }
             });
 
-            chainCallback(nodeType.prototype, "onNodeCreated", function () {
+            chainCallback(nodeType.prototype, "onNodeCreated", /** @this {ComfyNode} */ function () {
                 console.log('beforeRegisterNodeDef.onNodeCreated', this);
                 const node = this;
 
@@ -203,7 +204,7 @@ app.registerExtension({
                 };
 
                 // Initialize dynamic inputs
-                ensureDynamicInputs();
+                // ensureDynamicInputs();
 
                 // Update labels/types and manage dynamic slots on connect/disconnect
                 chainCallback(node, "onConnectionsChange", function (slotType, slot, isConnecting, linkInfo, output) {

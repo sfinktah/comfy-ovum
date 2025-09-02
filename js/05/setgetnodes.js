@@ -34,6 +34,7 @@ import {
     getPreferredSlotLabel,
     getPreviousWidgetName
 } from "../01/twinnodeHelpers.js";
+import { TwinNodes } from "../common/twinNodes.js";
 
 // mostly written by GPT-5
 // based on KJ's SetGet: https://github.com/kj-comfy/ComfyUI-extensions which was
@@ -43,16 +44,13 @@ import {
 let disablePrefix = app.ui.settings.getSettingValue("KJNodes.disablePrefix")
 const LGraphNode = LiteGraph.LGraphNode
 
+// TwinNodes base moved to ../common/twinNodes.js and imported above
+
 app.registerExtension({
     name: "SetTwinNodes",
     registerCustomNodes() {
-        class SetTwinNodes extends LGraphNode {
-            defaultVisibility = true;
-            serialize_widgets = true;
-            drawConnection = false;
+        class SetTwinNodes extends TwinNodes {
             currentGetters = null;
-            slotColor = "#FFF";
-            canvas = app.canvas;
             menuEntry = "Show connections";
 
             constructor(title) {
@@ -95,18 +93,6 @@ app.registerExtension({
 
                     // After updating the title/color, apply shortened labels to outputs when appropriate
                     this.applyAbbreviatedOutputLabels();
-                };
-
-                // Ensure there are N inputs and outputs matching widget count
-                this.ensureSlotCount = function(count) {
-                    console.log("[SetTwinNodes] ensureSlotCount");
-                    ensureSlotCounts(this, count);
-                };
-
-                // Get a human-friendly label from the connected output: prefer label, then name, then type
-                this.getPreferredSlotLabel = function(fromNode, originSlotIndex) {
-                    console.log("[SetTwinNodes] getPreferredSlotLabel");
-                    return getPreferredSlotLabel(fromNode, originSlotIndex);
                 };
 
                 // Normalize labels without adding numbers; keep duplicates as-is.
@@ -215,7 +201,7 @@ app.registerExtension({
                         }
                     }
                 }
-                this.ensureSlotCount(initialCount);
+                ensureSlotCounts(this);
                 // Initialize previousNames snapshot to current widget values
                 this.properties.previousNames = (this.widgets || []).map(w => (w && w.value != null ? String(w.value).trim() : ""));
                 this.updateTitle();
@@ -302,6 +288,7 @@ app.registerExtension({
                             if (this.outputs?.[index]) {
                                 this.outputs[index].type = '*';
                                 this.outputs[index].name = '*';
+                                this.outputs[index].label = '*';
                             }
                             if (this.widgets?.[index]) {
                                 this.widgets[index].value = '';
@@ -309,8 +296,8 @@ app.registerExtension({
                             // Re-number duplicates among remaining connected inputs
                             this.applyDuplicateNumbering();
                             this.updateTitle();
-                            propagateToGetters(this);
-                            this.update();
+                            // propagateToGetters(this);
+                            // this.update();
 
                             // Cleanup
                             if (this.__disconnectTimers) delete this.__disconnectTimers[slotKey];
@@ -325,9 +312,10 @@ app.registerExtension({
                         if (this.outputs?.[index]) {
                             this.outputs[index].type = '*';
                             this.outputs[index].name = '*';
+                            this.outputs[index].label = '*';
                         }
                         this.updateTitle();
-                        this.update();
+                        // this.update();
                         return;
                     }
 
@@ -368,13 +356,13 @@ app.registerExtension({
                                 }
 
                                 // Propagate updated types to getters without altering names
-                                propagateToGetters(this);
+                                // propagateToGetters(this);
 
-                                this.update();
+                                // this.update();
                                 return;
                             }
 
-                            const basePreferred = this.getPreferredSlotLabel(fromNode, link_info.origin_slot) || type || '*';
+                            const basePreferred = getPreferredSlotLabel(fromNode, link_info.origin_slot) || type || '*';
 
                             // If the preferred label is a "lame name" (equals type), see if exactly one GetTwinNodes
                             // has a starred constant and an output typed to this 'type'. If so, adopt that label,
@@ -431,7 +419,7 @@ app.registerExtension({
 
                             // Update title/color and propagate
                             this.updateTitle();
-                            propagateToGetters(this);
+                            // propagateToGetters(this);
 
                             // Note: we don't actually have a settings panel yet
                             if (app.ui.settings.getSettingValue("KJNodes.nodeAutoColor")) {
@@ -446,7 +434,7 @@ app.registerExtension({
                         } else {
                             showAlert("node input undefined.");
                         }
-                        this.update();
+                        // this.update();
                         return;
                     }
 
@@ -454,7 +442,7 @@ app.registerExtension({
                     if (link_info && this.graph && type === LiteGraph.OUTPUT && isConnected) {
                         mirrorOutputFromInput(index);
                         this.updateTitle();
-                        this.update();
+                        // this.update();
                         return;
                     }
                 }
@@ -465,11 +453,6 @@ app.registerExtension({
                     validateWidgetName(this, graph, idx);
                 }
 
-                // Return the previous name recorded for the widget at index 'idx'
-                this.getPreviousName = function(idx) {
-                    return getPreviousWidgetName(this, idx);
-                };
-
                 this.clone = function () {
                     const cloned = SetTwinNodes.prototype.clone.apply(this);
                     // Reset all inputs
@@ -477,6 +460,7 @@ app.registerExtension({
                         for (let i = 0; i < cloned.inputs.length; i++) {
                             cloned.inputs[i].name = '*';
                             cloned.inputs[i].type = '*';
+                            cloned.inputs[i].label = '*';
                         }
                     }
                     cloned.value = '';
@@ -489,8 +473,6 @@ app.registerExtension({
                     if (Array.isArray(this.widgets)) {
                         for (let i = 0; i < this.widgets.length; i++) {
                             this.validateWidgetName(graph, i);
-                            // Hook any pre-existing widget instances
-                            try { wrapWidgetValueSetter(this.widgets[i]); } catch (_e) {}
                         }
                     }
                 }
@@ -510,7 +492,7 @@ app.registerExtension({
                     // this line only used for debug output
                     const getters = findGetters(node);
                     console.log("[SetTwinNodes] getters (propagation targets)", getters);
-                    propagateToGetters(this, getters);
+                    // propagateToGetters(this, getters);
 
                     // Rename propagation across all widget indices:
                     // compare previousNames snapshot vs current widget values and
@@ -546,8 +528,6 @@ app.registerExtension({
                     this.properties.previousNames = currNames;
                 }
 
-                // This node is purely frontend and does not impact the resulting prompt so should not be serialized
-                this.isVirtualNode = true;
             }
 
 

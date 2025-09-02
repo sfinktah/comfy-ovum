@@ -29,12 +29,13 @@ import {
     showAlert,
     findSetters,
     findSetter,
-    ensureOutputSlots,
     ensureWidgetCount,
     normalizeWidgetLabels,
     validateNodeLinks,
-    getPreviousWidgetName
+    getPreviousWidgetName,
+    ensureSlotCounts
 } from "../01/twinnodeHelpers.js";
+import { TwinNodes } from "../common/twinNodes.js";
 
 // mostly written by GPT-5
 // based on KJ's SetGet: https://github.com/kj-comfy/ComfyUI-extensions which was
@@ -102,7 +103,7 @@ app.registerExtension({
         }
     },
     registerCustomNodes() {
-        class GetTwinNodes extends LGraphNode {
+        class GetTwinNodes extends TwinNodes {
 
             defaultVisibility = true;
             serialize_widgets = true;
@@ -110,6 +111,7 @@ app.registerExtension({
             slotColor = "#FFF";
             currentSetter = null;
             canvas = app.canvas;
+            numberOfInputSlots = 0;
 
             constructor(title) {
                 super(title)
@@ -122,19 +124,7 @@ app.registerExtension({
                 const node = this;
 
                 // Determine colors using all connected input types in order
-                const typesArr = (this.outputs || [])
-                    .filter(inp => inp?.link != null && inp?.type && inp.type !== '*')
-                    .map(inp => inp.type);
-
-                // Note: we don't actually have a settings panel yet
-                const autoColor = app.ui.settings.getSettingValue("KJNodes.nodeAutoColor");
-                if (typesArr.length && autoColor) {
-                    setColorAndBgColor.call(this, typesArr);
-                } else {
-                    // reset to default look if nothing connected or auto-color disabled
-                    this.color = undefined;
-                    this.bgcolor = undefined;
-                }
+                this.updateTitle();
 
                 // Return combined constant names from SetTwinNodes and Kijai's SetNode (prefixed)
                 this.getCombinedConstantNames = function() {
@@ -169,12 +159,7 @@ app.registerExtension({
                 };
 
                 // Ensure the number of outputs matches count
-                this.ensureOutputCount = function(count) {
-                    console.log("[GetTwinNodes] ensureOutputCount");
-                    const min = this.properties?.constCount || 2;
-                    count = Math.max(min, count);
-                    ensureOutputSlots(this, count);
-                };
+                ensureSlotCounts(this);
 
                 // Normalize widget labels to "Constant N"
                 this.normalizeGetterWidgetLabels = function() {
@@ -184,12 +169,13 @@ app.registerExtension({
                 // ~Start with one selector; expand after matching a setter~
                 const initialCount = this.properties.constCount || 2;
                 this.ensureGetterWidgetCount(initialCount);
-                this.ensureOutputCount(initialCount);
+
                 // Ensure default outputs exist with type "*"
                 for (let i = 0; i < initialCount; i++) {
                     if (this.outputs?.[i]) {
                         this.outputs[i].name = "*";
                         this.outputs[i].type = "*";
+                        this.outputs[i].label = "*";
                     }
                 }
 
@@ -277,6 +263,8 @@ app.registerExtension({
                     if (slotType === LiteGraph.OUTPUT && !isChangeConnect) {
                         this.onRename();
                     }
+                    
+                    this.updateTitle();
                 }
 
                 // Backward-compatible single-name setter
@@ -376,7 +364,7 @@ app.registerExtension({
                         // Always normalize labels after unset/removal
                         this.normalizeGetterWidgetLabels();
                         // Keep outputs count aligned to widgets after any removals
-                        this.ensureOutputCount(this.widgets?.length || 0);
+                        ensureSlotCounts(this);
                     }
 
                     const setter = findSetter(node);
@@ -396,7 +384,7 @@ app.registerExtension({
                         // Ensure enough widgets and outputs
                         const wNeeded = setter.widgets?.length || 0;
                         this.ensureGetterWidgetCount(wNeeded || 2);
-                        this.ensureOutputCount(this.widgets?.length || 0);
+                        ensureSlotCounts(this);
 
                         // Autofill any empty selections from the matched setter (position-agnostic)
                         // Only perform this when we didn't just unset a widget via "(unset)".
@@ -440,7 +428,7 @@ app.registerExtension({
                             const t = label ? (typeByConst[label] || '*') : '*';
 
                             // Ensure output slot exists
-                            if (i >= (this.outputs?.length || 0)) this.ensureOutputCount(i + 1);
+                            if (i >= (this.outputs?.length || 0)) ensureSlotCounts(this);
 
                             if (this.outputs?.[i]) {
                                 this.outputs[i].name = label || '*';
@@ -473,26 +461,8 @@ app.registerExtension({
                             this.ensureGetterWidgetCount(min); // adds empty widgets up to min
                         }
 
-                        // Outputs mirror current selections with '*' type for empties
-                        const count = this.widgets?.length || 1;
-                        this.ensureOutputCount(count);
-                        for (let i = 0; i < count; i++) {
-                            const label = this.widgets?.[i]?.value ? String(this.widgets[i].value).trim() : "";
-                            if (this.outputs?.[i]) {
-                                this.outputs[i].name = label || '*';
-                                this.outputs[i].label = label || '*';
-                                this.outputs[i].type = '*';
-                            }
-                        }
-
-                        // No selection or unknown type: reset color
-                        this.color = undefined;
-                        this.bgcolor = undefined;
+                        ensureSlotCounts(this);
                     }
-
-                    // Build title from selected widget values once, outside the if/else
-                    const namesForTitle = extractWidgetNames(this);
-                    this.title = computeTwinNodeTitle(namesForTitle, "Get", disablePrefix);
 
                     // Finally, validate existing links against updated types
                     this.validateLinks();
@@ -540,7 +510,7 @@ app.registerExtension({
                 this.setTypesArray = function(typesArr) {
                     const min = this.properties?.constCount || 2;
                     const targetCount = Math.max(min, Array.isArray(typesArr) ? typesArr.length : 0);
-                    this.ensureOutputCount(targetCount);
+                    ensureSlotCounts(this);
                     for (let i = 0; i < targetCount; i++) {
                         const t = (typesArr && typesArr[i]) ? typesArr[i] : '*';
                         if (this.outputs?.[i]) {
@@ -558,7 +528,7 @@ app.registerExtension({
 
                 // TODO: Check - legacy single-output setter kept for compatibility with callers that expect setType
                 this.setType = function(type) {
-                    this.ensureOutputCount(1);
+                    ensureSlotCounts(this);
                     if (this.outputs[0]) {
                         this.outputs[0].name = type;
                         this.outputs[0].type = type;
@@ -573,12 +543,34 @@ app.registerExtension({
                         this.canvas.selectNode(setter, false);
                     }
                 };
+                
+                this.updateTitle = function() {
+                    console.log("[GetTwinNodes] updateTitle");
+                    const namesForTitle = extractWidgetNames(this);
+                    this.title = computeTwinNodeTitle(namesForTitle, "Get", disablePrefix);
+
+                    // Determine colors using all connected input types in order
+                    const typesArr = (this.outputs || [])
+                        .filter(inp => inp?.link != null && inp?.type && inp.type !== '*')
+                        .map(inp => inp.type);
+                    
+                    // Note: we don't actually have a settings panel yet
+                    const autoColor = app.ui.settings.getSettingValue("KJNodes.nodeAutoColor");
+                    if (typesArr.length && autoColor) {
+                        setColorAndBgColor.call(this, typesArr);
+                    } else {
+                        // reset to default look if nothing connected or auto-color disabled
+                        this.color = undefined;
+                        this.bgcolor = undefined;
+                    }
+                }
 
                 // This node is purely frontend and does not impact the resulting prompt so should not be serialized
                 this.isVirtualNode = true;
             }
 
-            // TODO: This function doesn't work for shit on the second widget, because findSetter isn't that smart
+
+// TODO: This function doesn't work for shit on the second widget, because findSetter isn't that smart
             getInputLink(slot) {
                 const setter = findSetter(this, this.widgets[slot].value);
 
