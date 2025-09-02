@@ -16,6 +16,7 @@
 /** @typedef {import("../../typings/ComfyNode").ComfyNode} ComfyNode */
 /** @typedef {import("../common/graphHelpersForTwinNodes.js").GraphHelpers} GraphHelpers */
 /** @typedef {import("@comfyorg/litegraph/dist/types/widgets").IWidget} IWidget */
+/** @typedef {import("@comfyorg/litegraph/dist/litegraph").ContextMenuItem} ContextMenuItem */
 
 import { app } from "../../../scripts/app.js";
 import { GraphHelpers } from "../common/graphHelpersForTwinNodes.js";
@@ -53,6 +54,11 @@ app.registerExtension({
             currentGetters = null;
             menuEntry = "Show connections";
 
+            /**
+             * Constructs a new SetTwinNodes instance.
+             * Mirrors the LGraphNode constructor semantics by creating a node with an optional title and initializing defaults.
+             * @param {string} title Optional title displayed in the editor UI.
+             */
             constructor(title) {
                 super(title)
                 if (!this.properties) {
@@ -231,11 +237,11 @@ app.registerExtension({
 
                 /**
                  * @this {ComfyNode}
-                 * @param {ISlotType} type
-                 * @param {number} index
-                 * @param {boolean} isConnected
-                 * @param {LLink|null|undefined} link_info
-                 * @param {INodeInputSlot|INodeOutputSlot|SubgraphIO} inputOrOutput
+                 * @param {number} type LiteGraph.INPUT (1) for input, LiteGraph.OUTPUT (2) for output.
+                 * @param {number} index The slot index being affected.
+                 * @param {boolean} isConnected True when connecting; false when disconnecting.
+                 * @param {LLink|null|undefined} link_info The link descriptor involved in the change.
+                 * @param {INodeInputSlot|INodeOutputSlot|SubgraphIO} inputOrOutput The slot object for the affected side.
                  */
                 this.onConnectionsChange = function(
                     type,	//1 = input, 2 = output
@@ -453,6 +459,12 @@ app.registerExtension({
                     validateWidgetName(this, graph, idx);
                 }
 
+                /**
+                 * Creates a copy of this node.
+                 * Conforms to LGraphNode.clone by returning a cloned node instance; resets slots and recomputes size.
+                 * @this {ComfyNode}
+                 * @returns {ComfyNode} The cloned node.
+                 */
                 this.clone = function () {
                     const cloned = SetTwinNodes.prototype.clone.apply(this);
                     // Reset all inputs
@@ -469,6 +481,12 @@ app.registerExtension({
                     return cloned;
                 };
 
+                /**
+                 * Called when the node is added to a graph.
+                 * Mirrors LGraphNode.onAdded.
+                 * @param {LGraph} graph The graph this node was added to.
+                 * @returns {void}
+                 */
                 this.onAdded = function(graph) {
                     if (Array.isArray(this.widgets)) {
                         for (let i = 0; i < this.widgets.length; i++) {
@@ -531,9 +549,21 @@ app.registerExtension({
             }
 
 
+            /**
+             * Called when the node is removed from the graph.
+             * Mirrors LGraphNode.onRemoved.
+             * @returns {void}
+             */
             onRemoved() {
                 console.log("[SetTwinNodes] onRemoved (kinda think something should happen here)");
             }
+            /**
+             * Allows extending the context menu for this node.
+             * Mirrors LGraphNode.getExtraMenuOptions contract by receiving the canvas and a mutable options array.
+             * @param {LGraphCanvas} _ The graph canvas (unused here).
+             * @param {ContextMenuItem[]} options Array of context menu option entries to extend in place.
+             * @returns {void}
+             */
             getExtraMenuOptions(_, options) {
                 // TODO: -
                 //     - Uses node.currentGetters[0].outputs[0].type to derive a color for the “Show connections” highlight.
@@ -604,6 +634,13 @@ app.registerExtension({
             }
 
 
+            /**
+             * Called to render custom content on top of the node after the node background/body has been drawn.
+             * Mirrors LGraphNode.onDrawForeground.
+             * @param {CanvasRenderingContext2D} ctx Canvas 2D rendering context.
+             * @param {LGraphCanvas} lGraphCanvas The graph canvas.
+             * @returns {void}
+             */
             onDrawForeground(ctx, lGraphCanvas) {
                 if (this.drawConnection) {
                     this._drawVirtualLinks(lGraphCanvas, ctx);

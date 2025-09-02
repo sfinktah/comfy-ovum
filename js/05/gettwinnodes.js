@@ -16,6 +16,8 @@
 /** @typedef {import("../../typings/ComfyNode").ComfyNode} ComfyNode */
 /** @typedef {import("../common/graphHelpersForTwinNodes.js").GraphHelpers} GraphHelpers */
 /** @typedef {import("@comfyorg/litegraph/dist/types/widgets").IWidget} IWidget */
+/** @typedef {import("@comfyorg/litegraph/dist/litegraph").ContextMenuItem} ContextMenuItem */
+/** @typedef {import("@comfyorg/litegraph/dist/litegraph").SerializedLGraphNode} SerializedLGraphNode */
 
 import { app } from "../../../scripts/app.js";
 import { GraphHelpers } from "../common/graphHelpersForTwinNodes.js";
@@ -113,6 +115,11 @@ app.registerExtension({
             canvas = app.canvas;
             numberOfInputSlots = 0;
 
+            /**
+             * Constructs a new GetTwinNodes instance.
+             * Mirrors the LGraphNode constructor semantics by creating a node with an optional title and initializing defaults.
+             * @param {string} title Optional title displayed in the editor UI.
+             */
             constructor(title) {
                 super(title)
                 if (!this.properties) {
@@ -180,6 +187,12 @@ app.registerExtension({
                 }
 
                 // During deserialization, respect serialized widgets/outputs by suppressing auto-derivation for a tick
+                /**
+                 * Called after the node has been configured or deserialized.
+                 * Aligns with LGraphNode.onConfigure; used here to temporarily suppress auto-derivation after restore.
+                 * @param {SerializedLGraphNode} _data The deserialized configuration data for this node.
+                 * @returns {void}
+                 */
                 this.onConfigure = function(_data) {
                     console.log("[GetTwinNodes] onConfigure");
                     this.__restoring = true;
@@ -187,6 +200,16 @@ app.registerExtension({
                     setTimeout(() => { this.__restoring = false; }, 1000);
                 };
 
+                /**
+                 * Called when a connection is created or removed for this node.
+                 * Mirrors LGraphNode.onConnectionsChange semantics.
+                 * @param {number} slotType LiteGraph.INPUT (1) for input, LiteGraph.OUTPUT (2) for output.
+                 * @param {number} slot The slot index being affected.
+                 * @param {boolean} isChangeConnect True when connecting; false when disconnecting.
+                 * @param {LLink|null|undefined} link_info The link descriptor involved in the change.
+                 * @param {INodeInputSlot|INodeOutputSlot|SubgraphIO} output The slot object for the affected side.
+                 * @returns {void}
+                 */
                 this.onConnectionsChange = function(
                     slotType,
                     slot,
@@ -468,6 +491,12 @@ app.registerExtension({
                     this.validateLinks();
                 }
 
+                /**
+                 * Creates a copy of this node.
+                 * Conforms to LGraphNode.clone by returning a cloned node instance with size recomputed.
+                 * @this {ComfyNode}
+                 * @returns {ComfyNode} The cloned node.
+                 */
                 this.clone = function () {
                     const cloned = GetTwinNodes.prototype.clone.apply(this);
                     cloned.size = cloned.computeSize();
@@ -571,6 +600,12 @@ app.registerExtension({
 
 
 // TODO: This function doesn't work for shit on the second widget, because findSetter isn't that smart
+            /**
+             * Returns the link connected to the matched setter's input corresponding to the given output slot.
+             * This is a convenience helper specific to GetTwinNodes.
+             * @param {number} slot Output slot index on this getter.
+             * @returns {LLink|undefined} The found link, or undefined if no matching setter/link exists.
+             */
             getInputLink(slot) {
                 const setter = findSetter(this, this.widgets[slot].value);
 
@@ -592,6 +627,12 @@ app.registerExtension({
                     //throw new Error(errorMessage);
                 }
             }
+            /**
+             * Called when the node is added to a graph.
+             * Mirrors LGraphNode.onAdded.
+             * @param {LGraph} graph The graph this node was added to.
+             * @returns {void}
+             */
             onAdded(graph) {
                 if (Array.isArray(this.widgets)) {
                     for (let i = 0; i < this.widgets.length; i++) {
@@ -600,6 +641,13 @@ app.registerExtension({
                 }
             }
 
+            /**
+             * Allows extending the context menu for this node.
+             * Mirrors LGraphNode.getExtraMenuOptions contract by receiving the canvas and a mutable options array.
+             * @param {LGraphCanvas} _ The graph canvas (unused here).
+             * @param {ContextMenuItem[]} options Array of context menu option entries to extend in place.
+             * @returns {void}
+             */
             getExtraMenuOptions(_, options) {
                 const node = this;
                 let menuEntry = node.drawConnection ? "Hide connections" : "Show connections";
@@ -632,6 +680,13 @@ app.registerExtension({
                 );
             }
 
+            /**
+             * Called to render custom content on top of the node after the node background/body has been drawn.
+             * Mirrors LGraphNode.onDrawForeground.
+             * @param {CanvasRenderingContext2D} ctx Canvas 2D rendering context.
+             * @param {LGraphCanvas} lGraphCanvas The graph canvas.
+             * @returns {void}
+             */
             onDrawForeground(ctx, lGraphCanvas) {
                 if (this.drawConnection) {
                     this._drawVirtualLink(lGraphCanvas, ctx);
