@@ -164,6 +164,7 @@ export function wrapWidgetValueSetter(widget) {
                 // Consider invalid a string that is empty (after trim) or equals '*'
                 const vt = (typeof v === 'string') ? v.trim() : v;
                 const isInvalidString = (typeof v === 'string') && (vt === '' || vt === '*');
+                console.log(`[wrapWidgetValueSetter] ${current} -> ${v}`);
 
                 if (current !== v && !isInvalidString) {
                     try {
@@ -230,13 +231,13 @@ export function findSetters(node, name = undefined) {
     }
     const sourceNames = Array.isArray(node.widgets) ? node.widgets.map(w => (w && w.value != null ? String(w.value).trim() : "")) : [];
     const names = name ? [name] : sourceNames.filter(v => !!v);
-    console.log("[findSetters]", { node: node, names: names });
+    // console.log("[findSetters]", { node: node, names: names });
     if (names.length === 0) return [];
     const nameSet = new Set(names);
     return GraphHelpers.getNodesByType(node.graph, ['SetTwinNodes', 'SetNode']).filter(otherNode =>
         Array.isArray(otherNode.widgets) &&
         otherNode.widgets.some(widget => {
-            console.log("[findSetters] widget", { widget: widget });
+            // console.log("[findSetters] widget", { widget: widget });
             const widgetValue = widget && widget.value != null ? String(widget.value).trim() : "";
             return widgetValue && nameSet.has(widgetValue);
         })
@@ -260,17 +261,28 @@ export function findSetter(node, name = undefined) {
 
 // Match GetTwinNodes if they share at least one name with this node
 // If checkForPreviousName is true, use the previousNames snapshot; otherwise use current widget values.
-export function findGetters(node, checkForPreviousName) {
+export function findGetters(node, checkForPreviousName, widgetIndex) {
     if (!(node instanceof LiteGraph.LGraphNode)) {
         throw new Error("node parameter must be instance of LGraphNode");
     }
-    const sourceNames = checkForPreviousName
-        ? (Array.isArray(node.properties.previousNames) ? node.properties.previousNames : [])
-        : (Array.isArray(node.widgets) ? node.widgets.map(w => (w && w.value != null ? String(w.value).trim() : "")) : []);
-    const names = sourceNames.filter(v => !!v);
-    console.log("[findGetters]", { node: node, checkForPreviousName: checkForPreviousName, names: names });
+
+    // Collect all candidate raw values (either previousNames or current widget values)
+    const allCandidates = checkForPreviousName
+        ? (Array.isArray(node.properties?.previousNames) ? node.properties.previousNames : [])
+        : (Array.isArray(node.widgets) ? node.widgets.map(w => (w && w.value != null ? w.value : "")) : []);
+
+    // If a widget index is provided, only consider that one value; otherwise, consider all
+    const candidates = widgetIndex != null ? [allCandidates[widgetIndex]] : allCandidates;
+
+    // Normalize to trimmed strings and drop empty values
+    const names = candidates
+        .map(v => (v != null ? String(v).trim() : ""))
+        .filter(v => v !== "");
+
+    // console.log("[findGetters]", { node: node, checkForPreviousName: checkForPreviousName, widgetIndex: widgetIndex, names: names });
     if (!node.graph || names.length === 0) return [];
     const nameSet = new Set(names);
+
     return GraphHelpers.getNodesByType(node.graph, 'GetTwinNodes').filter(otherNode =>
         Array.isArray(otherNode.widgets) &&
         otherNode.widgets.some(w => {
@@ -284,7 +296,7 @@ export function propagateToGetters(node) {
     console.log("[propagateToGetters]", { node: node });
     const types = (node.inputs || []).map(input => input?.type || '*');
     const getters = findGetters(node);
-    getters.forEach(/** GetTwinNodes */ getter => {
+    getters.forEach(/** TwinNodes */ getter => {
         if (getter.setTypesArray) {
             getter.setTypesArray(types);
         } else if (getter.setTypes) {
@@ -348,7 +360,7 @@ export function ensureWidgetCount(node, count, widgetType, namePrefix, callback,
     const current = node.widgets?.length || 0;
     for (let i = current; i < count; i++) {
         const idx = i;
-        const created = node.addWidget(
+        const widget = node.addWidget(
             widgetType,
             `${namePrefix} ${idx + 1}`,
             "",
@@ -356,7 +368,7 @@ export function ensureWidgetCount(node, count, widgetType, namePrefix, callback,
             options || {}
         );
         // Hook the value setter to track previous value
-        wrapWidgetValueSetter(created);
+        wrapWidgetValueSetter(widget);
     }
 }
 
@@ -389,7 +401,17 @@ export function validateNodeLinks(node) {
 }
 
 // Widget name validation helper function
-export function validateWidgetName(node, graph, idx) {
+/**
+ * Validates and ensures the uniqueness of a widget's name within a graph structure.
+ * If the name conflicts with other widget values in `SetTwinNodes` nodes in the graph,
+ * it appends a numeric suffix to resolve the conflict.
+ *
+ * @param {Object} node - The node containing the widget to validate.
+ * @param {number} idx - The index of the widget in the node's widget list to validate.
+ * @return {void} This function does not return a value.
+ */
+export function validateWidgetName(node, idx) {
+    const graph = node.graph;
     if (!graph || !node.widgets || !node.widgets[idx]) return;
     let base = String(node.widgets[idx].value || "").trim();
     if (!base) return;

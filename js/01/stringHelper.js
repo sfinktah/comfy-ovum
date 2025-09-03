@@ -107,28 +107,50 @@ export function computeTwinNodeTitle(names, kind, disablePrefix = false) {
 }
 
 /**
- * Extract widget names from a node in a standardized way.
- * Options:
- *  - connectedOnly: when true, include only indices whose input slot has a link (useful for Set nodes)
- * Always returns unique names (first occurrence kept) in original order.
- * @param {{widgets?: Array<{value?: any}>, inputs?: Array<{link?: any}>}} node
- * @param {{connectedOnly?: boolean}} [options]
- * @returns {string[]}
+ * Extracts the names of widgets from a given node, with an optional filter for connected widgets.
+ *
+ * @param {Object} node - The node containing the widgets and optional input/output links.
+ * @param {Object} [options={}] - Optional configuration.
+ * @param {boolean|'inputs'|'outputs'} [options.connectedOnly=false] - If true, include widgets with either input or output links; if "inputs", require connected input links; if "outputs", require connected output links. Other truthy values behave like "inputs".
+ * @param {boolean} [options.unique=true] - If true, return only unique names (preserving first occurrences); if false, allow duplicates.
+ * @return {string[]} An array of widget names, preserving original order; deduplicated when unique is true.
  */
 export function extractWidgetNames(node, options = {}) {
-    const { connectedOnly = false } = options;
-    const result = [];
+    const { connectedOnly = false, unique = true } = options;
     const widgets = Array.isArray(node?.widgets) ? node.widgets : [];
+
+    // Helpers to determine connectivity for index i
+    const hasInputLink = (i) => node?.inputs?.[i]?.link != null;
+    const hasOutputLink = (i) => {
+        const links = node?.outputs?.[i]?.links;
+        return Array.isArray(links) ? links.length > 0 : links != null;
+    };
+
+    const result = [];
+
     for (let i = 0; i < widgets.length; i++) {
+        // Connectivity gating based directly on connectedOnly
         if (connectedOnly) {
-            const link = node?.inputs?.[i]?.link;
-            if (link == null) continue;
+            let linked;
+            if (connectedOnly === 'inputs') {
+                linked = hasInputLink(i);
+            } else if (connectedOnly === 'outputs') {
+                linked = hasOutputLink(i);
+            } else {
+                linked = hasInputLink(i) || hasOutputLink(i);
+            } 
+            if (!linked) continue;
         }
+
         const raw = widgets[i]?.value;
-        const val = raw != null ? String(raw).trim() : "";
-        if (val) result.push(val);
+        if (raw == null) continue;
+
+        const val = String(raw).trim();
+        if (!val) continue;
+        if (unique && result.indexOf(val) !== -1) continue;
+
+        result.push(val);
     }
-    // Deduplicate preserving order
-    const seen = new Set();
-    return result.filter(n => (seen.has(n) ? false : (seen.add(n), true)));
+
+    return result;
 }

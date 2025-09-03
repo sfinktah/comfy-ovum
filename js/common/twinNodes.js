@@ -4,14 +4,14 @@
 /** @typedef {import('@comfyorg/litegraph/dist/litegraph').LGraphCanvas} LGraphCanvas */
 
 import { app } from "../../../scripts/app.js";
-import { wrapWidgetValueSetter, getPreviousWidgetName } from "../01/twinnodeHelpers.js";
+import {wrapWidgetValueSetter, getPreviousWidgetName, setColorAndBgColor} from "../01/twinnodeHelpers.js";
 
 const LGraphNode = LiteGraph.LGraphNode
 export class TwinNodes extends LGraphNode {
     defaultVisibility = true;
     serialize_widgets = true;
     drawConnection = false;
-    slotColor = "#FFF";
+    slotColors = ["#fff", "#fff"];
     canvas = app?.canvas;
     isVirtualNode = true;
     numberOfInputSlots = 2;
@@ -48,5 +48,19 @@ export class TwinNodes extends LGraphNode {
     updateTitle() {
         // To be overridden by subclasses
         console.log("[TwinNodes] updateTitle");
+    }
+
+    updateColors() {
+        // Note: we don't actually have a settings panel yet
+        if (app.ui.settings.getSettingValue("KJNodes.nodeAutoColor")) {
+            const typesArr = (this.outputs || [])
+                .filter(i => i?.type && i.type !== '*')
+                .map(i => i.type);
+            if (typesArr.length) setColorAndBgColor.call(this, typesArr);
+            else console.log("[TwinNodes] updateColors: no outputs");
+        } else {
+            console.log("[TwinNodes] updateColors: disabled by settings");
+        }
+        app.canvas.setDirty(true, true);
     }
 }

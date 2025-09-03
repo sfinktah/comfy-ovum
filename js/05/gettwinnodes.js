@@ -19,25 +19,21 @@
 /** @typedef {import("@comfyorg/litegraph/dist/litegraph").ContextMenuItem} ContextMenuItem */
 /** @typedef {import("@comfyorg/litegraph/dist/litegraph").SerializedLGraphNode} SerializedLGraphNode */
 
-import { app } from "../../../scripts/app.js";
-import { GraphHelpers } from "../common/graphHelpersForTwinNodes.js";
-import { analyzeNamesForAbbrev, computeTwinNodeTitle, extractWidgetNames } from "../01/stringHelper.js";
+import {app} from "../../../scripts/app.js";
+import {GraphHelpers} from "../common/graphHelpersForTwinNodes.js";
+import {computeTwinNodeTitle, extractWidgetNames} from "../01/stringHelper.js";
 import {
-    setColorAndBgColor,
-    isUnlinkedName,
-    stripUnlinkedPrefix,
-    makeUnlinkedName,
-    wrapWidgetValueSetter,
-    showAlert,
-    findSetters,
-    findSetter,
+    ensureSlotCounts,
     ensureWidgetCount,
-    normalizeWidgetLabels,
-    validateNodeLinks,
+    findSetter,
     getPreviousWidgetName,
-    ensureSlotCounts
+    makeUnlinkedName,
+    normalizeWidgetLabels,
+    showAlert,
+    validateNodeLinks,
+    wrapWidgetValueSetter
 } from "../01/twinnodeHelpers.js";
-import { TwinNodes } from "../common/twinNodes.js";
+import {TwinNodes} from "../common/twinNodes.js";
 
 // mostly written by GPT-5
 // based on KJ's SetGet: https://github.com/kj-comfy/ComfyUI-extensions which was
@@ -106,13 +102,7 @@ app.registerExtension({
     },
     registerCustomNodes() {
         class GetTwinNodes extends TwinNodes {
-
-            defaultVisibility = true;
-            serialize_widgets = true;
-            drawConnection = false;
-            slotColor = "#FFF";
             currentSetter = null;
-            canvas = app.canvas;
             numberOfInputSlots = 0;
 
             /**
@@ -173,18 +163,17 @@ app.registerExtension({
                     normalizeWidgetLabels(this, "Constant");
                 };
 
-                // ~Start with one selector; expand after matching a setter~
                 const initialCount = this.properties.constCount || 2;
                 this.ensureGetterWidgetCount(initialCount);
 
                 // Ensure default outputs exist with type "*"
-                for (let i = 0; i < initialCount; i++) {
-                    if (this.outputs?.[i]) {
-                        this.outputs[i].name = "*";
-                        this.outputs[i].type = "*";
-                        this.outputs[i].label = "*";
-                    }
-                }
+                // for (let i = 0; i < initialCount; i++) {
+                //     if (this.outputs?.[i]) {
+                //         this.outputs[i].name = "*";
+                //         this.outputs[i].type = "*";
+                //         this.outputs[i].label = "*";
+                //     }
+                // }
 
                 // During deserialization, respect serialized widgets/outputs by suppressing auto-derivation for a tick
                 /**
@@ -462,18 +451,7 @@ app.registerExtension({
                                 pickedType = t;
                             }
                         }
-
-                        // Note: we don't actually have a settings panel yet
-                        // Only colorize when a constant is selected; follow same rule as SetTwinNodes (based on types)
-                        const autoColor = app.ui.settings.getSettingValue("KJNodes.nodeAutoColor");
-                        const typesArr = (this.outputs || []).map(o => o?.type).filter(t => t && t !== '*');
-                        if (anySelected && autoColor && typesArr.length) {
-                            setColorAndBgColor.call(this, typesArr);
-                        } else {
-                            // reset to default look if no selection, unknown type, or auto-color disabled
-                            this.color = undefined;
-                            this.bgcolor = undefined;
-                        }
+                        this.updateColors();
                     } else {
                         // No matching setter: if exactly one constant is selected, ensure we have a second empty widget
                         const selectedVals = (this.widgets || [])
@@ -577,21 +555,7 @@ app.registerExtension({
                     console.log("[GetTwinNodes] updateTitle");
                     const namesForTitle = extractWidgetNames(this);
                     this.title = computeTwinNodeTitle(namesForTitle, "Get", disablePrefix);
-
-                    // Determine colors using all connected input types in order
-                    const typesArr = (this.outputs || [])
-                        .filter(inp => inp?.link != null && inp?.type && inp.type !== '*')
-                        .map(inp => inp.type);
-                    
-                    // Note: we don't actually have a settings panel yet
-                    const autoColor = app.ui.settings.getSettingValue("KJNodes.nodeAutoColor");
-                    if (typesArr.length && autoColor) {
-                        setColorAndBgColor.call(this, typesArr);
-                    } else {
-                        // reset to default look if nothing connected or auto-color disabled
-                        this.color = undefined;
-                        this.bgcolor = undefined;
-                    }
+                    this.canvas.setDirty(true, true);
                 }
 
                 // This node is purely frontend and does not impact the resulting prompt so should not be serialized
@@ -599,10 +563,10 @@ app.registerExtension({
             }
 
 
-// TODO: This function doesn't work for shit on the second widget, because findSetter isn't that smart
             /**
              * Returns the link connected to the matched setter's input corresponding to the given output slot.
-             * This is a convenience helper specific to GetTwinNodes.
+             * This is a convenience helper specific to GetTwinNodes, but seems to be the magic (if undocumented)
+             * glue that makes the SetNode and GetNode nodes work.
              * @param {number} slot Output slot index on this getter.
              * @returns {LLink|undefined} The found link, or undefined if no matching setter/link exists.
              */
@@ -611,8 +575,7 @@ app.registerExtension({
 
                 if (setter) {
                     const input = setter.inputs[slot];
-                    const link = GraphHelpers.getLink(this.graph, input.link);
-                    return link;
+                    return GraphHelpers.getLink(this.graph, input.link);
                 } else {
                     // No SetTwinNodes found for BOOLEAN(GetTwinNodes). Most likely you're missing custom nodes
                     const errorMessage = "No SetTwinNode found for the first input (" + this.widgets[slot].value + ") of the GetTwinNodes titled " + this.title;
@@ -657,6 +620,18 @@ app.registerExtension({
                         content: "Go to setter",
                         callback: () => {
                             node.goToSetter();
+                        },
+                    },
+                    {
+                        content: "Update title",
+                        callback: () => {
+                            node.updateTitle();
+                        },
+                    },
+                    {
+                        content: "Update colors",
+                        callback: () => {
+                            node.updateColors();
                         },
                     },
                     {

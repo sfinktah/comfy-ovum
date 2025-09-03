@@ -22,8 +22,7 @@ import { app } from "../../../scripts/app.js";
 import { GraphHelpers } from "../common/graphHelpersForTwinNodes.js";
 import { analyzeNamesForAbbrev, computeTwinNodeTitle, extractWidgetNames } from "../01/stringHelper.js";
 import { 
-    setColorAndBgColor, 
-    isUnlinkedName, 
+    isUnlinkedName,
     stripUnlinkedPrefix, 
     makeUnlinkedName, 
     wrapWidgetValueSetter, 
@@ -36,7 +35,13 @@ import {
     getPreviousWidgetName
 } from "../01/twinnodeHelpers.js";
 import { TwinNodes } from "../common/twinNodes.js";
-
+import { drawTextWithBg, getWidgetBounds } from "../01/canvasHelpers.js";
+/**
+ * Get the bounding box of a widget in node-local coordinates
+ * @param {LGraphNode} node - The node containing the widget
+ * @param {Object} widget - The widget to get bounds for
+ * @returns {Object} - {x, y, width, height} in node-local coordinates
+ */
 // mostly written by GPT-5
 // based on KJ's SetGet: https://github.com/kj-comfy/ComfyUI-extensions which was
 // based on diffus3's SetGet: https://github.com/diffus3/ComfyUI-extensions
@@ -79,23 +84,8 @@ app.registerExtension({
                 // and update node color from the first connected typed link
                 this.updateTitle = function () {
                     console.log("[SetTwinNodes] updateTitle");
-                    const names = extractWidgetNames(this, { connectedOnly: true });
+                    const names = extractWidgetNames(this);
                     this.title = computeTwinNodeTitle(names, "Set", disablePrefix);
-
-                    // Determine colors using all connected input types in order
-                    const typesArr = (this.inputs || [])
-                        .filter(inp => inp?.link != null && inp?.type && inp.type !== '*')
-                        .map(inp => inp.type);
-
-                    // Note: we don't actually have a settings panel yet
-                    const autoColor = app.ui.settings.getSettingValue("KJNodes.nodeAutoColor");
-                    if (typesArr.length && autoColor) {
-                        setColorAndBgColor.call(this, typesArr);
-                    } else {
-                        // reset to default look if nothing connected or auto-color disabled
-                        this.color = undefined;
-                        this.bgcolor = undefined;
-                    }
 
                     // After updating the title/color, apply shortened labels to outputs when appropriate
                     this.applyAbbreviatedOutputLabels();
@@ -132,7 +122,7 @@ app.registerExtension({
                         // Only fill widget value if empty or '*'
                         if (this.widgets?.[i] && (!this.widgets[i].value || this.widgets[i].value === '*')) {
                             this.widgets[i].value = base;
-                            this.validateWidgetName(this.graph, i);
+                            validateWidgetName(this, i);
                         }
                     }
                 };
@@ -141,25 +131,9 @@ app.registerExtension({
                 this.applyAbbreviatedOutputLabels = function() {
                     console.log("[SetTwinNodes] applyAbbreviatedOutputLabels");
 
-                    const items = [];
-                    const maxCount = Math.max(
-                        this.widgets?.length || 0,
-                        this.inputs?.length || 0,
-                        this.outputs?.length || 0
-                    );
-
-                    for (let i = 0; i < maxCount; i++) {
-                        const connected = !!(this.inputs?.[i]?.link != null);
-                        const raw = this.widgets?.[i]?.value;
-                        const val = (raw && String(raw).trim()) || "";
-                        // Only consider slots that are connected or have a meaningful value
-                        if (connected || val) {
-                            const baseName = val || String(this.inputs?.[i]?.label || this.inputs?.[i]?.name || "").trim();
-                            if (baseName) {
-                                items.push({ index: i, name: baseName });
-                            }
-                        }
-                    }
+                    // Build items from widget names using helper (allow duplicates, preserve order)
+                    const names = extractWidgetNames(this, { unique: false });
+                    const items = names.map((name, i) => ({ index: i, name }));
 
                     if (!items.length) return;
 
@@ -179,7 +153,7 @@ app.registerExtension({
                 const initialCount = this.properties.constCount || 2;
                 for (let i = 0; i < initialCount; i++) {
                     const idx = i;
-                    const created = this.addWidget(
+                    const widget = this.addWidget(
                         "text",
                         `Constant ${idx + 1}`,
                         '',
@@ -187,20 +161,20 @@ app.registerExtension({
                         {}
                     );
                     // Hook the value setter to track previous value
-                    wrapWidgetValueSetter(created);
+                    wrapWidgetValueSetter(widget);
 
                     // callback?(value: any, canvas?: LGraphCanvas, node?: LGraphNode, pos?: Point, e?: CanvasPointerEvent): void;
                     function callback(value, canvas, node, pos, e) {
                         console.log("[SetTwinNodes] widget callback", {
                             value: value,
+                            previousValue: node.widgets[idx]?.previousValue,
                             old_value: node.widgets[idx]?.value,
-                            canvas: canvas,
-                            node: node,
-                            pos: pos,
-                            e: e
+                            // node: node,
+                            // pos: pos,
+                            // e: e
                         });
                         if (node && node.graph) {
-                            node.validateWidgetName(node.graph, idx);
+                            validateWidgetName(node, idx);
                             node.properties.previousNames[idx] = value;
                             node.updateTitle();
                             node.update();
@@ -414,7 +388,7 @@ app.registerExtension({
                             if (this.widgets?.[index] && (!this.widgets[index].value || this.widgets[index].value === '*')) {
                                 this.widgets[index].value = preferred;
                                 // Enforce graph-wide uniqueness for this widget index
-                                this.validateWidgetName(this.graph, index);
+                                validateWidgetName(this, index);
                             }
 
                             // Mirror type/name to the corresponding output
@@ -427,13 +401,7 @@ app.registerExtension({
                             this.updateTitle();
                             // propagateToGetters(this);
 
-                            // Note: we don't actually have a settings panel yet
-                            if (app.ui.settings.getSettingValue("KJNodes.nodeAutoColor")) {
-                                const typesArr = (this.inputs || [])
-                                    .filter(i => i?.type && i.type !== '*')
-                                    .map(i => i.type);
-                                if (typesArr.length) setColorAndBgColor.call(this, typesArr);
-                            }
+                            this.updateColors();
 
                             // Cleanup any snapshot for this slot after a normal connect
                             if (this.__lastDisconnected) delete this.__lastDisconnected[index];
@@ -455,9 +423,7 @@ app.registerExtension({
 
                 // Ensure a widget's name is unique across all SetTwinNodes widgets in the graph.
                 // If a collision is found, append _0, _1, ... to the original base.
-                this.validateWidgetName = function(graph, idx) {
-                    validateWidgetName(this, graph, idx);
-                }
+                validateWidgetName(this, idx);
 
                 /**
                  * Creates a copy of this node.
@@ -490,9 +456,15 @@ app.registerExtension({
                 this.onAdded = function(graph) {
                     if (Array.isArray(this.widgets)) {
                         for (let i = 0; i < this.widgets.length; i++) {
-                            this.validateWidgetName(graph, i);
+                            validateWidgetName(this, i);
                         }
                     }
+                }
+
+                this.checkGetters = function() {
+                    this.currentGetters = this.widgets.map((v, k) => k).map(k => findGetters(this, null, k));
+                    this.canvas.setDirty(true, true);
+                    console.log("[SetTwinNodes] checkGetters", this.currentGetters);
                 }
 
                 this.update = function() {
@@ -574,20 +546,39 @@ app.registerExtension({
                     {
                         content: menuEntry,
                         callback: () => {
-                            node.currentGetters = findGetters(node);
+                            node.checkGetters();
                             console.log("[SetTwinNodes] context menu, found getters", node.currentGetters);
-                            if (node.currentGetters.length == 0) return;
+                            let i;
+                            node.currentGetters.forEach((getters, i) => {
+                                let linkType = '*';
+                                for (const g of getters) {
+                                    const found = (g.outputs || []).find(o => o && o.type && o.type !== '*');
+                                    if (found) { linkType = found.type; break; }
+                                }
+                                node.slotColors[i] = node.canvas.default_connection_color_byType[linkType]
+                                menuEntry = node.drawConnection ? "Hide connections" : "Show connections";
+                            });
                             // Generalize: pick first connected, typed output across all getters
-                            let linkType = '*';
-                            for (const g of node.currentGetters) {
-                                const found = (g.outputs || []).find(o => o && o.type && o.type !== '*');
-                                if (found) { linkType = found.type; break; }
-                            }
-                            node.slotColor = node.canvas.default_connection_color_byType[linkType]
-                            menuEntry = node.drawConnection ? "Hide connections" : "Show connections";
                             node.drawConnection = !node.drawConnection;
                             node.canvas.setDirty(true, true);
-
+                        },
+                    },
+                    {
+                        content: "Update title",
+                        callback: () => {
+                            node.updateTitle();
+                        },
+                    },
+                    {
+                        content: "Update colors",
+                        callback: () => {
+                            node.updateColors();
+                        },
+                    },
+                    {
+                        content: "Check getters",
+                        callback: () => {
+                            node.checkGetters();
                         },
                     },
                     {
@@ -608,11 +599,10 @@ app.registerExtension({
                     },
                 );
                 // Dynamically add a submenu for all getters
-                node.currentGetters = findGetters(node);
+                this.checkGetters();
                 if (node.currentGetters) {
 
-                    let gettersSubmenu = node.currentGetters.map(getter => ({
-
+                    let gettersSubmenu = node.currentGetters.flat(0).map(getter => ({
                         content: `${getter.title} id: ${getter.id}`,
                         callback: () => {
                             node.canvas.centerOnNode(getter);
@@ -645,6 +635,69 @@ app.registerExtension({
                 if (this.drawConnection) {
                     this._drawVirtualLinks(lGraphCanvas, ctx);
                 }
+
+                const missingGetters = (this.currentGetters ?? [])
+                    .map((v, k) => ({v, k}))  // Fixed: proper object literal syntax
+                    .filter(o => o.v.length === 0)
+                    .filter(o => {
+                        const wv = this.widgets?.[o.k]?.value;
+                        return typeof wv === "string" && wv.trim().length > 0;
+                    })
+                    .map(o => o.k);
+                
+                // If minimized (collapsed) and there are missing getters, show a single message and skip the loop
+                const isCollapsed = !!(this.flags && this.flags.collapsed);
+                if (isCollapsed && missingGetters.length > 0) {
+                    const titleH = (LiteGraph && LiteGraph.NODE_TITLE_HEIGHT) ? LiteGraph.NODE_TITLE_HEIGHT : 30;
+                    const textX = this.size[0] + 10; // to the right of the minimized node
+                    const textY = Math.round(titleH * -0.3); // vertically aligned within the title bar
+                    const text = "← Missing GetTwinNode(s)";
+                    drawTextWithBg(ctx, text, textX, textY);
+                } else {
+                    for (const widgetIndex of missingGetters) {
+                        const targetWidget = this.widgets?.[widgetIndex];
+                        if (!targetWidget) continue;
+
+                        const bounds = getWidgetBounds(this, targetWidget);
+
+                        if (bounds) {
+                            // Position text to the right of the widget
+                            const textX = bounds.x + bounds.width + 10; // 10px gap
+                            const textY = bounds.y + bounds.height / 2 + 4; // Vertically centered (+4 for text baseline)
+
+                            drawTextWithBg(ctx, "← No GetTwinNode", textX, textY);
+                        }
+                    }
+                }
+
+                const padX = 8, padY = 6, lineH = 14;
+
+                const lines = [];
+
+                // special color for scheduler + cfg: amber-ish (visible in light/dark)
+                const EMP = "#ffcc66";
+
+                lines.push({ t: `There was an old dog`, c: EMP });
+                lines.push({ t: `He sat by the kennel`, c: EMP });
+                lines.push({ t: `And pooped a lot` });
+
+                const overlayH = Math.min(340, lines.length * lineH) + padY;
+                if (this.__ea_overlay_h !== overlayH) { this.__ea_overlay_h = overlayH; this.graph?.setDirtyCanvas(true, true); }
+                const x = padX, y = this.size[1] - overlayH;
+
+                ctx.save();
+                ctx.font = "12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace";
+                ctx.shadowColor = "rgba(0,0,0,0.6)";
+                ctx.shadowBlur = 2;
+
+                let yy = y + 10;
+                for (const line of lines) {
+                    ctx.fillStyle = line.c || "#ffffff";
+                    ctx.fillText(line.t, x, yy);
+                    yy += lineH;
+                }
+                ctx.restore();
+
             }
             // onDrawCollapsed(ctx, lGraphCanvas) {
             // 	if (this.drawConnection) {
@@ -655,45 +708,55 @@ app.registerExtension({
                 if (!this.currentGetters?.length) return;
 
                 // Determine a sensible start anchor on this node: first typed output, else slot 0
-                let outIdx = 0;
-                if (Array.isArray(this.outputs)) {
-                    const found = this.outputs.findIndex(o => o && o.type && o.type !== '*');
-                    if (found >= 0) outIdx = found;
-                }
-                const absStart = this.getConnectionPos(false, outIdx);
-                const start_node_slotpos = [
-                    absStart[0] - this.pos[0],
-                    absStart[1] - this.pos[1],
-                ];
+                // Remove unused variable declaration and fix shadowing
+                this.currentGetters.forEach((getters, slotIndex) => {
+                    if (!Array.isArray(getters) || !getters.length) return;
+                    // Add error handling for getConnectionPos
+                    if (typeof this.getConnectionPos !== 'function') return;
 
-                // Provide a default link object with necessary properties, to avoid errors as link can't be null anymore
-                const defaultLink = { type: 'default', color: this.slotColor };
+                    const absStart = this.getConnectionPos(false, slotIndex);
+                    if (!absStart || !this.pos) return;
 
-                for (const getter of this.currentGetters) {
-                    // Determine a sensible end anchor on the getter: first typed input, else input 0
-                    let inIdx = 0;
-                    if (Array.isArray(getter.inputs)) {
-                        const fin = getter.inputs.findIndex(i => i && i.type && i.type !== '*');
-                        if (fin >= 0) inIdx = fin;
-                    }
-                    const absEnd = getter.getConnectionPos(true, inIdx);
-                    const end_node_slotpos = [
-                        absEnd[0] - this.pos[0],
-                        absEnd[1] - this.pos[1],
+                    const start_node_slotpos = [
+                        absStart[0] - this.pos[0],
+                        absStart[1] - this.pos[1],
                     ];
 
-                    lGraphCanvas.renderLink(
-                        ctx,
-                        start_node_slotpos,
-                        end_node_slotpos,
-                        defaultLink,
-                        false,
-                        null,
-                        this.slotColor,
-                        LiteGraph.RIGHT,
-                        LiteGraph.LEFT
-                    );
-                }
+                    // Provide a default link object with necessary properties
+                    const defaultLink = {type: 'default', color: this.slotColor};
+
+                    for (const getter of getters) {
+                        // Add validation for getter
+                        if (!getter || typeof getter.getConnectionPos !== 'function') continue;
+
+                        // Determine a sensible end anchor on the getter: first typed input, else input 0
+                        let inIdx = 0;
+                        if (Array.isArray(getter.inputs)) {
+                            const fin = getter.inputs.findIndex(input => input && input.type && input.type !== '*');
+                            if (fin >= 0) inIdx = fin;
+                        }
+
+                        const absEnd = getter.getConnectionPos(true, inIdx);
+                        if (!absEnd) continue;
+
+                        const end_node_slotpos = [
+                            absEnd[0] - this.pos[0],
+                            absEnd[1] - this.pos[1],
+                        ];
+
+                        lGraphCanvas.renderLink(
+                            ctx,
+                            start_node_slotpos,
+                            end_node_slotpos,
+                            defaultLink,
+                            false,
+                            null,
+                            this.slotColor,
+                            LiteGraph.RIGHT,
+                            LiteGraph.LEFT
+                        );
+                    }
+                });
             }
         }
 
