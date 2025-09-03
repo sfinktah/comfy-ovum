@@ -20,7 +20,7 @@
 
 import { app } from "../../../scripts/app.js";
 import { GraphHelpers } from "../common/graphHelpersForTwinNodes.js";
-import { analyzeNamesForAbbrev, computeTwinNodeTitle, extractWidgetNames } from "../01/stringHelper.js";
+import { analyzeNamesForAbbrev, computeTwinNodeTitle, extractWidgetNames, safeStringTrim } from "../01/stringHelper.js";
 import { 
     isUnlinkedName,
     stripUnlinkedPrefix, 
@@ -102,10 +102,10 @@ app.registerExtension({
                         const raw =
                             this.inputs[i].label ||
                             this.inputs[i].name ||
-                            (this.widgets?.[i]?.value ? String(this.widgets[i].value).trim() : "") ||
+                            safeStringTrim(this.widgets?.[i]?.value) ||
                             `Constant ${i + 1}`;
 
-                        const base = String(raw).trim();
+                        const base = safeStringTrim(raw);
 
                         // Set input label/name verbatim (no numbering)
                         if (this.inputs?.[i]) {
@@ -183,7 +183,7 @@ app.registerExtension({
                 }
                 ensureSlotCounts(this);
                 // Initialize previousNames snapshot to current widget values
-                this.properties.previousNames = (this.widgets || []).map(w => (w && w.value != null ? String(w.value).trim() : ""));
+                this.properties.previousNames = (this.widgets || []).map(w => safeStringTrim(w?.value));
                 this.updateTitle();
 
                 /**
@@ -421,10 +421,6 @@ app.registerExtension({
                     }
                 }
 
-                // Ensure a widget's name is unique across all SetTwinNodes widgets in the graph.
-                // If a collision is found, append _0, _1, ... to the original base.
-                validateWidgetName(this, idx);
-
                 /**
                  * Creates a copy of this node.
                  * Conforms to LGraphNode.clone by returning a cloned node instance; resets slots and recomputes size.
@@ -488,7 +484,7 @@ app.registerExtension({
                     // compare previousNames snapshot vs current widget values and
                     // update any GetTwinNodes widgets that still reference the old name.
                     const currNames = Array.isArray(this.widgets)
-                        ? this.widgets.map(widget => (widget && widget.value != null ? String(widget.value).trim() : ""))
+                        ? this.widgets.map(widget => safeStringTrim(widget?.value))
                         : [];
                     const prevNames = Array.isArray(this.properties.previousNames) ? this.properties.previousNames : [];
 
@@ -502,7 +498,7 @@ app.registerExtension({
                                 let changed = false;
                                 for (let gi = 0; gi < getter.widgets.length; gi++) {
                                     const gv = getter.widgets[gi]?.value;
-                                    if (gv && String(gv).trim() === prev) {
+                                    if (gv && safeStringTrim(gv) === prev) {
                                         getter.widgets[gi].value = curr;
                                         changed = true;
                                     }
@@ -641,7 +637,7 @@ app.registerExtension({
                     .filter(o => o.v.length === 0)
                     .filter(o => {
                         const wv = this.widgets?.[o.k]?.value;
-                        return typeof wv === "string" && wv.trim().length > 0;
+                        return typeof wv === "string" && safeStringTrim(wv).length > 0;
                     })
                     .map(o => o.k);
                 

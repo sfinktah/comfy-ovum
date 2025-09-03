@@ -20,6 +20,7 @@
 
 import { app } from "../../../scripts/app.js";
 import { GraphHelpers } from "../common/graphHelpersForTwinNodes.js";
+import { safeStringTrim } from "./stringHelper.js";
 
 /**
  * @param {string[]|string} types - Array of types to evaluate for color mapping; if string provided, it will be treated as a single-item array.
@@ -229,7 +230,7 @@ export function findSetters(node, name = undefined) {
     if (!(node instanceof LiteGraph.LGraphNode)) {
         throw new Error("node parameter must be instance of LGraphNode");
     }
-    const sourceNames = Array.isArray(node.widgets) ? node.widgets.map(w => (w && w.value != null ? String(w.value).trim() : "")) : [];
+    const sourceNames = Array.isArray(node.widgets) ? node.widgets.map(w => safeStringTrim(w?.value)) : [];
     const names = name ? [name] : sourceNames.filter(v => !!v);
     // console.log("[findSetters]", { node: node, names: names });
     if (names.length === 0) return [];
@@ -238,7 +239,7 @@ export function findSetters(node, name = undefined) {
         Array.isArray(otherNode.widgets) &&
         otherNode.widgets.some(widget => {
             // console.log("[findSetters] widget", { widget: widget });
-            const widgetValue = widget && widget.value != null ? String(widget.value).trim() : "";
+            const widgetValue = safeStringTrim(widget?.value);
             return widgetValue && nameSet.has(widgetValue);
         })
     );
@@ -269,14 +270,14 @@ export function findGetters(node, checkForPreviousName, widgetIndex) {
     // Collect all candidate raw values (either previousNames or current widget values)
     const allCandidates = checkForPreviousName
         ? (Array.isArray(node.properties?.previousNames) ? node.properties.previousNames : [])
-        : (Array.isArray(node.widgets) ? node.widgets.map(w => (w && w.value != null ? w.value : "")) : []);
+        : (Array.isArray(node.widgets) ? node.widgets.map(w => w?.value) : []);
 
     // If a widget index is provided, only consider that one value; otherwise, consider all
     const candidates = widgetIndex != null ? [allCandidates[widgetIndex]] : allCandidates;
 
     // Normalize to trimmed strings and drop empty values
     const names = candidates
-        .map(v => (v != null ? String(v).trim() : ""))
+        .map(v => safeStringTrim(v))
         .filter(v => v !== "");
 
     // console.log("[findGetters]", { node: node, checkForPreviousName: checkForPreviousName, widgetIndex: widgetIndex, names: names });
@@ -286,7 +287,7 @@ export function findGetters(node, checkForPreviousName, widgetIndex) {
     return GraphHelpers.getNodesByType(node.graph, 'GetTwinNodes').filter(otherNode =>
         Array.isArray(otherNode.widgets) &&
         otherNode.widgets.some(w => {
-            const val = w && w.value != null ? String(w.value).trim() : "";
+            const val = safeStringTrim(w?.value);
             return val && nameSet.has(val);
         })
     );
@@ -309,7 +310,7 @@ export function propagateToGetters(node) {
         const g = node && node.graph;
         if (g && typeof g.sendEventToAllNodes === "function") {
             const currNames = Array.isArray(node.widgets)
-                ? node.widgets.map(w => (w && w.value != null ? String(w.value).trim() : ""))
+                ? node.widgets.map(w => safeStringTrim(w?.value))
                 : [];
             const prevNames = Array.isArray(node.properties?.previousNames)
                 ? node.properties.previousNames
@@ -423,7 +424,7 @@ export function validateWidgetName(node, idx) {
             otherNode.widgets.forEach((w, wi) => {
                 if (!w) return;
                 if (otherNode === node && wi === idx) return; // skip self at same index
-                const v = (w.value != null) ? String(w.value).trim() : "";
+                const v = safeStringTrim(w?.value);
                 if (v) existingValues.add(v);
             });
         }

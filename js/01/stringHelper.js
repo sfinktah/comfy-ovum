@@ -6,7 +6,7 @@
  */
 function splitNameTokens(str) {
     if (typeof str !== 'string') return [];
-    let s = String(str).trim();
+    let s = safeStringTrim(str);
     if (!s) return [];
     // Separate camelCase boundaries
     s = s.replace(/([a-z0-9])([A-Z])/g, '$1 $2');
@@ -25,7 +25,7 @@ function splitNameTokens(str) {
  * @returns {{use: boolean, mode?: 'prefix'|'suffix', common?: string[], shortNames?: string[], titleText?: string}}
  */
 export function analyzeNamesForAbbrev(names) {
-    const normalized = (names || []).map(n => (n == null ? '' : String(n).trim())).filter(Boolean);
+    const normalized = (names || []).map(n => safeStringTrim(n)).filter(Boolean);
     if (normalized.length < 2) return { use: false };
 
     const anyLong = normalized.some(n => n.length > 6);
@@ -93,7 +93,7 @@ export function analyzeNamesForAbbrev(names) {
  */
 export function computeTwinNodeTitle(names, kind, disablePrefix = false) {
     const normalized = Array.isArray(names)
-        ? names.map(n => (n == null ? '' : String(n).trim())).filter(Boolean)
+        ? names.map(n => safeStringTrim(n)).filter(Boolean)
         : [];
     const baseTitle = `${kind}TwinNodes`;
     if (normalized.length === 0) return baseTitle;
@@ -104,6 +104,15 @@ export function computeTwinNodeTitle(names, kind, disablePrefix = false) {
     }
     const joined = normalized.join(" & ");
     return (disablePrefix ? "" : `${kind}_`) + joined;
+}
+
+/**
+ * Safely convert a value to a trimmed string, returning empty string if null/undefined.
+ * @param {*} value - The value to convert
+ * @returns {string} The trimmed string or empty string
+ */
+export function safeStringTrim(value) {
+    return (value != null) ? String(value).trim() : "";
 }
 
 /**
@@ -145,7 +154,7 @@ export function extractWidgetNames(node, options = {}) {
         const raw = widgets[i]?.value;
         if (raw == null) continue;
 
-        const val = String(raw).trim();
+        const val = safeStringTrim(raw);
         if (!val) continue;
         if (unique && result.indexOf(val) !== -1) continue;
 

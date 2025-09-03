@@ -21,7 +21,7 @@
 
 import {app} from "../../../scripts/app.js";
 import {GraphHelpers} from "../common/graphHelpersForTwinNodes.js";
-import {computeTwinNodeTitle, extractWidgetNames} from "../01/stringHelper.js";
+import {computeTwinNodeTitle, extractWidgetNames, safeStringTrim} from "../01/stringHelper.js";
 import {
     ensureSlotCounts,
     ensureWidgetCount,
@@ -231,9 +231,9 @@ app.registerExtension({
                                 const targetNode = GraphHelpers.getNodeById(node.graph, link_info.target_id);
                                 const inSlot = targetNode?.inputs?.[link_info.target_slot];
                                 const preferred =
-                                    (inSlot?.label && String(inSlot.label).trim()) ||
-                                    (inSlot?.name && String(inSlot.name).trim()) ||
-                                    (inSlot?.type && String(inSlot.type).trim()) ||
+                                    safeStringTrim(inSlot?.label) ||
+                                    safeStringTrim(inSlot?.name) ||
+                                    safeStringTrim(inSlot?.type) ||
                                     "";
                                 if (preferred) {
                                     // If the derived name is not present in any known constants, append '*'
@@ -381,11 +381,11 @@ app.registerExtension({
 
                     const setter = findSetter(node);
                     // Gather current selections
-                    const selected = (this.widgets || []).map(w => (w?.value ? String(w.value).trim() : ""));
+                    const selected = (this.widgets || []).map(w => safeStringTrim(w?.value));
                     const anySelected = selected.some(v => !!v);
 
                     if (setter) {
-                        const setterNames = (setter.widgets || []).map(w => (w?.value ? String(w.value).trim() : ""));
+                        const setterNames = (setter.widgets || []).map(w => safeStringTrim(w?.value));
                         // Map selected constant -> type (from matched setter input at that label)
                         const typeByConst = {};
                         setterNames.forEach((name, idx) => {
@@ -401,9 +401,9 @@ app.registerExtension({
                         // Autofill any empty selections from the matched setter (position-agnostic)
                         // Only perform this when we didn't just unset a widget via "(unset)".
                         if (!didUnset) {
-                            const setterVals = (setter.widgets || []).map(w => (w?.value ? String(w.value).trim() : "")).filter(Boolean);
+                            const setterVals = (setter.widgets || []).map(w => safeStringTrim(w?.value)).filter(Boolean);
                             const selectedVals = new Set(
-                                (this.widgets || []).map(w => (w?.value ? String(w.value).trim() : "")).filter(Boolean)
+                                (this.widgets || []).map(w => safeStringTrim(w?.value)).filter(Boolean)
                             );
                             for (let i = 0; i < wNeeded; i++) {
                                 if (this.widgets?.[i] && (!this.widgets[i].value || this.widgets[i].value === '*')) {
@@ -422,7 +422,7 @@ app.registerExtension({
                             }
                         } else {
                             // If didUnset but we still have only one selected and have fewer than min widgets, ensure additional empty widgets
-                            const valList = (this.widgets || []).map(w => (w?.value ? String(w.value).trim() : "")).filter(Boolean);
+                            const valList = (this.widgets || []).map(w => safeStringTrim(w?.value)).filter(Boolean);
                             const min = this.properties?.constCount || 2;
                             if (valList.length === 1 && (this.widgets?.length || 0) < min) {
                                 this.ensureGetterWidgetCount(min);
@@ -436,7 +436,7 @@ app.registerExtension({
                         const outCount = this.widgets?.length || 0;
                         let pickedType = null;
                         for (let i = 0; i < outCount; i++) {
-                            const label = this.widgets?.[i]?.value ? String(this.widgets[i].value).trim() : "";
+                            const label = safeStringTrim(this.widgets?.[i]?.value);
                             const t = label ? (typeByConst[label] || '*') : '*';
 
                             // Ensure output slot exists
@@ -455,7 +455,7 @@ app.registerExtension({
                     } else {
                         // No matching setter: if exactly one constant is selected, ensure we have a second empty widget
                         const selectedVals = (this.widgets || [])
-                            .map(w => (w?.value ? String(w.value).trim() : ""))
+                            .map(w => safeStringTrim(w?.value))
                             .filter(Boolean);
                         const min = this.properties?.constCount || 2;
                         if (selectedVals.length === 1 && (this.widgets?.length || 0) < min) {
@@ -493,14 +493,14 @@ app.registerExtension({
                 // Listen for broadcast rename events and update matching widget values
                 this.setnodeNameChange = function(old_value, value, widgetIndex, senderNodeId) {
                     console.log("[GetTwinNodes] setnodeNameChange", old_value, value);
-                    const prev = (old_value != null) ? String(old_value).trim() : "";
-                    const next = (value != null) ? String(value).trim() : "";
+                    const prev = safeStringTrim(old_value);
+                    const next = safeStringTrim(value);
                     if (!prev || !next || prev === next) return;
 
                     let changed = false;
                     if (Array.isArray(this.widgets)) {
                         for (let i = 0; i < this.widgets.length; i++) {
-                            const val = this.widgets[i]?.value != null ? String(this.widgets[i].value).trim() : "";
+                            const val = safeStringTrim(this.widgets[i]?.value);
                             if (val && val === prev) {
                                 this.widgets[i].value = next;
                                 changed = true;
