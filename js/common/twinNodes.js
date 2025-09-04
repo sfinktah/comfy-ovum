@@ -3,8 +3,8 @@
 /** @typedef {import("@comfyorg/litegraph/dist/litegraph").LiteGraph} LiteGraph */
 /** @typedef {import('@comfyorg/litegraph/dist/litegraph').LGraphCanvas} LGraphCanvas */
 
-import { app } from "../../../scripts/app.js";
-import {wrapWidgetValueSetter, getPreviousWidgetName, setColorAndBgColor} from "../01/twinnodeHelpers.js";
+import {app} from "../../../scripts/app.js";
+import {getPreviousWidgetName, setColorAndBgColor, wrapWidgetValueSetter} from "../01/twinnodeHelpers.js";
 
 const LGraphNode = LiteGraph.LGraphNode
 export class TwinNodes extends LGraphNode {
@@ -16,12 +16,14 @@ export class TwinNodes extends LGraphNode {
     isVirtualNode = true;
     numberOfInputSlots = 2;
     numberOfOutputSlots = 2;
+    numberOfWidgets = 2;
+    colors = [];
 
     constructor(title) {
         super(title);
     }
 
-    // Return the previous name recorded for the widget at index 'idx'
+    // Return the previous name recorded for the widget at widgetIndex 'idx'
     getPreviousName(idx) {
         return getPreviousWidgetName(this, idx);
     }
@@ -52,7 +54,7 @@ export class TwinNodes extends LGraphNode {
 
     updateColors() {
         // Note: we don't actually have a settings panel yet
-        if (app.ui.settings.getSettingValue("KJNodes.nodeAutoColor")) {
+        if (app.ui.settings.getSettingValue("ovum.nodeAutoColor")) {
             const typesArr = (this.outputs || [])
                 .filter(i => i?.type && i.type !== '*')
                 .map(i => i.type);
@@ -62,5 +64,63 @@ export class TwinNodes extends LGraphNode {
             console.log("[TwinNodes] updateColors: disabled by settings");
         }
         app.canvas.setDirty(true, true);
+    }
+
+    /**
+     * Called to render custom content behind the node body (but not the title).
+     * If two or more colors are present in this.colors, draw a vertical gradient between their bgcolors.
+     * Excludes the title area by starting below LiteGraph.NODE_TITLE_HEIGHT.
+     * @param {CanvasRenderingContext2D} ctx
+     * @param {LGraphCanvas} lGraphCanvas
+     */
+    onDrawBackground(ctx, lGraphCanvas) {
+        try {
+            const colors = Array.isArray(this.colors) ? this.colors : [];
+            if (colors.length < 2 || colors[0].bgcolor == colors[1].bgcolor) return;
+            if (!this.size || this.size.length < 2) return;
+            if (this.flags && this.flags.collapsed) return;
+
+            // const titleH = (LiteGraph && LiteGraph.NODE_TITLE_HEIGHT) ? LiteGraph.NODE_TITLE_HEIGHT : 30;
+            const titleH = 0; // doesn't seem to need to be offset
+            const x = 0;
+            const y = titleH;
+            const w = this.size[0] || 0;
+            const h = Math.max(0, (this.size[1] || 0) - titleH);
+            if (w <= 0 || h <= 0) return;
+
+            const bg1 = (colors[0] && colors[0].bgcolor) ? colors[0].bgcolor : (this.bgcolor || "#333");
+            const bg2 = (colors[1] && colors[1].bgcolor) ? colors[1].bgcolor : (this.bgcolor || bg1);
+
+            const grad = ctx.createLinearGradient(0, y, 0, y + h);
+            grad.addColorStop(0, bg1);
+            grad.addColorStop(1, bg2);
+
+            ctx.save();
+            ctx.fillStyle = grad;
+
+            const r = 6; // bottom corner radius
+
+            if (typeof ctx.roundRect === "function") {
+                // Draw only the body: top corners radius 0 to avoid title area, bottom corners rounded
+                ctx.beginPath();
+                ctx.roundRect(x, y, w, h, [0, 0, r, r]);
+                ctx.fill();
+            } else {
+                // Fallback: manual path with rounded bottom corners
+                ctx.beginPath();
+                ctx.moveTo(x, y);
+                ctx.lineTo(x + w, y);
+                ctx.lineTo(x + w, y + h - r);
+                ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+                ctx.lineTo(x + r, y + h);
+                ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+                ctx.closePath();
+                ctx.fill();
+            }
+
+            ctx.restore();
+        } catch (_e) {
+            // Defensive: never break canvas draw loop
+        }
     }
 }

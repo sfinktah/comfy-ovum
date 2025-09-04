@@ -21,6 +21,7 @@
 import { app } from "../../../scripts/app.js";
 import { GraphHelpers } from "../common/graphHelpersForTwinNodes.js";
 import { safeStringTrim } from "./stringHelper.js";
+import { log } from "../common/logger.js";
 
 /**
  * @param {string[]|string} types - Array of types to evaluate for color mapping; if string provided, it will be treated as a single-item array.
@@ -62,13 +63,15 @@ export function setColorAndBgColor(types) {
         'MASK':         { color: '#1c5715', bgcolor: '#1f401b'   }, // custom, kjnodes
         'GUIDER':       { color: '#3c7878', bgcolor: '#1c453b'   }, // custom, kjnodes
         'CONTROL_NET':  { color: '#156653', bgcolor: '#1c453b'   }, // custom, kjnodes
-        'INT':          { color: '#1b4669', bgcolor: '#29699c'   }, // custom, kjnodes
+        'NUMBER':       { color: '#1b4669', bgcolor: '#29699c'   }, // custom, kjnodes
 
         'ARGS':         { color: '#434',    bgcolor: '#646',     }, // indigo2
         'EMBED':        { color: '#532',    bgcolor: '#743',     }, // orange
         'BOOLEAN':      { color: '#334',    bgcolor: '#446',     }, // indigo1
         'STRING':       { color: '#332',    bgcolor: '#553',     }, // olive
         'TEXT':         { color: '#332',    bgcolor: '#553',     }, // olive
+        'SEED':         { color: '#1b4669', bgcolor: '#29699c'   }, // custom, kjnodes
+        'INT':          { color: '#1b4669', bgcolor: '#29699c'   }, // custom, kjnodes
     };
 
     const list = Array.isArray(types) ? types : (types != null ? [types] : []);
@@ -93,6 +96,8 @@ export function setColorAndBgColor(types) {
 
         if (matches.length >= 2) break;
     }
+
+    this.colors = matches;
 
     if (matches.length === 0) {
         return;
@@ -165,7 +170,7 @@ export function wrapWidgetValueSetter(widget) {
                 // Consider invalid a string that is empty (after trim) or equals '*'
                 const vt = (typeof v === 'string') ? v.trim() : v;
                 const isInvalidString = (typeof v === 'string') && (vt === '' || vt === '*');
-                console.log(`[wrapWidgetValueSetter] ${current} -> ${v}`);
+                log({ class: "TwinNodeHelpers", method: "wrapWidgetValueSetter", severity: "debug", tag: "widget_value_set" }, `[wrapWidgetValueSetter] "${current}" -> "${v}"`);
 
                 if (current !== v && !isInvalidString) {
                     try {
@@ -225,32 +230,49 @@ export function showAlert(detail, options = {}) {
     })
 }
 
+/**
+ * Finds setter nodes and the specific widgets whose values match the provided name
+ * or names derived from the given node's widgets.
+ *
+ * @param {LiteGraph.LGraphNode|ComfyNode} node - The node to use for deriving source names or comparing target nodes.
+ * @param {string} [name] - Optional name to filter by. If omitted, names are derived from the node's widgets.
+ * @return {Array<{ node: LiteGraph.LGraphNode|ComfyNode, widget: IWidget, widgetIndex: number }>} A list of matches, each containing the setter node, the matching widget, and its widgetIndex.
+ * @throws {Error} If the `node` parameter is not an instance of `LiteGraph.LGraphNode`.
+ */
 export function findSetters(node, name = undefined) {
     // noinspection DuplicatedCode
     if (!(node instanceof LiteGraph.LGraphNode)) {
         throw new Error("node parameter must be instance of LGraphNode");
     }
     const sourceNames = Array.isArray(node.widgets) ? node.widgets.map(w => safeStringTrim(w?.value)) : [];
-    const names = name ? [name] : sourceNames.filter(v => !!v);
+    const names = name != null ? [safeStringTrim(name)] : sourceNames.filter(v => !!v);
     // console.log("[findSetters]", { node: node, names: names });
-    if (names.length === 0) return [];
-    const nameSet = new Set(names);
-    return GraphHelpers.getNodesByType(node.graph, ['SetTwinNodes', 'SetNode']).filter(otherNode =>
-        Array.isArray(otherNode.widgets) &&
-        otherNode.widgets.some(widget => {
-            // console.log("[findSetters] widget", { widget: widget });
+    if (!node.graph || names.length === 0) return [];
+    const nameSet = new Set(names.filter(Boolean));
+
+    const results = [];
+    const candidates = GraphHelpers.getNodesByType(node.graph, ['SetTwinNodes', 'SetNode']);
+    for (const otherNode of candidates) {
+        if (!Array.isArray(otherNode.widgets)) continue;
+        for (let i = 0; i < otherNode.widgets.length; i++) {
+            const widget = otherNode.widgets[i];
             const widgetValue = safeStringTrim(widget?.value);
-            return widgetValue && nameSet.has(widgetValue);
-        })
-    );
+            if (widgetValue && nameSet.has(widgetValue)) {
+                results.push({ node: otherNode, widget, widgetIndex: i });
+                // continue to capture all matches across nodes and widgets
+            }
+        }
+    }
+    return results;
 }
 
 /**
- * @param {GetTwinNodes|ComfyNode} node - The input node containing widgets and a graph. This node is used to determine
- *                        the set of values to filter getter nodes against. The `node` object is expected
- *                        to have the properties `widgets` (an array) and `graph` (a reference to the graph instance).
- * @return {ComfyNode} - An array of getter nodes that meet the matching criteria. If no matches or values are found,
- *                   an empty array is returned.
+ * Finds the first setter match for the given name (or names derived from the node),
+ * returning the node, the matching widget, and its widgetIndex.
+ *
+ * @param {LiteGraph.LGraphNode|ComfyNode} node - The node to use for deriving source names or comparing target nodes.
+ * @param {string} [name] - The optional name to search for.
+ * @return {{ node: LiteGraph.LGraphNode|ComfyNode, widget: IWidget, widgetIndex: number } | null} The first matching result if found; otherwise, null.
  */
 export function findSetter(node, name = undefined) {
     const setters = findSetters(node, name);
@@ -272,7 +294,7 @@ export function findGetters(node, checkForPreviousName, widgetIndex) {
         ? (Array.isArray(node.properties?.previousNames) ? node.properties.previousNames : [])
         : (Array.isArray(node.widgets) ? node.widgets.map(w => w?.value) : []);
 
-    // If a widget index is provided, only consider that one value; otherwise, consider all
+    // If a widget widgetIndex is provided, only consider that one value; otherwise, consider all
     const candidates = widgetIndex != null ? [allCandidates[widgetIndex]] : allCandidates;
 
     // Normalize to trimmed strings and drop empty values
@@ -294,7 +316,7 @@ export function findGetters(node, checkForPreviousName, widgetIndex) {
 }
 
 export function propagateToGetters(node) {
-    console.log("[propagateToGetters]", { node: node });
+    log({ class: "TwinNodeHelpers", method: "propagateToGetters", severity: "trace", tag: "function_entered" }, "[propagateToGetters]", { node: node });
     const types = (node.inputs || []).map(input => input?.type || '*');
     const getters = findGetters(node);
     getters.forEach(/** TwinNodes */ getter => {
@@ -336,13 +358,13 @@ export function propagateToGetters(node) {
 
 // Slot management helper functions
 export function ensureInputSlots(node, count) {
-    console.log("[ensureInputSlots] count:", count);
+    log({ class: "TwinNodeHelpers", method: "ensureInputSlots", severity: "trace", tag: "function_entered" }, "[ensureInputSlots] count:", count);
     while ((node.inputs?.length || 0) < count) node.addInput("*", "*");
     while ((node.inputs?.length || 0) > count) node.removeInput(node.inputs.length - 1);
 }
 
 export function ensureOutputSlots(node, count) {
-    console.log("[ensureOutputSlots] count:", count);
+    log({ class: "TwinNodeHelpers", method: "ensureOutputSlots", severity: "trace", tag: "function_entered" }, "[ensureOutputSlots] count:", count);
     while ((node.outputs?.length || 0) < count) node.addOutput("*", "*");
     while ((node.outputs?.length || 0) > count) node.removeOutput(node.outputs.length - 1);
 }
@@ -357,7 +379,7 @@ export function ensureSlotCounts(node) {
 
 // Widget management helper functions
 export function ensureWidgetCount(node, count, widgetType, namePrefix, callback, options) {
-    console.log("[ensureWidgetCount] count:", count, "type:", widgetType);
+    log({ class: "TwinNodeHelpers", method: "ensureWidgetCount", severity: "trace", tag: "function_entered" }, "[ensureWidgetCount] count:", count, "type:", widgetType);
     const current = node.widgets?.length || 0;
     for (let i = current; i < count; i++) {
         const idx = i;
@@ -374,7 +396,7 @@ export function ensureWidgetCount(node, count, widgetType, namePrefix, callback,
 }
 
 export function normalizeWidgetLabels(node, namePrefix) {
-    console.log("[normalizeWidgetLabels] namePrefix:", namePrefix);
+    log({ class: "TwinNodeHelpers", method: "normalizeWidgetLabels", severity: "trace", tag: "function_entered" }, "[normalizeWidgetLabels] namePrefix:", namePrefix);
     if (!Array.isArray(node.widgets)) return;
     for (let i = 0; i < node.widgets.length; i++) {
         if (node.widgets[i] && typeof node.widgets[i].name !== "undefined") {
@@ -385,7 +407,7 @@ export function normalizeWidgetLabels(node, namePrefix) {
 
 // Link validation helper function
 export function validateNodeLinks(node) {
-    console.log("[validateNodeLinks]");
+    log({ class: "TwinNodeHelpers", method: "validateNodeLinks", severity: "trace", tag: "function_entered" }, "[validateNodeLinks]");
     if (!node.outputs) return;
 
     for (let i = 0; i < node.outputs.length; i++) {
@@ -394,7 +416,7 @@ export function validateNodeLinks(node) {
                 const link = GraphHelpers.getLink(node.graph, linkId);
                 return link && (!link.type.split(",").includes(node.outputs[i].type) && link.type !== '*');
             }).forEach(linkId => {
-                console.log("[validateNodeLinks] Removing invalid link", linkId);
+                log({ class: "TwinNodeHelpers", method: "validateNodeLinks", severity: "info", tag: "link_removed" }, "[validateNodeLinks] Removing invalid link", linkId);
                 GraphHelpers.removeLink(node.graph, linkId);
             });
         }
@@ -408,7 +430,7 @@ export function validateNodeLinks(node) {
  * it appends a numeric suffix to resolve the conflict.
  *
  * @param {Object} node - The node containing the widget to validate.
- * @param {number} idx - The index of the widget in the node's widget list to validate.
+ * @param {number} idx - The widgetIndex of the widget in the node's widget list to validate.
  * @return {void} This function does not return a value.
  */
 export function validateWidgetName(node, idx) {
@@ -423,7 +445,7 @@ export function validateWidgetName(node, idx) {
         if (otherNode && otherNode.type === 'SetTwinNodes' && Array.isArray(otherNode.widgets)) {
             otherNode.widgets.forEach((w, wi) => {
                 if (!w) return;
-                if (otherNode === node && wi === idx) return; // skip self at same index
+                if (otherNode === node && wi === idx) return; // skip self at same widgetIndex
                 const v = safeStringTrim(w?.value);
                 if (v) existingValues.add(v);
             });
@@ -445,7 +467,7 @@ export function validateWidgetName(node, idx) {
 
 // Slot label helper function
 export function getPreferredSlotLabel(fromNode, originSlotIndex) {
-    console.log("[getPreferredSlotLabel]");
+    log({ class: "TwinNodeHelpers", method: "getPreferredSlotLabel", severity: "trace", tag: "function_entered" }, "[getPreferredSlotLabel]");
     const srcSlot = fromNode?.outputs?.[originSlotIndex];
     const lbl = srcSlot?.label || srcSlot?.name || srcSlot?.type;
     return (lbl && String(lbl).trim()) || "";

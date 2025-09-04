@@ -1,5 +1,6 @@
 /** @typedef {import('@comfyorg/litegraph/dist/litegraph').LGraph} LGraph */
 /** @typedef {import('@comfyorg/litegraph/dist/litegraph').Subgraph} Subgraph */
+import { log } from "./logger.js";
 
 export const GraphHelpers = {
     /**
@@ -24,7 +25,7 @@ export const GraphHelpers = {
                 if (n) return n;
             } catch (_) {}
         }
-        console.log(`[TwinNodes] getNodeById: graph of type ${graph.constructor.name} did not have getNodeById method: using fallback`);
+        log({ class: "GraphHelpers", method: "getNodeById", severity: "warn", tag: "fallback" }, `[TwinNodes] getNodeById: graph of type ${graph.constructor.name} did not have getNodeById method: using fallback`);
         const nodes = this.getAllNodes(graph);
         return nodes.find(n => n && n.id == id) || null;
     },
@@ -42,10 +43,10 @@ export const GraphHelpers = {
             try {
                 return graph.getLink(linkId) || null;
             } catch (_) {
-                console.log(`[TwinNodes] getLink: exception while calling graph.getLink: ${_}`);
+                log({ class: "GraphHelpers", method: "getLink", severity: "error", tag: "exception" }, `[TwinNodes] getLink: exception while calling graph.getLink: ${_}`);
             }
         }
-        console.log("[TwinNodes] getLink: using fallback");
+        log({ class: "GraphHelpers", method: "getLink", severity: "warn", tag: "fallback" }, "[TwinNodes] getLink: using fallback");
         return graph?.links?.[linkId] ?? null;
     },
 
@@ -64,7 +65,7 @@ export const GraphHelpers = {
                 return false;
             }
         }
-        console.log("[TwinNodes] removeLink: using fallback");
+        log({ class: "GraphHelpers", method: "removeLink", severity: "warn", tag: "fallback" }, "[TwinNodes] removeLink: using fallback");
         // Fallback best-effort: remove from links map if present
         if (graph.links && Object.prototype.hasOwnProperty.call(graph.links, linkId)) {
             try {

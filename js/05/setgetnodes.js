@@ -18,24 +18,23 @@
 /** @typedef {import("@comfyorg/litegraph/dist/types/widgets").IWidget} IWidget */
 /** @typedef {import("@comfyorg/litegraph/dist/litegraph").ContextMenuItem} ContextMenuItem */
 
-import { app } from "../../../scripts/app.js";
-import { GraphHelpers } from "../common/graphHelpersForTwinNodes.js";
-import { analyzeNamesForAbbrev, computeTwinNodeTitle, extractWidgetNames, safeStringTrim } from "../01/stringHelper.js";
-import { 
-    isUnlinkedName,
-    stripUnlinkedPrefix, 
-    makeUnlinkedName, 
-    wrapWidgetValueSetter, 
-    showAlert, 
-    findGetters,
-    propagateToGetters,
+import {app} from "../../../scripts/app.js";
+import {GraphHelpers} from "../common/graphHelpersForTwinNodes.js";
+import {analyzeNamesForAbbrev, computeTwinNodeTitle, extractWidgetNames, safeStringTrim} from "../01/stringHelper.js";
+import {
     ensureSlotCounts,
-    validateWidgetName,
+    findGetters,
     getPreferredSlotLabel,
-    getPreviousWidgetName
+    isUnlinkedName,
+    showAlert,
+    stripUnlinkedPrefix,
+    validateWidgetName,
+    wrapWidgetValueSetter
 } from "../01/twinnodeHelpers.js";
-import { TwinNodes } from "../common/twinNodes.js";
-import { drawTextWithBg, getWidgetBounds } from "../01/canvasHelpers.js";
+import {TwinNodes} from "../common/twinNodes.js";
+import {drawTextWithBg, getWidgetBounds} from "../01/canvasHelpers.js";
+import {log} from "../common/logger.js";
+
 /**
  * Get the bounding box of a widget in node-local coordinates
  * @param {LGraphNode} node - The node containing the widget
@@ -47,7 +46,7 @@ import { drawTextWithBg, getWidgetBounds } from "../01/canvasHelpers.js";
 // based on diffus3's SetGet: https://github.com/diffus3/ComfyUI-extensions
 
 // Note: we don't actually have a settings , so lets use Kijai's
-let disablePrefix = app.ui.settings.getSettingValue("KJNodes.disablePrefix")
+let disablePrefix = app.ui.settings.getSettingValue("ovum.disablePrefix")
 const LGraphNode = LiteGraph.LGraphNode
 
 // TwinNodes base moved to ../common/twinNodes.js and imported above
@@ -64,8 +63,7 @@ class SetTwinNodes extends TwinNodes {
         super(title)
         if (!this.properties) {
             this.properties = {
-                previousNames: [],
-                constCount: 2,
+                previousNames: Array(this.numberOfWidgets || 2).fill(""),
             };
         }
         this.properties.showOutputText = SetTwinNodes.defaultVisibility;
@@ -77,7 +75,7 @@ class SetTwinNodes extends TwinNodes {
         this.__pendingRelinkInfo = this.__pendingRelinkInfo || Object.create(null);
 
         // Create an arbitrary number of constants/links
-        const initialCount = this.properties.constCount || 2;
+        const initialCount = this.numberOfWidgets || 2;
         for (let i = 0; i < initialCount; i++) {
             const idx = i;
             const widget = this.addWidget(
@@ -91,20 +89,30 @@ class SetTwinNodes extends TwinNodes {
             wrapWidgetValueSetter(widget);
 
             // callback?(value: any, canvas?: LGraphCanvas, node?: LGraphNode, pos?: Point, e?: CanvasPointerEvent): void;
+            /**
+             * A callback function triggered during widget interaction, performing actions such as updating node properties and validation.
+             *
+             * @param {string} value - The current value of the widget.
+             * @param {LGraphCanvas} canvas - The canvas where the widget is rendered.
+             * @param {SetTwinNodes} node - The node object associated with the widget.
+             * @param {number} pos - The position of the widget.
+             * @param {Object} e - The event object triggering the callback.
+             * @return {void} Returns nothing.
+             */
             function callback(value, canvas, node, pos, e) {
-                console.log("[SetTwinNodes] widget callback", {
+                log({ class: "SetTwinNodes", method: "callback", severity: "trace", tag: "function_entered" }, "[SetTwinNodes] widget callback", {
                     value: value,
                     previousValue: node.widgets[idx]?.previousValue,
-                    old_value: node.widgets[idx]?.value,
+                    value2: node.widgets[idx]?.value,
                     // node: node,
-                    // pos: pos,
+                    pos: pos,
                     // e: e
                 });
                 if (node && node.graph) {
                     validateWidgetName(node, idx);
-                    node.properties.previousNames[idx] = value;
                     node.updateTitle();
                     node.update();
+                    node.properties.previousNames[idx] = value;
                 }
             }
         }
@@ -119,7 +127,7 @@ class SetTwinNodes extends TwinNodes {
      * and update node color from the first connected typed link
      */
     updateTitle() {
-        console.log("[SetTwinNodes] updateTitle");
+        log({ class: "SetTwinNodes", method: "updateTitle", severity: "trace", tag: "function_entered" }, "[SetTwinNodes] updateTitle");
         const names = extractWidgetNames(this);
         this.title = computeTwinNodeTitle(names, "Set", disablePrefix);
 
@@ -132,7 +140,7 @@ class SetTwinNodes extends TwinNodes {
      * Sync outputs to inputs and fill empty widget values from labels.
      */
     applyDuplicateNumbering() {
-        console.log("[SetTwinNodes] applyDuplicateNumbering");
+        log({ class: "SetTwinNodes", method: "applyDuplicateNumbering", severity: "trace", tag: "function_entered" }, "[SetTwinNodes] applyDuplicateNumbering");
         const count = this.inputs?.length || 0;
         for (let i = 0; i < count; i++) {
             if (!this.inputs?.[i] || this.inputs[i].link == null) continue;
@@ -169,7 +177,7 @@ class SetTwinNodes extends TwinNodes {
      * Compute and apply abbreviated labels to SetTwinNodes outputs where appropriate
      */
     applyAbbreviatedOutputLabels() {
-        console.log("[SetTwinNodes] applyAbbreviatedOutputLabels");
+        log({ class: "SetTwinNodes", method: "applyAbbreviatedOutputLabels", severity: "trace", tag: "function_entered" }, "[SetTwinNodes] applyAbbreviatedOutputLabels");
 
         // Build items from widget names using helper (allow duplicates, preserve order)
         const names = extractWidgetNames(this, { unique: false });
@@ -190,33 +198,36 @@ class SetTwinNodes extends TwinNodes {
     }
 
     /**
-     * Callback invoked by {@link connect} to override the target slot index.
-     * Its return value overrides the target index selection.
-     * @this {ComfyNode}
-     * @param {number} target_slot The current input slot index
-     * @param {number|string} requested_slot The originally requested slot index - could be negative, or if using (deprecated) name search, a string
-     * @returns {number|false|null} If a number is returned, the connection will be made to that input index.
-     * If an invalid index or non-number (false, null, NaN etc) is returned, the connection will be cancelled.
+     * Callback invoked by {@link connect} to override the target slot widgetIndex.
+     * Its return value overrides the target widgetIndex selection.
+     * @this {SetTwinNodes}
+     * @param {number} target_slot The current input slot widgetIndex
+     * @param {number|string} requested_slot The originally requested slot widgetIndex - could be negative, or if using (deprecated) name search, a string
+     * @returns {number|false|null} If a number is returned, the connection will be made to that input widgetIndex.
+     * If an invalid widgetIndex or non-number (false, null, NaN etc) is returned, the connection will be cancelled.
      */
     onBeforeConnectInput(target_slot, requested_slot) {
-        console.log("[SetTwinNodes] onBeforeConnectInput", { target_slot, requested_slot });
+        log({ class: "SetTwinNodes", method: "onBeforeConnectInput", severity: "trace", tag: "function_entered" }, "[SetTwinNodes] onBeforeConnectInput", { target_slot, requested_slot });
     }
 
-    onWidgetChanged(name, value, old_value, w) {
-        // [SetTwinNodes] onWidgetChanged {name: 'Constant 2', value: 'con2', old_value: 'IMAGE', w: TextWidget}
-        console.log("[SetTwinNodes] onWidgetChanged", {name, value, old_value, w});
+    onWidgetChanged(name, value, oldValue, widget) {
+        // [SetTwinNodes] onWidgetChanged {name: 'Constant 2', value: 'con2', oldValue: 'IMAGE', widget: TextWidget}
+        const widgetIndex = this.widgets.indexOf(widget);
+        const type = this.inputs?.[widgetIndex]?.type;
+        log({ class: "SetTwinNodes", method: "onWidgetChanged", severity: "trace", tag: "function_entered" }, "[SetTwinNodes] onWidgetChanged", {name, value, oldValue, type, w: widget});
         this.graph.sendEventToAllNodes("setnodeNameChange", {
-            old_value,
+            oldValue,
             value,
-            index: this.widgets.indexOf(w),
-            setterId: this.id
+            type,
+            widgetIndex,
+            nodeId: this.id
         });
     }
 
     /**
-     * @this {ComfyNode}
+     * @this {SetTwinNodes}
      * @param {number} type LiteGraph.INPUT (1) for input, LiteGraph.OUTPUT (2) for output.
-     * @param {number} index The slot index being affected.
+     * @param {number} index The slot widgetIndex being affected.
      * @param {boolean} isConnected True when connecting; false when disconnecting.
      * @param {LLink|null|undefined} link_info The link descriptor involved in the change.
      * @param {INodeInputSlot|INodeOutputSlot|SubgraphIO} inputOrOutput The slot object for the affected side.
@@ -228,7 +239,7 @@ class SetTwinNodes extends TwinNodes {
         link_info,
         inputOrOutput
     ) {
-        console.log("[SetTwinNodes] onConnectionsChange", { type, index, isConnected, link_info, inputOrOutput });
+        log({ class: "SetTwinNodes", method: "onConnectionsChange", severity: "trace", tag: "function_entered" }, "[SetTwinNodes] onConnectionsChange", { type, index, isConnected, link_info, inputOrOutput });
         const mirrorOutputFromInput = (s) => {
             if (this.inputs && this.outputs && this.inputs[s] && this.outputs[s]) {
                 this.outputs[s].type = this.inputs[s].type || '*';
@@ -248,7 +259,7 @@ class SetTwinNodes extends TwinNodes {
             const slotKey = `${type}:${index}`;
             // Capture the previous type at the moment of disconnect
             const prevTypeAtDisconnect = this.inputs?.[index]?.type;
-            console.log("[SetTwinNodes] onConnectionsChange input disconnected", { slotKey, prevTypeAtDisconnect });
+            log({ class: "SetTwinNodes", method: "onConnectionsChange", severity: "debug", tag: "connection_change" }, "[SetTwinNodes] onConnectionsChange input disconnected", { slotKey, prevTypeAtDisconnect });
 
             // Clear any existing timer for this slot
             if (this.__disconnectTimers && this.__disconnectTimers[slotKey]) {
@@ -391,7 +402,7 @@ class SetTwinNodes extends TwinNodes {
                 // Auto-name the corresponding widget for this slot if empty or '*'
                 if (this.widgets?.[index] && (!this.widgets[index].value || this.widgets[index].value === '*')) {
                     this.widgets[index].value = preferred;
-                    // Enforce graph-wide uniqueness for this widget index
+                    // Enforce graph-wide uniqueness for this widget widgetIndex
                     validateWidgetName(this, index);
                 }
 
@@ -428,8 +439,8 @@ class SetTwinNodes extends TwinNodes {
     /**
      * Creates a copy of this node.
      * Conforms to LGraphNode.clone by returning a cloned node instance; resets slots and recomputes size.
-     * @this {ComfyNode}
-     * @returns {ComfyNode} The cloned node.
+     * @this {SetTwinNodes}
+     * @returns {SetTwinNodes} The cloned node.
      */
     clone() {
         const cloned = SetTwinNodes.prototype.clone.apply(this);
@@ -464,11 +475,11 @@ class SetTwinNodes extends TwinNodes {
     checkGetters() {
         this.currentGetters = this.widgets.map((v, k) => k).map(k => findGetters(this, null, k));
         this.canvas.setDirty(true, true);
-        console.log("[SetTwinNodes] checkGetters", this.currentGetters);
+        log({ class: "SetTwinNodes", method: "checkGetters", severity: "debug", tag: "status" }, "[SetTwinNodes] checkGetters", this.currentGetters);
     }
 
     update() {
-        console.log("[SetTwinNodes] update");
+        log({ class: "SetTwinNodes", method: "update", severity: "trace", tag: "function_entered" }, "[SetTwinNodes] update");
         if (!this.graph) {
             return;
         }
@@ -480,38 +491,47 @@ class SetTwinNodes extends TwinNodes {
         // Rename propagation across all widget indices:
         // compare previousNames snapshot vs current widget values and
         // update any GetTwinNodes widgets that still reference the old name.
-        const currNames = Array.isArray(this.widgets)
-            ? this.widgets.map(widget => safeStringTrim(widget?.value))
-            : [];
-        const prevNames = Array.isArray(this.properties.previousNames) ? this.properties.previousNames : [];
-
-        for (let i = 0; i < Math.max(prevNames.length, currNames.length); i++) {
-            const prev = prevNames[i] || "";
-            const curr = currNames[i] || "";
-            if (prev && curr && prev !== curr) {
-                const allGettersForRename = GraphHelpers.getNodesByType(this.graph, "GetTwinNodes");
-                allGettersForRename.forEach(/** TwinNodes */ getter => {
-                    if (!Array.isArray(getter.widgets)) return;
-                    let changed = false;
-                    for (let gi = 0; gi < getter.widgets.length; gi++) {
-                        const gv = getter.widgets[gi]?.value;
-                        if (gv && safeStringTrim(gv) === prev) {
-                            console.log(`[SetTwinNodes] update, updating getter widger ${gv} -> ${curr}`);
-                            getter.widgets[gi].value = curr;
-                            changed = true;
-                        }
-                    }
-                    if (changed && typeof getter.onRename === "function") {
-                        getter.onRename();
-                    }
-                });
-            }
-        }
+        // const currNames = Array.isArray(this.widgets)
+        //     ? this.widgets.map(widget => safeStringTrim(widget?.value))
+        //     : [];
+        // this.propagateNameChanges2(currNames);
 
         // Update the previousNames snapshot
-        this.properties.previousNames = currNames;
+        // this.properties.previousNames = currNames;
     }
 
+
+    propagateNameChanges2(currNames) {
+        // const prevNames = Array.isArray(this.properties.previousNames) ? this.properties.previousNames : [];
+        //
+        // for (let i = 0; i < Math.max(prevNames.length, currNames.length); i++) {
+        //     const prev = prevNames[i] || "";
+        //     const curr = currNames[i] || "";
+        //     if (prev && curr && prev !== curr) {
+        //         const allGettersForRename = GraphHelpers.getNodesByType(this.graph, "GetTwinNodes");
+        //         allGettersForRename.forEach(/** TwinNodes */getter => {
+        //             if (!Array.isArray(getter.widgets)) return;
+        //             let changed = false;
+        //             for (let gi = 0; gi < getter.widgets.length; gi++) {
+        //                 const gv = getter.widgets[gi]?.value;
+        //                 if (gv && safeStringTrim(gv) === prev) {
+        //                     log({
+        //                         class: "SetTwinNodes",
+        //                         method: "update",
+        //                         severity: "debug",
+        //                         tag: "rename_propagate"
+        //                     }, `[SetTwinNodes] update, updating getter widger ${gv} -> ${curr}`);
+        //                     getter.widgets[gi].value = curr;
+        //                     changed = true;
+        //                 }
+        //             }
+        //             if (changed && typeof getter.onRename === "function") {
+        //                 getter.onRename();
+        //             }
+        //         });
+        //     }
+        // }
+    }
 
     /**
      * Called when the node is removed from the graph.
@@ -519,7 +539,7 @@ class SetTwinNodes extends TwinNodes {
      * @returns {void}
      */
     onRemoved() {
-        console.log("[SetTwinNodes] onRemoved (kinda think something should happen here)");
+        log({ class: "SetTwinNodes", method: "onRemoved", severity: "trace", tag: "function_entered" }, "[SetTwinNodes] onRemoved (kinda think something should happen here)");
     }
     /**
      * Allows extending the context menu for this node.
@@ -539,7 +559,7 @@ class SetTwinNodes extends TwinNodes {
                 content: menuEntry,
                 callback: () => {
                     node.checkGetters();
-                    console.log("[SetTwinNodes] context menu, found getters", node.currentGetters);
+                    log({ class: "SetTwinNodes", method: "getExtraMenuOptions", severity: "info", tag: "context_menu" }, "[SetTwinNodes] context menu, found getters", node.currentGetters);
                     let i;
                     node.currentGetters.forEach((getters, i) => {
                         let linkType = '*';
@@ -579,7 +599,7 @@ class SetTwinNodes extends TwinNodes {
                     const allGetters = GraphHelpers.getNodesByType(node.graph, ["GetTwinNodes", "SetTwinNodes"]);
                     allGetters.forEach(otherNode => {
                         otherNode.drawConnection = false;
-                        console.log(otherNode);
+                        log({ class: "SetTwinNodes", method: "getExtraMenuOptions", severity: "debug", tag: "context_menu" }, otherNode);
                     });
 
                     menuEntry = "Show connections";
@@ -614,7 +634,6 @@ class SetTwinNodes extends TwinNodes {
             });
         }
     }
-
 
     /**
      * Called to render custom content on top of the node after the node background/body has been drawn.
@@ -765,6 +784,7 @@ app.registerExtension({
         );
 
         SetTwinNodes.category = "ovum";
+        window.SetTwinNodes = SetTwinNodes;
     },
 });
 

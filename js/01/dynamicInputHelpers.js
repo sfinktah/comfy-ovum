@@ -10,7 +10,7 @@ export function getDynamicInputs(node) {
          * @returns {{input: INodeInputSlot, index: number}} An object containing "input" property of type INodeInputSlot and "index" property of type number.
          */
         function (input, index) {
-            return {input, index};
+            return {input, widgetIndex: index};
         })
         .filter(o => o.input && typeof o.input.name === "string" && /^arg\d+$/.test(o.input.name))
         .sort((a, b) => {
@@ -61,7 +61,7 @@ export function ensureDynamicInputsImpl(node, isConnecting) {
                 const prevInp = dyn[dyn.length - 2].input;
                 if (lastInp.link == null && prevInp.link == null) {
                     // Remove the last one
-                    // Recompute index each loop to avoid stale indices after removal
+                    // Recompute widgetIndex each loop to avoid stale indices after removal
                     const fresh = getDynamicInputs(node);
                     const lastIdx = fresh[fresh.length - 1].index;
                     node.removeInput(lastIdx);

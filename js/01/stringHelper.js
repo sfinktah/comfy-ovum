@@ -128,7 +128,7 @@ export function extractWidgetNames(node, options = {}) {
     const { connectedOnly = false, unique = true } = options;
     const widgets = Array.isArray(node?.widgets) ? node.widgets : [];
 
-    // Helpers to determine connectivity for index i
+    // Helpers to determine connectivity for widgetIndex i
     const hasInputLink = (i) => node?.inputs?.[i]?.link != null;
     const hasOutputLink = (i) => {
         const links = node?.outputs?.[i]?.links;
