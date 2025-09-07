@@ -79,6 +79,8 @@ app.registerExtension({
         function onSocketOpen() {
             console.info("[ComfyUI] websocket opened/reconnected");
             // Record system information when connection opens
+            Timer.cudnn_enabled = null;
+            Timer.current_run_id = null;
             app.api.subscribeLogs(true).then(x => {
                 console.log("Logs subscribed", x);
             });

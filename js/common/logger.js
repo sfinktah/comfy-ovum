@@ -28,15 +28,44 @@
  * - Derived from meta.class and meta.method as "ClassName::methodName".
  * - If neither supplied, source is empty for display; stats record "(no-source)" placeholder.
  *
- * Rules:
- * - Prioritized list; first matching rule wins.
+ * Rules (iptables-style):
+ * - Ordered chain; rules processed sequentially, first match wins.
  * - Each rule has an action: 'allow' or 'deny'.
  * - Match criteria: severity (string|array), tag (string|array), source (string|array). Omitted criterion is a wildcard.
+ * - Rules are numbered starting from 1 (like iptables line numbers).
+ * - Commands mirror iptables:
+ *   - appendRule(): Add rule to end of chain (like iptables -A)
+ *   - insertRule(pos, rule): Insert rule at position (like iptables -I)
+ *   - deleteRule(pos): Delete rule by number (like iptables -D)
+ *   - replaceRule(pos, rule): Replace rule at position (like iptables -R)
+ *   - listRules(): List all rules with numbers (like iptables -L)
+ *   - flushRules(): Clear all rules (like iptables -F)
  * - Examples:
- *     Logger.addRule({ action: 'deny', tag: 'function_entered', comment: 'Hide function enter spam' });
- *     Logger.addRule({ action: 'allow', severity: ['warn','error'], comment: 'Always show warnings/errors' });
- *     Logger.addRule({ action: 'deny', source: 'SetTwinNodes::update' });
- * - Rules are persisted to localStorage under a versioned key. Use Logger.listRules()/Logger.clearRules()/Logger.setRules() to manage.
+ *     Logger.appendRule({ action: 'deny', tag: 'function_entered', comment: 'Hide function enter spam' });
+ *     Logger.insertRule(1, { action: 'allow', severity: ['warn','error'], comment: 'Always show warnings/errors first' });
+ *     Logger.deleteRule(3); // Delete rule #3
+ *     Logger.replaceRule(2, { action: 'deny', source: 'SetTwinNodes::update' });
+ * - Rules are persisted to localStorage under a versioned key.
+ *      *
+ *      * Rule format:
+ *      * {
+ *      *   action: 'allow'|'deny',       // required
+ *      *   severity?: string|string[],   // optional; match when severity is one of these values
+ *      *   tag?: string|string[],        // optional; match when any of the log's tags is in this set
+ *      *   source?: string|string[],     // optional; exact match against "Class::method"
+ *      *   comment?: string              // optional; freeform note for humans
+ *      * }
+ *      *
+ *      * Priority:
+ *      * - If widgetIndex is provided, inserts at that widgetIndex (0 = highest priority).
+ *      * - Otherwise appends to the end (lowest priority).
+ *      *
+ *      * Persistence:
+ *      * - The updated rule list is persisted to localStorage.
+ *      *
+ *      * @param {Object} rule The rule object; invalid rules are ignored.
+ *      * @param {number|null} [index=null] Optional insertion widgetIndex.
+ *      * @returns {Array<Object>|undefined} The updated rule list as returned by listRules(), or undefined if rule was invalid.
  *
  * Stats:
  * - Logger maintains counters for totals, emitted, suppressed, and per-dimension breakdowns (severity, tag, source).
@@ -44,8 +73,15 @@
  *
  * Quick usage:
  *   Logger.log({ class: 'Widget', method: 'init', severity: 'trace', tag: 'function_entered' }, 'Initializing with', opts);
- *   Logger.addRule({ action: 'deny', tag: 'function_entered' }); // blacklist example
- *   Logger.addRule({ action: 'allow', severity: ['warn','error'] }); // whitelist example
+ *   
+ *   // iptables-style rule management:
+ *   Logger.appendRule({ action: 'deny', tag: 'function_entered' }); // append rule to end
+ *   Logger.insertRule(1, { action: 'allow', severity: ['warn','error'] }); // insert as first rule
+ *   Logger.deleteRule(2); // delete rule #2
+ *   Logger.replaceRule(1, { action: 'allow', severity: 'error' }); // replace rule #1
+ *   Logger.listRules(); // list all rules with numbers
+ *   Logger.flushRules(); // clear all rules
+ *   
  *   Logger.showStats();
  *
  * Backwards compatibility:
@@ -83,6 +119,37 @@ function buildPrefix(meta) {
     parts.push(`[${sev}]`);
     if (tags.length) parts.push(`[${tags.join(',')}]`);
     return parts.join('');
+}
+
+function stripSuperfluousArgs(meta, args) {
+    if (!args || args.length === 0) return args;
+
+    const cls = meta?.class ? String(meta.class) : '';
+    const method = meta?.method ? String(meta.method) : '';
+
+    // If we don't have class or method info, return args unchanged
+    if (!cls && !method) return args;
+
+    return args.filter(arg => {
+        // Only filter string arguments
+        if (typeof arg !== 'string') return true;
+
+        // Check if the string contains redundant class/method information
+        let containsClass = cls && arg.includes(`[${cls}]`);
+        let containsMethod = method && arg.includes(method);
+        let containsSource = cls && method && arg.includes(`[${cls}]`) && arg.includes(method);
+
+        // Remove if the string appears to be just redundant source information
+        if (containsSource || (containsClass && containsMethod)) {
+            // Additional check: if the string is mostly just the redundant info, remove it
+            const cleanArg = arg.replace(/\[.*?\]/g, '').trim();
+            if (!cleanArg || cleanArg === method || cleanArg === cls) {
+                return false;
+            }
+        }
+
+        return true;
+    });
 }
 
 function safeLocalStorageGet(key) {
@@ -207,20 +274,22 @@ export class Logger {
         if (!allowed) return;
 
         const prefix = buildPrefix({ ...meta, severity, tag: tags });
-        // Display arguments identically to console.* by forwarding the original args
+        const filteredArgs = stripSuperfluousArgs(meta, args);
+
+        // Display arguments with superfluous information stripped
         try {
             if (prefix) {
-                console[consoleMethod](prefix, ...args);
+                console[consoleMethod](prefix, ...filteredArgs);
             } else {
-                console[consoleMethod](...args);
+                console[consoleMethod](...filteredArgs);
             }
         } catch (_e) {
             // Fallback if console method is not available for any reason
             try {
                 if (prefix) {
-                    console.log(prefix, ...args);
+                    console.log(prefix, ...filteredArgs);
                 } else {
-                    console.log(...args);
+                    console.log(...filteredArgs);
                 }
             } catch (_e2) {
                 // Swallow to avoid breaking app on logging failures
@@ -296,123 +365,288 @@ export class Logger {
         return s;
     }
 
-    // Rule helpers
+    // iptables-style Rule Management
     /**
-     * List all rules with their current priority widgetIndex.
-     * Internal matching Sets are not exposed; only serializable fields are returned.
-     * @returns {Array<Object>} Array of rule objects with an added 'widgetIndex' property.
+     * List rules in iptables-style format with line numbers.
+     * Similar to 'iptables -L' command.
+     * @param {boolean} [verbose=false] Show detailed information
+     * @returns {void} Prints rules to console
      */
-    static listRules() {
+    static listRules(verbose = false) {
         this.init();
-        // Return cloned list with widgetIndex
-        return this._rules.map((r, i) => ({ index: i, ...r }));
+        console.log('Logger Rules (processed in order):');
+        console.log('num  action   criteria');
+        console.log('---  ------   ---------');
+
+        if (this._rules.length === 0) {
+            console.log('(no rules - default ACCEPT)');
+            return;
+        }
+
+        this._rules.forEach((rule, i) => {
+            const num = (i + 1).toString().padStart(3);
+            const action = rule.action.toUpperCase().padEnd(6);
+            const criteria = this._formatRuleCriteria(rule, verbose);
+            console.log(`${num}  ${action}   ${criteria}`);
+        });
     }
 
     /**
-     * Remove all rules and persist the empty list to localStorage.
+     * Append a rule to the end of the chain.
+     * Similar to 'iptables -A' command.
+     * @param {Object} rule Rule specification
+     * @returns {number|undefined} Rule number if successful
+     */
+    static appendRule(rule) {
+        const sanitized = this._sanitizeRule(rule);
+        if (!sanitized) return;
+        this._rules.push(sanitized);
+        this._saveRules();
+        return this._rules.length;
+    }
+
+    /**
+     * Insert a rule at the specified position.
+     * Similar to 'iptables -I' command.
+     * @param {number} position 1-based position (1 = first rule)
+     * @param {Object} rule Rule specification
+     * @returns {number|undefined} Rule number if successful
+     */
+    static insertRule(position, rule) {
+        const sanitized = this._sanitizeRule(rule);
+        if (!sanitized) return;
+
+        // Convert 1-based position to 0-based index
+        let index = position - 1;
+        if (index < 0) index = 0;
+        if (index > this._rules.length) index = this._rules.length;
+
+        this._rules.splice(index, 0, sanitized);
+        this._saveRules();
+        return index + 1;
+    }
+
+    /**
+     * Delete a rule by position or by specification.
+     * Similar to 'iptables -D' command.
+     * @param {number|Object} ruleSpec Either 1-based rule number or rule specification to match
+     * @returns {boolean} True if rule was deleted
+     */
+    static deleteRule(ruleSpec) {
+        if (typeof ruleSpec === 'number') {
+            // Delete by rule number (1-based)
+            const index = ruleSpec - 1;
+            if (index < 0 || index >= this._rules.length) return false;
+            this._rules.splice(index, 1);
+            this._saveRules();
+            return true;
+        } else if (typeof ruleSpec === 'object') {
+            // Delete by matching rule specification
+            const index = this._findMatchingRuleIndex(ruleSpec);
+            if (index === -1) return false;
+            this._rules.splice(index, 1);
+            this._saveRules();
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Replace a rule at the specified position.
+     * Similar to 'iptables -R' command.
+     * @param {number} position 1-based position
+     * @param {Object} rule New rule specification
+     * @returns {boolean} True if rule was replaced
+     */
+    static replaceRule(position, rule) {
+        const index = position - 1;
+        if (index < 0 || index >= this._rules.length) return false;
+
+        const sanitized = this._sanitizeRule(rule);
+        if (!sanitized) return false;
+
+        this._rules[index] = sanitized;
+        this._saveRules();
+        return true;
+    }
+
+    /**
+     * Flush all rules (equivalent to clearing the chain).
+     * Similar to 'iptables -F' command.
      * @returns {void}
      */
-    static clearRules() {
+    static flushRules() {
         this._rules = [];
         this._saveRules();
     }
 
     /**
-     * Replace the current rule list with the provided one.
-     * Invalid entries are discarded; valid entries are sanitized and persisted.
-     * @param {Array<Object>} rules Array of rule objects (see addRule for format).
-     * @returns {void}
+     * Get rule count.
+     * @returns {number} Number of rules
      */
-    static setRules(rules) {
-        this._rules = this._sanitizeRulesArray(Array.isArray(rules) ? rules : []);
-        this._saveRules();
+    static getRuleCount() {
+        return this._rules.length;
     }
 
     /**
-     * Add a rule to the prioritized list (first match wins).
-     *
-     * Rule format:
-     * {
-     *   action: 'allow'|'deny',       // required
-     *   severity?: string|string[],   // optional; match when severity is one of these values
-     *   tag?: string|string[],        // optional; match when any of the log's tags is in this set
-     *   source?: string|string[],     // optional; exact match against "Class::method"
-     *   comment?: string              // optional; freeform note for humans
-     * }
-     *
-     * Priority:
-     * - If widgetIndex is provided, inserts at that widgetIndex (0 = highest priority).
-     * - Otherwise appends to the end (lowest priority).
-     *
-     * Persistence:
-     * - The updated rule list is persisted to localStorage.
-     *
-     * @param {Object} rule The rule object; invalid rules are ignored.
-     * @param {number|null} [index=null] Optional insertion widgetIndex.
-     * @returns {Array<Object>|undefined} The updated rule list as returned by listRules(), or undefined if rule was invalid.
+     * Get rules array with position numbers (backwards compatibility).
+     * @returns {Array<Object>} Array of rule objects with added 'num' property.
+     */
+    static getRules() {
+        this.init();
+        return this._rules.map((r, i) => ({ num: i + 1, ...r }));
+    }
+
+    // Legacy methods (backwards compatibility)
+    /**
+     * @deprecated Use appendRule instead
      */
     static addRule(rule, index = null) {
-        const sanitized = this._sanitizeRule(rule);
-        if (!sanitized) return;
-        if (index == null || index < 0 || index > this._rules.length) {
-            this._rules.push(sanitized);
+        if (index != null) {
+            return this.insertRule(index + 1, rule) ? this.getRules() : undefined;
         } else {
-            this._rules.splice(index, 0, sanitized);
+            return this.appendRule(rule) ? this.getRules() : undefined;
         }
-        this._saveRules();
-        return this.listRules();
     }
 
     /**
-     * Convenience: add an 'allow' rule by supplying only match criteria.
-     * @param {{severity?: string|string[], tag?: string|string[], source?: string|string[], comment?: string}} criteria
-     * @param {number|null} [index=null]
-     * @returns {Array<Object>|undefined}
+     * @deprecated Use appendRule with action: 'allow' instead
      */
     static addAllowRule(criteria, index = null) {
         return this.addRule({ action: 'allow', ...criteria }, index);
     }
 
     /**
-     * Convenience: add a 'deny' rule (blacklist) by supplying only match criteria.
-     * @param {{severity?: string|string[], tag?: string|string[], source?: string|string[], comment?: string}} criteria
-     * @param {number|null} [index=null]
-     * @returns {Array<Object>|undefined}
+     * @deprecated Use appendRule with action: 'deny' instead
      */
     static addDenyRule(criteria, index = null) {
         return this.addRule({ action: 'deny', ...criteria }, index);
     }
 
     /**
-     * Remove the rule at the given widgetIndex (priority).
-     * @param {number} index
-     * @returns {Array<Object>|undefined} Updated rules, or undefined if widgetIndex was invalid.
+     * @deprecated Use deleteRule instead
      */
     static removeRule(index) {
-        if (typeof index !== 'number' || index < 0 || index >= this._rules.length) return;
-        this._rules.splice(index, 1);
-        this._saveRules();
-        return this.listRules();
+        return this.deleteRule(index + 1) ? this.getRules() : undefined;
     }
 
     /**
-     * Reorder an existing rule, changing its priority.
-     * @param {number} fromIndex Current widgetIndex of the rule.
-     * @param {number} toIndex Desired widgetIndex (clamped into valid range).
-     * @returns {Array<Object>|undefined} Updated rules, or undefined if fromIndex was invalid.
+     * @deprecated Use insertRule/deleteRule combination instead
      */
     static moveRule(fromIndex, toIndex) {
-        if (fromIndex === toIndex) return this.listRules();
+        if (fromIndex === toIndex) return this.getRules();
         if (fromIndex < 0 || fromIndex >= this._rules.length) return;
         if (toIndex < 0) toIndex = 0;
         if (toIndex >= this._rules.length) toIndex = this._rules.length - 1;
         const [r] = this._rules.splice(fromIndex, 1);
         this._rules.splice(toIndex, 0, r);
         this._saveRules();
-        return this.listRules();
+        return this.getRules();
+    }
+
+    /**
+     * @deprecated Use flushRules instead
+     */
+    static clearRules() {
+        this.flushRules();
+    }
+
+    /**
+     * @deprecated Use direct rule manipulation methods instead
+     */
+    static setRules(rules) {
+        this._rules = this._sanitizeRulesArray(Array.isArray(rules) ? rules : []);
+        this._saveRules();
     }
 
     // ---- Internal helpers ----
+
+    /**
+     * Format rule criteria for display in iptables-style listing.
+     * @param {Object} rule Rule object
+     * @param {boolean} verbose Show detailed information
+     * @returns {string} Formatted criteria string
+     * @private
+     */
+    static _formatRuleCriteria(rule, verbose = false) {
+        const parts = [];
+
+        if (rule.severity) {
+            const sevs = Array.isArray(rule.severity) ? rule.severity : [rule.severity];
+            parts.push(`severity ${sevs.join(',')}`);
+        }
+
+        if (rule.tag) {
+            const tags = Array.isArray(rule.tag) ? rule.tag : [rule.tag];
+            parts.push(`tag ${tags.join(',')}`);
+        }
+
+        if (rule.source) {
+            const sources = Array.isArray(rule.source) ? rule.source : [rule.source];
+            parts.push(`source ${sources.join(',')}`);
+        }
+
+        if (parts.length === 0) {
+            parts.push('all');
+        }
+
+        let criteria = parts.join(' ');
+
+        if (rule.comment) {
+            criteria += ` /* ${rule.comment} */`;
+        }
+
+        return criteria;
+    }
+
+    /**
+     * Find the index of a rule matching the given specification.
+     * @param {Object} ruleSpec Rule specification to match
+     * @returns {number} Index of matching rule, or -1 if not found
+     * @private
+     */
+    static _findMatchingRuleIndex(ruleSpec) {
+        return this._rules.findIndex(rule => this._rulesMatch(rule, ruleSpec));
+    }
+
+    /**
+     * Check if two rule specifications match.
+     * @param {Object} rule1 First rule
+     * @param {Object} rule2 Second rule
+     * @returns {boolean} True if rules match
+     * @private
+     */
+    static _rulesMatch(rule1, rule2) {
+        if (rule1.action !== rule2.action) return false;
+
+        // Compare arrays/strings as normalized arrays
+        const normalize = (val) => {
+            if (Array.isArray(val)) return [...val].sort();
+            if (typeof val === 'string') return [val];
+            return null;
+        };
+
+        const compareArrays = (a1, a2) => {
+            if (a1 === null && a2 === null) return true;
+            if (a1 === null || a2 === null) return false;
+            if (a1.length !== a2.length) return false;
+            return a1.every((item, index) => item === a2[index]);
+        };
+
+        const sev1 = normalize(rule1.severity);
+        const sev2 = normalize(rule2.severity);
+        if (!compareArrays(sev1, sev2)) return false;
+
+        const tag1 = normalize(rule1.tag);
+        const tag2 = normalize(rule2.tag);
+        if (!compareArrays(tag1, tag2)) return false;
+
+        const src1 = normalize(rule1.source);
+        const src2 = normalize(rule2.source);
+        if (!compareArrays(src1, src2)) return false;
+
+        return true;
+    }
 
     static _updateStats({ severity, tags, source }, allowed, matchedRuleIndex) {
         this._stats.total += 1;

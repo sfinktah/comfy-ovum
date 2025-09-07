@@ -59,9 +59,9 @@ app.registerExtension({
             constructor(title) {
                 super(title)
                 if (!this.properties) {
-                    this.properties = { constCount: 2 };
-                } else if (this.properties.constCount == null) {
-                    this.properties.constCount = 2;
+                    this.properties = { bgcolors: [] };
+                } else if (this.numberOfWidgets == null) {
+                    this.numberOfWidgets = 2;
                 }
                 this.properties.showOutputText = GetTwinNodes.defaultVisibility;
 
@@ -402,9 +402,11 @@ app.registerExtension({
                         if (i >= (this.outputs?.length || 0)) ensureSlotCounts(this);
 
                         if (this.outputs?.[i]) {
-                            this.outputs[i].name = label || '*';
-                            this.outputs[i].label = label || '*';
-                            this.outputs[i].type = t;
+                            this.setOutput(i, {
+                                name: label || '*',
+                                label: label || '*',
+                                type: t
+                            });
                         }
                         if (!pickedType && label && t && t !== '*') {
                             pickedType = t;
@@ -461,7 +463,7 @@ app.registerExtension({
              */
             setnodeNameChange(e) {
                 // log({ class: "GetTwinNodes", method: "setnodeNameChange", severity: "trace", tag: "function_entered" }, `[GetTwinNodes] setnodeNameChange "${oldValue}" -> "${value}" (${type})`, oldValue, value);
-                log({ class: "GetTwinNodes", method: "setnodeNameChange", severity: "trace", tag: "function_entered" }, `[GetTwinNodes] setnodeNameChange`, arguments);
+                log({ class: "GetTwinNodes", method: "setnodeNameChange", severity: "trace", tag: "function_entered" }, e);
                 const prev = safeStringTrim(e.oldValue);
                 const next = safeStringTrim(e.value);
                 if (!prev || !next || prev === next) return;
@@ -488,14 +490,16 @@ app.registerExtension({
 
             // Support arbitrary number of types
             setTypesArray(typesArr) {
-                const min = this.properties?.constCount || 2;
+                const min = this.numberOfWidgets || 2;
                 const targetCount = Math.max(min, Array.isArray(typesArr) ? typesArr.length : 0);
                 ensureSlotCounts(this);
                 for (let i = 0; i < targetCount; i++) {
                     const t = (typesArr && typesArr[i]) ? typesArr[i] : '*';
                     if (this.outputs?.[i]) {
-                        this.outputs[i].name = t;
-                        this.outputs[i].type = t;
+                        this.setOutput(i, {
+                            name: t,
+                            type: t
+                        });
                     }
                 }
                 this.validateLinks();
@@ -510,8 +514,10 @@ app.registerExtension({
             setType(type, _widgetIndex) {
                 ensureSlotCounts(this);
                 if (this.outputs[_widgetIndex]) {
-                    this.outputs[_widgetIndex].name = type;
-                    this.outputs[_widgetIndex].type = type;
+                    this.setOutput(_widgetIndex, {
+                        name: type,
+                        type: type
+                    });
                 }
                 this.validateLinks();
             }
@@ -519,15 +525,15 @@ app.registerExtension({
             goToSetter() {
                 const setter = findSetter(this);
                 if (setter) {
-                    this.canvas.centerOnNode(setter);
-                    this.canvas.selectNode(setter, false);
+                    this.canvas.centerOnNode(setter.node);
+                    this.canvas.selectNode(setter.node, false);
                 }
             }
 
             updateTitle() {
                 log({ class: "GetTwinNodes", method: "updateTitle", severity: "trace", tag: "function_entered" }, "[GetTwinNodes] updateTitle");
                 const namesForTitle = extractWidgetNames(this);
-                this.title = computeTwinNodeTitle(namesForTitle, "Get", disablePrefix);
+                this.title = computeTwinNodeTitle(namesForTitle, "get", disablePrefix);
                 this.canvas.setDirty(true, true);
             }
 
@@ -540,7 +546,13 @@ app.registerExtension({
              * @returns {LLink|undefined} The found link, or undefined if no matching setter/link exists.
              */
             getInputLink(slot) {
-                const setter = findSetter(this, this.widgets[slot].value);
+                const wv = safeStringTrim(this.widgets?.[slot]?.value) || '';
+                if (!wv) return;
+
+                const found = findSetter(this, wv);
+                if (!found) return;
+
+                const setter = found.node;
 
                 if (setter) {
                     const input = setter.inputs[slot];

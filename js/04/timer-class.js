@@ -5,7 +5,7 @@
 import {app} from "../../../scripts/app.js";
 import {$el} from "../../../scripts/ui.js";
 
-import { removeEmojis, getNodeNameById, graphGetNodeById, findNodesByTypeName, findTimerNodes } from '../01/graphHelpers.js';
+import { uniq, removeEmojis, getNodeNameById, graphGetNodeById, findNodesByTypeName, findTimerNodes } from '../01/graphHelpers.js';
 import { chainCallback, stripTrailingId } from '../01/utility.js';
 import { ensureTooltipLib, attachTooltip } from '../01/tooltipHelpers.js';
 import { onUploadGraphData, onCopyGraphData, onCopyButton } from "../01/copyButton.js";
@@ -297,6 +297,11 @@ export class Timer {
                     console.warn('[Timer] Failed to persist node name cache:', e);
                 }
             }
+            else if (name && name.startsWith('id:')) {
+                if (Timer.nodeNameCache && typeof Timer.nodeNameCache === 'object' && typeof Timer.nodeNameCache[id] === 'object') {
+                    return Timer.nodeNameCache[id].name + ' (cached)';
+                }
+            }
             return name;
         } catch (err) {
             console.warn('[Timer] Failed to get node name by id:', err);
@@ -382,18 +387,12 @@ export class Timer {
             // }
 
             // From run history
-            if (runHistory) {
-                for (const run of Object.values(runHistory)) {
-                    if (run && run.nodes && typeof run.nodes === 'object') {
-                        for (const k of Object.keys(run.nodes)) {
-                            if (k != null) ids.add(String(k));
-                        }
-                    }
-                }
-            }
+            if (runHistory)
+            runHistory.forEach(id => ids.add(String(id)));
 
             // From current graph, if available
             const g = app?.graph;
+            ids = new Set();
             if (g && Array.isArray(g._nodes)) {
                 for (const n of g._nodes) {
                     if (n && n.id != null) ids.add(String(n.id));
@@ -703,8 +702,10 @@ export class Timer {
             acc.push(nodes);
             return acc;
         }, [])
+        const runNodeIds = currentRunHistory.flatMap(o => Object.keys(o))
         if (Timer.debug) console.log("[Timer] currentRunHistory: ", currentRunHistory);
-        const currentNodeIds = this.getUniqueNodeIds(currentRunHistory);
+        if (Timer.debug) console.log("[Timer] runNodeIds: ", runNodeIds);
+        const currentNodeIds = uniq(runNodeIds); // this.getUniqueNodeIds(runNodeIds);
         if (Timer.debug) console.log("[Timer] currentNodeIds: ", currentNodeIds);
 
         const averagesByK = (function averageByK(lastNRunIds) {
@@ -743,7 +744,7 @@ export class Timer {
         Timer.all_times.sort((a, b) => (averagesByK[b.id] ?? 0) - (averagesByK[a.id] ?? 0));
 
         // Build filter
-        let filterFunc = (node_data) => ~currentNodeIds.indexOf(node_data.id);
+        let filterFunc = (node_data) => ~currentNodeIds.indexOf(node_data.id) || node_data.id.includes("total");
         if (Timer.searchTerm) {
             if (Timer.searchRegex) {
                 let re;
@@ -769,6 +770,17 @@ export class Timer {
             const rowCells = [
                 $el("td", {className: "node", textContent: Timer.getNodeNameByIdCached(node_data.id)})
             ];
+            rowCells[0].addEventListener("dblclick", () => {
+                // nodeId = "123:345"
+                const firstNode = nodeId.split(":")[0];
+                app.canvas.centerOnNode(app.graph.getNodeById(firstNode));
+                // app.canvas.centerOnNode(app.graph.getNodeById(27))
+                app.canvas.selectNode(app.graph.getNodeById(firstNode), false);
+                // app.graph.canvasAction((c) => {
+                //     c.centerOnNode(nodeId);
+                //     c.selectNode(nodeId, false);
+                // });
+            });
             if (!Timer.isHidden('runs', 'display')) rowCells.push($el("td", {
                 className: "runs",
                 "textContent": node_data.runs.toString()
@@ -821,6 +833,7 @@ export class Timer {
                 }));
             }
             table.append($el("tr", {className: drawingActiveNode ? "live-node" : ""}, rowCells));
+
         });
 
         // Return just the table if scope is "table"

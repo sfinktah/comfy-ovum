@@ -99,7 +99,7 @@ app.registerExtension({
                 }
             });
 
-            //            onConnectionsChange(this: ComfyNode, type: ISlotType, index: number, isConnected: boolean, link_info: LLink | null | undefined, inputOrOutput: INodeInputSlot | INodeOutputSlot | SubgraphIO): void;
+            //            onConnectionsChange(this: ComfyNode, type: ISlotType, widgetIndex: number, isConnected: boolean, link_info: LLink | null | undefined, inputOrOutput: INodeInputSlot | INodeOutputSlot | SubgraphIO): void;
             // Update labels/types and manage dynamic slots on connect/disconnect
             /** Called for each connection that is created, updated, or removed. This includes "restored" connections when deserialising. */
             chainCallback(node, "onConnectionsChange",
@@ -118,7 +118,7 @@ app.registerExtension({
                         if (type !== LiteGraph.INPUT) { console.log("[ovum.format] early return: connection not for INPUT slot, type:", type); return; }
                         /** @type {INodeInputSlot} */
                         const input = this.inputs?.[index];
-                        if (!input) { console.log("[ovum.format] early return: no input found at index", index); return; }
+                        if (!input) { console.log("[ovum.format] early return: no input found at widgetIndex", index); return; }
 
                         const stackTrace = new Error().stack;
 
@@ -157,7 +157,7 @@ app.registerExtension({
                                 // A change in connection
                             }
 
-                            // console.log("[formatter] onConnectionsChange isConnected", link_info, "input:", input, "link_info:", link_info, "inputOrOutput:", inputOrOutput, "type:", type, "index:", index, "isConnected:", isConnected, "stackTrace:", stackTrace);
+                            // console.log("[formatter] onConnectionsChange isConnected", link_info, "input:", input, "link_info:", link_info, "inputOrOutput:", inputOrOutput, "type:", type, "widgetIndex:", widgetIndex, "isConnected:", isConnected, "stackTrace:", stackTrace);
                             console.log(`[ovum.format] link_info.origin_id = ${link_info.origin_id}`);
                             const fromNode = GraphHelpers.getNodeById(graph, link_info.origin_id);
                             const type = fromNode?.outputs?.[link_info.origin_slot]?.type ?? "*";

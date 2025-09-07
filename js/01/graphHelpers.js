@@ -12,6 +12,8 @@ export function removeEmojis(input) {
         return input == null ? "" : String(input);
     }
 
+    return input.replace(/[^\x00-\xff]+\s?/, '');
+
     try {
         const stripped = input
             .replace(/[\p{Extended_Pictographic}\p{Emoji_Presentation}\uFE0F]/gu, "")
@@ -31,9 +33,9 @@ export function removeEmojis(input) {
  * Retrieve a node by its ID.
  * Supports nested subgraph lookup using colon-separated IDs, e.g. "126:22:11".
  * @param {string|number} id
- * @returns {object|null} Found node or null if not found.
+ * @returns {LGraphNode[]} Found node or null if not found.
  */
-export function graphGetNodeById(id) {
+export function graphGetNodesById(id) {
     const root = app?.graph;
     if (!root) return null;
 
@@ -52,17 +54,36 @@ export function graphGetNodeById(id) {
     let currentGraph = root;
     let node = null;
 
-    for (let i = 0; i < parts.length; i++) {
-        const key = coerce(parts[i]);
+    return parts.map((part, i) => {
+        const key = coerce(part);
         node = getFrom(currentGraph, key);
         if (!node) return null;
         if (i < parts.length - 1) {
             currentGraph = node.subgraph ?? null;
             if (!currentGraph) return null;
         }
-    }
+        return node;
+    });
+}
 
-    return node;
+export function last(array) {
+      const length = array == null ? 0 : array.length;
+      return length ? array[length - 1] : undefined;
+}
+
+export function uniq(array) {
+    const length = array == null ? 0 : array.length;
+    return length ? [...new Set(array)] : [];
+}
+
+/**
+ * Retrieve a node by its ID.
+ * Supports nested subgraph lookup using colon-separated IDs, e.g. "126:22:11".
+ * @param {string|number} id
+ * @returns {}
+ */
+export function graphGetNodeById(id) {
+    return last(graphGetNodesById(id));
 }
 
 /**
@@ -82,9 +103,10 @@ export function findNodesByTypeName(type) {
 export function getNodeNameById(id) {
     // g = app.graph._nodes_by_id[126].subgraph._nodes_by_id[22]
     // g = app.graph.getNodeById(126).subgraph.getNodeById(22)
-    const node = graphGetNodeById(id);
-    if (!node) return `id:${id}`;
-    const name = node.getTitle() || node.title || node.name || node.type || "";
+    const nodes = graphGetNodesById(id);
+    const lastNode = last(nodes);
+    if (!lastNode) return `id:${id}`;
+    const name =  nodes.map(n => (n?.getTitle ? n.getTitle() : null) || n?.title || n?.comfyClass || n?.type || "unknown").join(": ");
 
     // RegExp to remove most common Unicode emoji/emoticon characters
     return removeEmojis(name) + ' (' + id + ')';

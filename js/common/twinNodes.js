@@ -1,12 +1,13 @@
 /// <reference lib="es2015.collection" />
-/** @typedef {import("@comfyorg/litegraph/dist/LGraphNode").LGraphNode} LGraphNode */
-/** @typedef {import("@comfyorg/litegraph/dist/litegraph").LiteGraph} LiteGraph */
-/** @typedef {import('@comfyorg/litegraph/dist/litegraph').LGraphCanvas} LGraphCanvas */
+/** @typedef {import("@comfyorg/comfyui-frontend-types").LGraphNode} LGraphNode */
+/** @typedef {import("@comfyorg/comfyui-frontend-types").LiteGraph} LiteGraph */
+/** @typedef {import('@comfyorg/comfyui-frontend-types').LGraphCanvas} LGraphCanvas */
 
 import {app} from "../../../scripts/app.js";
 import {getPreviousWidgetName, setColorAndBgColor, wrapWidgetValueSetter} from "../01/twinnodeHelpers.js";
+import {log, Logger} from "./logger.js";
 
-const LGraphNode = LiteGraph.LGraphNode
+// const LGraphNode = LiteGraph.LGraphNode
 export class TwinNodes extends LGraphNode {
     defaultVisibility = true;
     serialize_widgets = true;
@@ -49,7 +50,7 @@ export class TwinNodes extends LGraphNode {
 
     updateTitle() {
         // To be overridden by subclasses
-        console.log("[TwinNodes] updateTitle");
+        Logger.log({ class: 'TwinNodes', method: 'updateTitle', severity: 'debug', tag: 'function_entered' }, 'Method called');
     }
 
     updateColors() {
@@ -59,9 +60,9 @@ export class TwinNodes extends LGraphNode {
                 .filter(i => i?.type && i.type !== '*')
                 .map(i => i.type);
             if (typesArr.length) setColorAndBgColor.call(this, typesArr);
-            else console.log("[TwinNodes] updateColors: no outputs");
+            else Logger.log({ class: 'TwinNodes', method: 'updateColors', severity: 'debug', tag: 'no_outputs' }, 'No outputs found for color computation');
         } else {
-            console.log("[TwinNodes] updateColors: disabled by settings");
+            Logger.log({ class: 'TwinNodes', method: 'updateColors', severity: 'info', tag: 'settings' }, 'Node auto-coloring disabled by settings');
         }
         app.canvas.setDirty(true, true);
     }
@@ -69,14 +70,13 @@ export class TwinNodes extends LGraphNode {
     /**
      * Called to render custom content behind the node body (but not the title).
      * If two or more colors are present in this.colors, draw a vertical gradient between their bgcolors.
-     * Excludes the title area by starting below LiteGraph.NODE_TITLE_HEIGHT.
+     * Excludes the title area (seems to be enforced)
      * @param {CanvasRenderingContext2D} ctx
-     * @param {LGraphCanvas} lGraphCanvas
      */
-    onDrawBackground(ctx, lGraphCanvas) {
+    onDrawBackground(ctx) {
         try {
-            const colors = Array.isArray(this.colors) ? this.colors : [];
-            if (colors.length < 2 || colors[0].bgcolor == colors[1].bgcolor) return;
+            const colors = Array.isArray(this.properties?.bgcolors) ? this.properties.bgcolors : [];
+            if (colors.length < 2 || colors[0] === colors[1]) return;
             if (!this.size || this.size.length < 2) return;
             if (this.flags && this.flags.collapsed) return;
 
@@ -88,8 +88,8 @@ export class TwinNodes extends LGraphNode {
             const h = Math.max(0, (this.size[1] || 0) - titleH);
             if (w <= 0 || h <= 0) return;
 
-            const bg1 = (colors[0] && colors[0].bgcolor) ? colors[0].bgcolor : (this.bgcolor || "#333");
-            const bg2 = (colors[1] && colors[1].bgcolor) ? colors[1].bgcolor : (this.bgcolor || bg1);
+            const bg1 = colors[0] || this.bgcolor;
+            const bg2 = colors[1] || this.bgcolor;
 
             const grad = ctx.createLinearGradient(0, y, 0, y + h);
             grad.addColorStop(0, bg1);
@@ -122,5 +122,44 @@ export class TwinNodes extends LGraphNode {
         } catch (_e) {
             // Defensive: never break canvas draw loop
         }
+    }
+
+
+    setOutput(index, overrides = {}) {
+        if (this.outputs?.[index]) {
+            Object.keys(overrides).forEach(key => {
+                if (key !== 'label' && key in this.outputs[index]) {
+                    this.outputs[index][key] = overrides[key];
+                }
+            });
+        }
+    }
+
+    setInput(index, overrides = {}) {
+        if (this.inputs?.[index]) {
+            Object.keys(overrides).forEach(key => {
+                if (key !== 'label' && key in this.inputs[index]) {
+                    this.inputs[index][key] = overrides[key];
+                }
+            });
+        }
+    }
+
+    resetOutput(index, overrides = {}) {
+        const defaults = {type: '*', name: '*'};
+        const finalOverrides = {...defaults, ...overrides};
+        this.setOutput(index, finalOverrides);
+    }
+
+    resetInput(index, overrides = {}) {
+        log({class: "SetTwinNodes", method: "resetInput", severity: "trace", tag: "function_entered"}, overrides);
+        const defaults = {type: '*', name: '*'};
+        const finalOverrides = {...defaults, ...overrides};
+        this.setInput(index, finalOverrides);
+        log({class: "SetTwinNodes", method: "resetInput", severity: "trace", tag: "function_exit"}, {
+            type: this.inputs?.[index]?.type,
+            name: this.inputs?.[index]?.name,
+            label: this.inputs?.[index]?.label
+        });
     }
 }

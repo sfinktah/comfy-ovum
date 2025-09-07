@@ -98,6 +98,7 @@ export function setColorAndBgColor(types) {
     }
 
     this.colors = matches;
+    this.properties.bgcolors = matches.map(m => m.bgcolor);
 
     if (matches.length === 0) {
         return;
@@ -234,7 +235,7 @@ export function showAlert(detail, options = {}) {
  * Finds setter nodes and the specific widgets whose values match the provided name
  * or names derived from the given node's widgets.
  *
- * @param {LiteGraph.LGraphNode|ComfyNode} node - The node to use for deriving source names or comparing target nodes.
+ * @param {TwinNodes} node - The node to use for deriving source names or comparing target nodes.
  * @param {string} [name] - Optional name to filter by. If omitted, names are derived from the node's widgets.
  * @return {Array<{ node: LiteGraph.LGraphNode|ComfyNode, widget: IWidget, widgetIndex: number }>} A list of matches, each containing the setter node, the matching widget, and its widgetIndex.
  * @throws {Error} If the `node` parameter is not an instance of `LiteGraph.LGraphNode`.
@@ -270,9 +271,9 @@ export function findSetters(node, name = undefined) {
  * Finds the first setter match for the given name (or names derived from the node),
  * returning the node, the matching widget, and its widgetIndex.
  *
- * @param {LiteGraph.LGraphNode|ComfyNode} node - The node to use for deriving source names or comparing target nodes.
+ * @param {TwinNodes} node - The node to use for deriving source names or comparing target nodes.
  * @param {string} [name] - The optional name to search for.
- * @return {{ node: LiteGraph.LGraphNode|ComfyNode, widget: IWidget, widgetIndex: number } | null} The first matching result if found; otherwise, null.
+ * @return {{ node: SetTwinNodes, widget: IWidget, widgetIndex: number } | null} The first matching result if found; otherwise, null.
  */
 export function findSetter(node, name = undefined) {
     const setters = findSetters(node, name);

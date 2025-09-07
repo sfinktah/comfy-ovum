@@ -87,7 +87,7 @@ export function analyzeNamesForAbbrev(names) {
  * - Uses analyzeNamesForAbbrev for compact titles when beneficial
  * - Applies optional "Get_/Set_" prefix unless disablePrefix is true
  * @param {string[]} names
- * @param {"Get"|"Set"} kind
+ * @param {"get"|"set"} kind
  * @param {boolean} [disablePrefix=false]
  * @returns {string}
  */
@@ -100,10 +100,10 @@ export function computeTwinNodeTitle(names, kind, disablePrefix = false) {
 
     const analysis = analyzeNamesForAbbrev(normalized);
     if (analysis && analysis.use) {
-        return (disablePrefix ? "" : `${kind}_`) + analysis.titleText;
+        return (disablePrefix ? "" : `${kind} `) + analysis.titleText;
     }
     const joined = normalized.join(" & ");
-    return (disablePrefix ? "" : `${kind}_`) + joined;
+    return (disablePrefix ? "" : `${kind} `) + joined;
 }
 
 /**

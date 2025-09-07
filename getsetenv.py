@@ -68,6 +68,9 @@ def _is_blocked_env(name: str) -> bool:
 
 class SetEnvVar:
     NAME = "Set Environment Variable"
+    DESCRIPTION ="""
+    Set an environment variable. `os.environ[name] = value`
+    """
     @classmethod
     def INPUT_TYPES(cls):
         return {
@@ -101,10 +104,10 @@ class SetEnvVar:
     def set_env(self, name, value, overwrite, any_input=None):
         if not isinstance(name, str) or len(name) == 0:
             print("[set_env] name is empty; no changes applied.")
-            return (any_input, False, "")
+            return any_input, False, ""
         if _is_blocked_env(name):
             print(f"[set_env] blocked dangerous environment variable '{name}'; no changes applied.")
-            return (any_input, False, "")
+            return any_input, False, ""
         prev_value = os.environ.get(name)
         applied = True
         if (name in os.environ) and (not overwrite):
@@ -114,10 +117,13 @@ class SetEnvVar:
             os.environ[name] = value
             print(f"[set_env] set {name}={'***' if 'KEY' in name or 'SECRET' in name or 'TOKEN' in name else value} (prev={prev_value})")
 
-        return (any_input, applied, prev_value if prev_value is not None else "")
+        return any_input, applied, prev_value if prev_value is not None else ""
 
 class GetEnvVar:
     NAME = "Get Environment Variable"
+    DESCRIPTION ="""
+    Get an environment variable. `os.environ.get(name, default)`
+    """
     @classmethod
     def INPUT_TYPES(cls):
         return {
@@ -139,29 +145,30 @@ class GetEnvVar:
             if isinstance(name, str) and len(name) > 0:
                 if _is_blocked_env(name):
                     # Blocked names should not influence graph re-execution via env changes.
-                    return (f"[BLOCKED]{name}", default, False, None)
+                    return f"[BLOCKED]{name}", default, False, None
                 exists = name in os.environ
                 val = os.environ.get(name, None)
                 # Use a digest to avoid exposing secrets while detecting changes.
                 digest = hashlib.sha256(val.encode("utf-8")).hexdigest() if isinstance(val, str) else None
-                return (name, default, exists, digest)
+                return name, default, exists, digest
             else:
-                return (name, default, False, None)
+                return name, default, False, None
         except Exception:
             # If change detection fails, force re-run to be safe.
             return float("NaN")
 
+    @classmethod
     def get_env(self, name, default):
         if not isinstance(name, str) or len(name) == 0:
             print("[get_env] name is empty; returning default.")
-            return (default, False)
+            return default, False
         if _is_blocked_env(name):
             print(f"[get_env] blocked dangerous environment variable '{name}'; returning default.")
-            return (default, False)
+            return default, False
         exists = name in os.environ
         value = os.environ.get(name, default)
         print(f"[get_env] get {name} -> {'***' if 'KEY' in name or 'SECRET' in name or 'TOKEN' in name else value} (exists={exists})")
-        return (value, exists)
+        return value, exists
 
 CLAZZES = [SetEnvVar, GetEnvVar]
 

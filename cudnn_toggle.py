@@ -10,6 +10,14 @@ anyType = AnyType("*")
 
 class CUDNNToggleOvum:
     NAME = "CUDNN Toggle Ovum"
+    DESCRIPTION = """
+    Toggle torch.backends.cudnn.enabled ON or OFF. 
+    torch.backends.cudnn.benchmark will be set to the same value.
+    To preserve the original state of cudnn, connnect the *prev_cudnn* output of the disabling node, to the *enable_cudnn* input of the enabling node.
+    To ensure correct behavior, connect the *any_input* input and *any_output* output of the node to intercept an *IMAGE* or *LATENT* immediately before and after the node you wish to disable cudnn for.
+    
+    The most common use case is to disable cudnn for VAE Decode and VAE Encode nodes, which can receive up to 2x speedup when running under ZLUDA emulation.
+    """
     @classmethod
     def INPUT_TYPES(cls):
         return {

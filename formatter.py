@@ -113,6 +113,9 @@ class TextFormatNode:
 
 class PythonStringFormat(TextFormatNode):
     NAME = "Python String Format"
+    DESCRIPTION ="""
+    Format a string using Python's string formatting syntax.
+    """
     @classmethod
     def INPUT_TYPES(s):
         # dyn_inputs = {"arg0": (any_type, {"lazy": True, "tooltip": "Any input. When connected, one more input slot is added."}), }
