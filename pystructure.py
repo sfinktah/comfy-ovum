@@ -16,7 +16,22 @@ anyType = AnyType("*")
 
 class ListSliceNode(NewPointer):
     DESCRIPTION="""
-    Extract a slice of a list. (JavaScript slice).
+    Extract a slice of a list (JavaScript Array.prototype.slice semantics).
+
+    Behavior:
+    - start (optional):
+      - If empty/unspecified -> 0.
+      - If negative -> n + start, clamped to [0, n].
+      - If positive -> clamped to [0, n].
+    - end (optional):
+      - If empty/unspecified -> n.
+      - If negative -> n + end, clamped to [0, n].
+      - If positive -> clamped to [0, n].
+    - If normalized start >= end -> returns an empty list.
+
+    Notes:
+    - Matches JavaScript slice: it never mutates the input list and supports negative indexes.
+    - Leaving start or end blank in the widget uses the default described above.
     """
     FUNCTION = "list_slice"
     RETURN_TYPES = ("LIST",)
@@ -24,14 +39,14 @@ class ListSliceNode(NewPointer):
     custom_name="Pyobjects/List Slice"
 
     @staticmethod
-    def list_slice(py_list, start, end):
+    def list_slice(py_list, start=None, end=None):
         if not isinstance(py_list, list):
             raise ValueError("Input must be a Python list")
 
         n = len(py_list)
 
         # Normalize start (JS semantics)
-        if start is None:
+        if start in (None, ""):
             start = 0
         else:
             start = int(start)
@@ -41,7 +56,7 @@ class ListSliceNode(NewPointer):
                 start = min(start, n)
 
         # Normalize end (JS semantics)
-        if end is None:
+        if end in (None, ""):
             end = n
         else:
             end = int(end)
@@ -62,14 +77,35 @@ class ListSliceNode(NewPointer):
         return {
             "required": {
                 "py_list": ("LIST",),
-                "start": ("INT",),
-                "end": ("INT",),
+                "start": ("INT", {"default": None, "tooltip": "Optional start index. Blank -> 0. Negative -> n+start (clamped). Positive clamped to [0,n]."}),
+                "end": ("INT", {"default": None, "tooltip": "Optional end index (exclusive). Blank -> n. Negative -> n+end (clamped). Positive clamped to [0,n]."}),
             }
         }
 
 class ListSpliceNode(NewPointer):
     DESCRIPTION=""" 
-    Splice a list into another list. (JavaScript splice).
+    Splice a list in place (JavaScript Array.prototype.splice semantics).
+
+    Behavior:
+    - start (optional):
+      - If empty/unspecified -> 0.
+      - If negative -> n + start, clamped to [0, n].
+      - If positive -> clamped to [0, n].
+    - delete_count (optional):
+      - If empty/unspecified -> n - start (delete to end).
+      - If negative -> 0.
+      - Otherwise -> clamped to [0, n - start].
+    - insert_list (optional):
+      - If empty/unspecified -> inserts nothing.
+      - If a list -> its items are inserted.
+      - If a single non-list value -> inserted as one element.
+
+    Returns:
+    - [0]: the mutated original list reference after splicing.
+    - [1]: a new list of removed elements.
+
+    Notes:
+    - Matches JavaScript splice behavior including negative indices and optional parameters.
     """
     FUNCTION = "list_splice"
     RETURN_TYPES = ("LIST", "LIST")  # (modified_list, removed_elements)
@@ -77,10 +113,10 @@ class ListSpliceNode(NewPointer):
     custom_name="Pyobjects/List Splice"
 
     @staticmethod
-    def list_splice(py_list, start, delete_count, insert_list):
+    def list_splice(py_list, start=None, delete_count=None, insert_list=None):
         if not isinstance(py_list, list):
             raise ValueError("Input must be a Python list")
-        if insert_list is None:
+        if insert_list is None or insert_list == "":
             insert_elems = []
         elif isinstance(insert_list, list):
             insert_elems = list(insert_list)
@@ -92,7 +128,7 @@ class ListSpliceNode(NewPointer):
         n = len(py_list)
 
         # Normalize start (JS semantics)
-        if start is None:
+        if start in (None, ""):
             s = 0
         else:
             s = int(start)
@@ -102,7 +138,7 @@ class ListSpliceNode(NewPointer):
                 s = min(s, n)
 
         # Normalize delete_count (JS semantics)
-        if delete_count is None:
+        if delete_count in (None, ""):
             dc = n - s
         else:
             dc = int(delete_count)
@@ -124,10 +160,61 @@ class ListSpliceNode(NewPointer):
         return {
             "required": {
                 "py_list": ("LIST",),
-                "start": ("INT",),
-                "delete_count": ("INT",),
-                "insert_list": ("LIST",),
+                "start": ("INT", {"default": None, "tooltip": "Optional start index. Blank -> 0. Negative -> n+start (clamped). Positive clamped to [0,n]."}),
+                "delete_count": ("INT", {"default": None, "tooltip": "Optional number of elements to delete. Blank -> delete to end. Negative -> 0. Clamped to [0, n-start]."}),
+                "insert_list": ("LIST", {"default": None, "tooltip": "Optional list of items to insert at start. Blank -> insert nothing."}),
             }
         }
 
-CLAZZES = [ListSliceNode, ListSpliceNode]
+class RepeatItemNode(NewPointer):
+    DESCRIPTION="""
+    Create a list containing the given item repeated 'count' times.
+    """
+    FUNCTION = "repeat_item"
+    RETURN_TYPES = ("LIST",)
+    CATEGORY = "Data"
+    custom_name="Pyobjects/Repeat Item"
+
+    @staticmethod
+    def repeat_item(item, count):
+        try:
+            c = int(count)
+        except Exception:
+            c = 0
+        if c < 0:
+            c = 0
+        return ([item] * c,)
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "item": (anyType,),
+                "count": ("INT", {"default": 1, "min": 0, "max": 1024, "step": 1}),
+            }
+        }
+
+class ReverseListNode(NewPointer):
+    DESCRIPTION="""
+    Return a new list with the elements of the input list in reverse order.
+    """
+    FUNCTION = "list_reverse"
+    RETURN_TYPES = ("LIST",)
+    CATEGORY = "Data"
+    custom_name="Pyobjects/Reverse List"
+
+    @staticmethod
+    def list_reverse(py_list):
+        if not isinstance(py_list, list):
+            raise ValueError("Input must be a Python list")
+        return (list(reversed(py_list)),)
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "py_list": ("LIST",),
+            }
+        }
+
+CLAZZES = [ListSliceNode, ListSpliceNode, RepeatItemNode, ReverseListNode]
