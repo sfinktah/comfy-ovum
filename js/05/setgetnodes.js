@@ -19,7 +19,7 @@
 import {app} from "../../../scripts/app.js";
 import {GraphHelpers} from "../common/graphHelpersForTwinNodes.js";
 import {analyzeNamesForAbbrev, computeTwinNodeTitle, extractWidgetNames, safeStringTrim} from "../01/stringHelper.js";
-import {ensureSlotCounts, findGetters, validateWidgetName, wrapWidgetValueSetter} from "../01/twinnodeHelpers.js";
+import {ensureSlotCounts, findGetters, validateWidgetName, wrapWidgetValueSetter, setWidgetValue} from "../01/twinnodeHelpers.js";
 import {TwinNodes} from "../common/twinNodes.js";
 import {drawTextWithBg, getWidgetBounds} from "../01/canvasHelpers.js";
 import {log} from "../common/logger.js";
@@ -102,6 +102,8 @@ class SetTwinNodes extends TwinNodes {
                 if (node && node.graph) {
                     validateWidgetName(node, idx);
                     node.updateTitle();
+                    node.updateColors();
+                    node.checkConnections();
                     node.update();
                     node.properties.previousNames[idx] = value;
                 }
@@ -110,7 +112,18 @@ class SetTwinNodes extends TwinNodes {
         ensureSlotCounts(this);
         // Initialize previousNames snapshot to current widget values
         this.properties.previousNames = (this.widgets || []).map(w => safeStringTrim(w?.value));
-        this.updateTitle();
+        node.updateTitle();
+        node.updateColors();
+
+
+        app.api.addEventListener("getnode_rename", e => {
+            log({ class: "SetTwinNodes", method: "onGetNodeRename", severity: "trace", tag: "function_entered" }, "onGetNodeRename", e.detail);
+            // const { widgetIndex, widgetValue, nodeId } = e.detail;
+            // const node = GraphHelpers.getNodeById(this.graph, nodeId);
+            node.checkConnections();
+        });
+
+        node.checkConnections();
     }
 
     /**
@@ -236,7 +249,8 @@ class SetTwinNodes extends TwinNodes {
 
                 // If widget exists, name the input slot after the widget value, otherwise name widget after the input
                 if (!widgetName) {
-                    this.widgets[index].value = widgetName = srcSlotName;
+                    widgetName = srcSlotName;
+                    setWidgetValue(this, index, widgetName);
                     // renumber if there are duplicates
                     validateWidgetName(this, index);
                 }
@@ -294,10 +308,10 @@ class SetTwinNodes extends TwinNodes {
         }
     }
 
-    checkGetters() {
+    checkConnections() {
         this.currentGetters = this.widgets.map((v, k) => k).map(k => findGetters(this, null, k));
         this.canvas.setDirty(true, true);
-        log({ class: "SetTwinNodes", method: "checkGetters", severity: "debug", tag: "status" }, "checkGetters", this.currentGetters);
+        log({ class: "SetTwinNodes", method: "checkConnections", severity: "debug", tag: "status" }, "checkConnections", this.currentGetters);
     }
 
     update() {
@@ -343,7 +357,7 @@ class SetTwinNodes extends TwinNodes {
         //                         severity: "debug",
         //                         tag: "rename_propagate"
         //                     }, `update, updating getter widger ${gv} -> ${curr}`);
-        //                     getter.widgets[gi].value = curr;
+        //                     setWidgetValue(getter, gi, curr);
         //                     changed = true;
         //                 }
         //             }
@@ -380,7 +394,7 @@ class SetTwinNodes extends TwinNodes {
             {
                 content: menuEntry,
                 callback: () => {
-                    node.checkGetters();
+                    node.checkConnections();
                     log({ class: "SetTwinNodes", method: "getExtraMenuOptions", severity: "info", tag: "context_menu" }, "context menu, found getters", node.currentGetters);
                     let i;
                     node.currentGetters.forEach((getters, i) => {
@@ -410,9 +424,9 @@ class SetTwinNodes extends TwinNodes {
                 },
             },
             {
-                content: "Check getters",
+                content: "Check connections",
                 callback: () => {
-                    node.checkGetters();
+                    node.checkConnections();
                 },
             },
             {
@@ -433,7 +447,7 @@ class SetTwinNodes extends TwinNodes {
             },
         );
         // Dynamically add a submenu for all getters
-        this.checkGetters();
+        this.checkConnections();
         if (node.currentGetters) {
 
             let gettersSubmenu = node.currentGetters.flat(1).map(getter => ({

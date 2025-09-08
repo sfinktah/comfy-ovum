@@ -67,6 +67,8 @@ export class TwinNodes extends LGraphNode {
         app.canvas.setDirty(true, true);
     }
 
+    checkConnections() {};
+
     /**
      * Called to render custom content behind the node body (but not the title).
      * If two or more colors are present in this.colors, draw a vertical gradient between their bgcolors.

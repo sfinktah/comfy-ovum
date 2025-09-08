@@ -28,7 +28,7 @@ import {
     findSetter,
     getPreviousWidgetName,
     makeUnlinkedName,
-    normalizeWidgetLabels,
+    normalizeWidgetLabels, setWidgetValue,
     showAlert,
     validateNodeLinks,
     wrapWidgetValueSetter
@@ -59,19 +59,40 @@ app.registerExtension({
             constructor(title) {
                 super(title)
                 if (!this.properties) {
-                    this.properties = { bgcolors: [] };
+                    this.properties = { 
+                        bgcolors: [],
+                        previousNames: Array(this.numberOfWidgets || 2).fill(""),
+                    };
                 } else if (this.numberOfWidgets == null) {
                     this.numberOfWidgets = 2;
                 }
+                if (!Array.isArray(this.properties.previousNames) || this.properties.previousNames.length !== this.numberOfWidgets) {
+                    this.properties.previousNames = Array(this.numberOfWidgets).fill("");
+                }
+
                 this.properties.showOutputText = GetTwinNodes.defaultVisibility;
 
                 const initialCount = this.numberOfWidgets || 2;
+                console.log("initialWidgetCount", this.widgets?.length || 0);
+                
                 this.ensureGetterWidgetCount(initialCount);
 
                 // Ensure the number of outputs matches count
                 ensureSlotCounts(this);
 
                 // Determine colors using all connected input types in order
+
+                const node = this;
+                // bit of a nasty hack
+                setTimeout(() => {
+                    node.widgets.forEach((widgetValue, widgetIndex) => {
+                        app.api.dispatchCustomEvent('getnode_rename', {
+                            nodeId: node.id,
+                            widgetIndex: widgetIndex,
+                            value: widgetValue,
+                        });
+                    })
+                }, 500);
                 this.updateTitle();
 
 
@@ -93,14 +114,16 @@ app.registerExtension({
                 }
 
                 const uniq = Array.from(new Set(names)).sort();
-                // Add reset option to allow unsetting the selection
+                // Add reset optiont to allow unsetting the selection
                 uniq.unshift("(unset)");
                 return uniq;
             }
 
             // Ensure there are at least N combo widgets for constants, each with a values provider
             ensureGetterWidgetCount(count) {
-                ensureWidgetCount(this, count, "combo", "Constant", (idx) => {
+                const node = this;
+                ensureWidgetCount(this, count, "combo", "Constant", (idx, value, canvas, node, pos, e) => {
+                    node.properties.previousNames[idx] = value;
                     this.onRename(idx);
                     // this.complicatedRenamingStuff();
                 }, {
@@ -182,7 +205,7 @@ app.registerExtension({
                                     .filter(n => n && n !== "(unset)");
                                 const known = new Set(knownNames);
                                 const needsUnlinked = !known.has(preferred);
-                                this.widgets[0].value = needsUnlinked ? makeUnlinkedName(preferred) : preferred;
+                                setWidgetValue(this, 0, needsUnlinked ? makeUnlinkedName(preferred) : preferred);
                             }
                         }
                     }
@@ -194,7 +217,7 @@ app.registerExtension({
                         allSetters.map(s => s.widgets?.[idx]?.value).filter(Boolean)
                     ));
                     if ((!val || val === '*') && options.length === 1) {
-                        if (this.widgets?.[idx]) this.widgets[idx].value = options[0];
+                        if (this.widgets?.[idx]) setWidgetValue(this, idx, options[0]);
                     }
 
                     // Attempt to auto-pair remaining constants from a matched setter
@@ -205,7 +228,7 @@ app.registerExtension({
                         this.ensureGetterWidgetCount(Math.max(min, needed));
                         for (let i = 0; i < needed; i++) {
                             if (!this.widgets?.[i]?.value && matched.widgets?.[i]?.value) {
-                                this.widgets[i].value = matched.widgets[i].value;
+                                setWidgetValue(this, i, matched.widgets[i].value);
                             }
                         }
                     }
@@ -224,7 +247,7 @@ app.registerExtension({
             setName(name, _widgetIndex) {
                 log({ class: "GetTwinNodes", method: "setName", severity: "trace", tag: "function_entered" }, "[GetTwinNodes] setName should not have been called");
                 if (this.widgets?.[_widgetIndex]) {
-                    this.widgets[_widgetIndex].value = name;
+                    setWidgetValue(this, _widgetIndex, name);
                 }
                 this.complicatedRenamingStuff();
                 this.serialize();
@@ -238,7 +261,7 @@ app.registerExtension({
                 const count = Array.isArray(names) ? names.length : 0;
                 for (let i = 0; i < count; i++) {
                     if (this.widgets?.[i]) {
-                        this.widgets[i].value = names[i];
+                        setWidgetValue(this, i, names[i]);
                     }
                 }
                 this.complicatedRenamingStuff();
@@ -255,6 +278,11 @@ app.registerExtension({
                 if (!widgetValue) {
                     return;
                 }
+                app.api.dispatchCustomEvent('getnode_rename', {
+                    nodeId: this.id,
+                    widgetIndex: widgetIndex,
+                    value: widgetValue,
+                });
                 const setter = findSetter(this, widgetValue);
                 if (setter) {
                     let linkType = (setter.node.inputs[setter.widgetIndex].type);
@@ -294,7 +322,7 @@ app.registerExtension({
                                 }
                             }
                             // Clear to empty string immediately and refresh UI
-                            this.widgets[i].value = '';
+                            setWidgetValue(this, i, '');
                             didUnset = true;
                         }
                     }
@@ -344,23 +372,23 @@ app.registerExtension({
                 const anySelected = selected.some(v => !!v);
 
                 if (setter) {
-                    const setterNames = (setter.widgets || []).map(w => safeStringTrim(w?.value));
+                    const setterNames = (setter.node.widgets || []).map(w => safeStringTrim(w?.value));
                     // Map selected constant -> type (from matched setter input at that label)
                     const typeByConst = {};
                     setterNames.forEach((name, idx) => {
-                        const t = setter.inputs?.[idx]?.type || '*';
+                        const t = setter.node.inputs?.[idx]?.type || '*';
                         if (name) typeByConst[name] = t;
                     });
 
                     // Ensure enough widgets and outputs
-                    const wNeeded = setter.widgets?.length || 0;
+                    const wNeeded = setter.node.widgets?.length || 0;
                     this.ensureGetterWidgetCount(wNeeded || 2);
                     ensureSlotCounts(this);
 
                     // Autofill any empty selections from the matched setter (position-agnostic)
                     // Only perform this when we didn't just unset a widget via "(unset)".
                     if (!didUnset) {
-                        const setterVals = (setter.widgets || []).map(w => safeStringTrim(w?.value)).filter(Boolean);
+                        const setterVals = (setter.node.widgets || []).map(w => safeStringTrim(w?.value)).filter(Boolean);
                         const selectedVals = new Set(
                             (this.widgets || []).map(w => safeStringTrim(w?.value)).filter(Boolean)
                         );
@@ -368,7 +396,7 @@ app.registerExtension({
                             if (this.widgets?.[i] && (!this.widgets[i].value || this.widgets[i].value === '*')) {
                                 const next = setterVals.find(v => !selectedVals.has(v));
                                 if (next) {
-                                    this.widgets[i].value = next;
+                                    setWidgetValue(this, i, next);
                                     selectedVals.add(next);
                                 }
                             }
@@ -453,6 +481,7 @@ app.registerExtension({
 
             /**
              * Handles broadcast rename events and updates matching widget values.
+             * If value === oldValue then this is a type notification.
              * @param {object} e - The rename event object.
              * @param {number} e.nodeId - ID of the node where the rename occurred.
              * @param {string} e.oldValue - Previous value before the rename.
@@ -473,7 +502,7 @@ app.registerExtension({
                     for (let i = 0; i < this.widgets.length; i++) {
                         const val = safeStringTrim(this.widgets[i]?.value);
                         if (val && val === prev) {
-                            this.widgets[i].value = next;
+                            setWidgetValue(this, i, next);
 
                             changed.push(i);
                         }

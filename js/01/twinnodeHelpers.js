@@ -424,6 +424,11 @@ export function validateNodeLinks(node) {
     }
 }
 
+export function setWidgetValue(node, idx, value) {
+    if (!node.widgets || !node.widgets[idx]) return;
+    node.widgets[idx].value = value;
+}
+
 // Widget name validation helper function
 /**
  * Validates and ensures the uniqueness of a widget's name within a graph structure.
@@ -437,7 +442,7 @@ export function validateNodeLinks(node) {
 export function validateWidgetName(node, idx) {
     const graph = node.graph;
     if (!graph || !node.widgets || !node.widgets[idx]) return;
-    let base = String(node.widgets[idx].value || "").trim();
+    let base = safeStringTrim(node.widgets[idx].value);
     if (!base) return;
 
     // Collect every widget value from all SetTwinNodes (excluding this exact widget)
@@ -461,7 +466,7 @@ export function validateWidgetName(node, idx) {
             tries++;
             candidate = `${base}_${tries}`;
         }
-        node.widgets[idx].value = candidate;
+        setWidgetValue(node, idx, candidate);
     }
     node.update();
 }
