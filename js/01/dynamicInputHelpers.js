@@ -1,3 +1,7 @@
+/** @typedef {import("@comfyorg/comfyui-frontend-types").INodeInputSlot} INodeInputSlot */
+import { log } from "../common/logger.js";
+import {last} from "./graphHelpers";
+
 export function getDynamicInputs(node) {
     /** @type {INodeInputSlot[]} */
     const inputs = node.inputs;
@@ -10,44 +14,57 @@ export function getDynamicInputs(node) {
          * @returns {{input: INodeInputSlot, index: number}} An object containing "input" property of type INodeInputSlot and "index" property of type number.
          */
         function (input, index) {
-            return {input, widgetIndex: index};
+            return {input, index};
         })
         .filter(o => o.input && typeof o.input.name === "string" && /^arg\d+$/.test(o.input.name))
-        .sort((a, b) => {
-            const an = parseInt(a.input.name.substring(3), 10);
-            const bn = parseInt(b.input.name.substring(3), 10);
-            return an - bn;
-        });
+        // // Sorting them is just going to get super confusing
+        // .sort((a, b) => {
+        //     const an = getInputArgNumber(a);
+        //     const bn = getInputArgNumber(b);
+        //     return an - bn;
+        // });
 }
 
 
+export function getInputArgNumber(input) {
+    return parseInt(input.name.substring(3), 10);
+}
 
 export function ensureDynamicInputsImpl(node, isConnecting) {
     try {
-        let dyn = getDynamicInputs(node);
+        let dynamicInputs = getDynamicInputs(node);
 
         // Ensure at least arg0 exists (backend should add it, but be defensive)
-        if (dyn.length === 0) {
-            node.addInput("arg0", "*", {label: "arg0", forceInput: true});
-            dyn = getDynamicInputs(node);
+        if (dynamicInputs.length === 0) {
+            node.addInput("arg0", "*", {forceInput: true});
+            dynamicInputs = getDynamicInputs(node);
         }
 
-        // Normalize labels for existing dynamic inputs
-        for (const {input} of dyn) {
-            const n = input.name.substring(3);
-            if (!input.label) {
+        // Give inputs pretty labels if they don't have user assigned labels
+        for (const {input, index} of dynamicInputs) {
+            const argNumber = getInputArgNumber(input);
+            if (argNumber !== index) {
+                log({class: "formatter", method: "ensureDynamicInputsImpl", severity: "warn", tag: "input_mismatch"},
+                    `input index mismatch, renaming input #${index} from ${input.name} to arg${index}`);
+                if (input.label && input.label.startsWith(input.name)) {
+                    // TODO: can we just set this to empty or null or something?
+                    // TODO: perform such resets in a helper function so when we find the answer, we can fix 1 spot
+                    input.label = `arg${index}`;
+                }
+                input.name = `arg${index}`;
+            }
+            if (!input.label || input.label === input.name || input.label.split(' ')[0] === input.name) {
                 const t = input.type || "*";
-                input.label = (t && t !== "*") ? `arg${n} ${t}` : `arg${n}`;
+                input.label = `arg${argNumber} ${t}`;
             }
         }
-
         // If the last dynamic input has a link, append a new trailing argN
-        let last = dyn[dyn.length - 1]?.input;
-        if (last && last.link != null) {
-            const lastNum = parseInt(last.name.substring(3), 10);
-            const nextNum = lastNum + 1;
-            node.addInput(`arg${nextNum}`, "*", {label: `arg${nextNum}`});
-            return; // addInput already dirties the canvas
+        let lastInput = last(dynamicInputs)?.input;
+        if (lastInput && lastInput.link != null) {
+            const nextNum = getInputArgNumber(lastInput) + 1;
+            node.addInput(`arg${nextNum}`, "*");
+            console.log("[ovum.format] new inputs have a label of: ", node.inputs[nextNum].label);
+            // return; // addInput already dirties the canvas
         }
 
         // When disconnecting, trim trailing unused inputs leaving exactly one empty at the end
@@ -55,16 +72,30 @@ export function ensureDynamicInputsImpl(node, isConnecting) {
             // Repeatedly remove the last input if the last two are both unlinked
             // This keeps one unlinked trailing input
             while (true) {
-                dyn = getDynamicInputs(node);
-                if (dyn.length < 2) break;
-                const lastInp = dyn[dyn.length - 1].input;
-                const prevInp = dyn[dyn.length - 2].input;
+                dynamicInputs = getDynamicInputs(node);
+                if (dynamicInputs.length < 2) break;
+                const lastInp = dynamicInputs[dynamicInputs.length - 1].input;
+                const prevInp = dynamicInputs[dynamicInputs.length - 2].input;
                 if (lastInp.link == null && prevInp.link == null) {
                     // Remove the last one
-                    // Recompute widgetIndex each loop to avoid stale indices after removal
-                    const fresh = getDynamicInputs(node);
-                    const lastIdx = fresh[fresh.length - 1].index;
+                    // Recompute index each loop to avoid stale indices after removal
+                    
+                    // What loop?  Oh, we're in a while (true)! But I think we can be smarter here, and splice out
+                    // the last entry after we've removed the physical input.
+                    // const fresh = getDynamicInputs(node);
+                    
+                    // TODO: ISSUE: .index does not refer to the physical index of the input, but the logical index
+                    // (i.e., arg0 with always be the 0th dynamicInput, even if there are two previous inputs)
+                    // const lastIdx = dynamicInputs[dynamicInputs.length - 1].index;
+                    // THIS SHOULD FIX THAT:
+                    const lastIdx = node.inputs.indexOf(lastInp);
+                    if (lastIdx === -1) {
+                        log({class: "formatter", method: "ensureDynamicInputsImpl", severity: "warn", tag: "input_mismatch"}, `input index not found while removing extra input`);
+                        break;
+                    }
                     node.removeInput(lastIdx);
+                    // This is smarter than recomputing via getDynamicInputs
+                    dynamicInputs.splice(-1, 1);
                 } else {
                     break;
                 }

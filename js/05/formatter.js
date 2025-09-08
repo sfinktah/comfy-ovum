@@ -11,7 +11,7 @@
 import { app } from "../../../scripts/app.js";
 import { graphGetNodeById } from "../01/graphHelpers.js";
 import { chainCallback } from "../01/utility.js";
-import { getDynamicInputs, ensureDynamicInputsImpl } from "../01/dynamicInputHelpers.js";
+import {getDynamicInputs, ensureDynamicInputsImpl, getInputArgNumber} from "../01/dynamicInputHelpers.js";
 import {GraphHelpers} from "../common/graphHelpersForTwinNodes.js";
 
 app.registerExtension({
@@ -73,7 +73,7 @@ app.registerExtension({
                     // If the last dynamic input is linked, ensure a trailing empty slot exists
                     const last = dyn[dyn.length - 1]?.inp;
                     if (last && last.link != null) {
-                        const lastNum = parseInt(last.name.substring(3), 10);
+                        const lastNum = getInputArgNumber(last);
                         const nextNum = lastNum + 1;
                         node.addInput(`arg${nextNum}`, "*", { label: `arg${nextNum}` });
                     }
