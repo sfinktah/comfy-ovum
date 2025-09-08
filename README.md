@@ -178,3 +178,88 @@ Tips and caveats:
 
 In short, “Set Environment Variable” and “Get Environment Variable” act like SetNode/GetNode with super powers: they can tunnel values across the graph, coordinate multiple consumers, and enable inter‑ and intra‑workflow value transfer—while staying simple, explicit, and robust.
 
+## Pystructure Data Nodes (complementary to ComfyUI-LogicUtils)
+
+These nodes are complementary to the excellent collection at https://github.com/aria1th/ComfyUI-LogicUtils. They focus on list manipulation and small data utilities that pair well with logic/structure nodes from that set.
+
+- List Slice
+  - What it does: Returns a slice of an input list using JavaScript-like slice semantics.
+  - Inputs:
+    - py_list (LIST): The source list.
+    - start (INT): Start index. Negative values count from the end. Clamped to bounds; default 0 if empty.
+    - end (INT): End index (non-inclusive). Negative values count from the end. Clamped to bounds; defaults to list length if empty.
+  - Output:
+    - LIST: A new list containing the requested slice. If start >= end after normalization, returns an empty list.
+  - Notes: Behavior mirrors JS slice for negative indices and boundary clamping; does not mutate the input list.
+
+- List Splice
+  - What it does: Splices into a list using JavaScript-like splice semantics: remove delete_count items starting at start and insert items from insert_list.
+  - Inputs:
+    - py_list (LIST): The target list (will be modified in place).
+    - start (INT): Start index. Negative values count from the end. Clamped to valid positions.
+    - delete_count (INT): Number of items to remove (clamped to remaining length; negatives treated as 0).
+    - insert_list (LIST): Items to insert at the splice position (can be empty to perform pure deletion).
+  - Outputs:
+    - LIST (modified_list): The same list instance after splicing.
+    - LIST (removed_elements): A list of the elements that were removed.
+  - Notes: Mirrors JS semantics for start and delete_count; performs in-place mutation of py_list.
+
+- Repeat Item
+  - What it does: Produces a list containing the given item repeated count times.
+  - Inputs:
+    - item (any): Any value to repeat.
+    - count (INT): Number of repetitions. Minimum 0; negatives are treated as 0.
+  - Output:
+    - LIST: [item, item, ..., item] repeated count times.
+  - Notes: Non-mutating; useful for building lists of constants, seeds, file paths, or objects for batch operations.
+
+- Reverse List
+  - What it does: Returns a new list in reverse order.
+  - Inputs:
+    - py_list (LIST): The source list.
+  - Output:
+    - LIST: A new list with elements reversed.
+  - Notes: Non-mutating; the input list is not modified.
+
+- List Concat
+  - What it does: Concatenates two lists similar to JS Array.concat.
+  - Inputs:
+    - list_a (LIST): First list.
+    - list_b (LIST): Second list (optional; blank treated as empty).
+  - Output:
+    - LIST: New list of elements of list_a followed by elements of list_b.
+  - Notes: Non-mutating.
+
+- List IndexOf
+  - What it does: Finds the first index of a value in a list like JS indexOf.
+  - Inputs:
+    - py_list (LIST): The list to search.
+    - search_element (any): Value to find.
+    - start (INT): Optional fromIndex; negative values count from end; blank -> 0.
+  - Output:
+    - INT: Index of the match; -1 if not found.
+
+- List Join
+  - What it does: Joins elements into a string like JS join.
+  - Inputs:
+    - py_list (LIST): Elements to join.
+    - separator (STRING): Optional separator; blank/unspecified -> comma, empty string -> no separator.
+  - Output:
+    - STRING: Joined string.
+
+- XRange
+  - What it does: Python-like xrange/range iterator without generators. Outputs current value, full list, and a boolean flag for exhausted/looped.
+  - Inputs:
+    - stop (INT): End (exclusive). Required.
+    - start (INT): Optional start; blank -> 0.
+    - step (INT): Optional step; blank -> 1; cannot be 0; can be negative.
+    - repeat (BOOLEAN): If true, wraps to the start (or end for negative step) when reaching the end; the flag output is true on the wrap iteration.
+    - cursor (INT): Current index into the range; you can set/reset this manually to control which value is output.
+    - advance (BOOLEAN): If true (default), increases cursor by 1 each evaluation so you can tick through values using Repeat/Trigger.
+  - Outputs:
+    - INT: current value at the cursor.
+    - LIST: the full expanded list of values (range(start, stop, step)).
+    - BOOL: exhausted_or_looped — true when the range is exhausted (with repeat disabled) or when it loops (with repeat enabled).
+  - Notes:
+    - Negative steps are supported exactly like Python range. If the computed range is empty, the list is empty and the flag is true; current value returns 0.
+
