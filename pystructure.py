@@ -1,4 +1,5 @@
 # Stolen from/extends functionality of https://github.com/aria1th/ComfyUI-LogicUtils/blob/main/pystructure.py
+import re
 
 class NewPointer:
     """A base class that forces ComfyUI to skip caching by returning NaN in IS_CHANGED."""
@@ -13,6 +14,28 @@ class AnyType(str):
         return False
 
 anyType = AnyType("*")
+
+def _parse_optional_int(value, field_name: str):
+    """Parse optional integer from a widget string.
+    Returns int or None. Treats None/''/whitespace-only as None.
+    Raises ValueError for non-integer non-blank values (e.g., '1.5', 'abc').
+    """
+    if value is None:
+        return None
+    # Explicitly reject booleans (bool is subclass of int)
+    if isinstance(value, bool):
+        raise ValueError(f"{field_name} must be an integer (blank for unset).")
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        s = value.strip()
+        if s == "":
+            return None
+        if re.fullmatch(r"[+-]?\d+", s):
+            return int(s)
+        raise ValueError(f"{field_name} must be an integer (blank for unset).")
+    # Reject floats and other types
+    raise ValueError(f"{field_name} must be an integer (blank for unset).")
 
 class ListSliceNode(NewPointer):
     DESCRIPTION="""
@@ -45,21 +68,23 @@ class ListSliceNode(NewPointer):
 
         n = len(py_list)
 
-        # Normalize start (JS semantics)
-        if start in (None, ""):
+        # Normalize start (JS semantics) from optional STRING
+        s_val = _parse_optional_int(start, "start")
+        if s_val is None:
             start = 0
         else:
-            start = int(start)
+            start = s_val
             if start < 0:
                 start = max(n + start, 0)
             else:
                 start = min(start, n)
 
-        # Normalize end (JS semantics)
-        if end in (None, ""):
+        # Normalize end (JS semantics) from optional STRING
+        e_val = _parse_optional_int(end, "end")
+        if e_val is None:
             end = n
         else:
-            end = int(end)
+            end = e_val
             if end < 0:
                 end = max(n + end, 0)
             else:
@@ -77,8 +102,8 @@ class ListSliceNode(NewPointer):
         return {
             "required": {
                 "py_list": ("LIST",),
-                "start": ("INT", {"default": None, "min": -1_000_000, "max": 1_000_000, "step": 1, "tooltip": "Optional start index. Blank -> 0. Negative -> n+start (clamped). Positive clamped to [0,n]."}),
-                "end": ("INT", {"default": None, "min": -1_000_000, "max": 1_000_000, "step": 1, "tooltip": "Optional end index (exclusive). Blank -> n. Negative -> n+end (clamped). Positive clamped to [0,n]."}),
+                "start": ("STRING", {"default": None, "tooltip": "Optional start index as integer string. Blank/whitespace -> 0. Negative -> n+start (clamped)."}),
+                "end": ("STRING", {"default": None, "tooltip": "Optional end index (exclusive) as integer string. Blank/whitespace -> n. Negative -> n+end (clamped)."}),
             }
         }
 
@@ -127,21 +152,23 @@ class ListSpliceNode(NewPointer):
 
         n = len(py_list)
 
-        # Normalize start (JS semantics)
-        if start in (None, ""):
+        # Normalize start (JS semantics) from optional STRING
+        s_parsed = _parse_optional_int(start, "start")
+        if s_parsed is None:
             s = 0
         else:
-            s = int(start)
+            s = s_parsed
             if s < 0:
                 s = max(n + s, 0)
             else:
                 s = min(s, n)
 
-        # Normalize delete_count (JS semantics)
-        if delete_count in (None, ""):
+        # Normalize delete_count (JS semantics) from optional STRING
+        dc_parsed = _parse_optional_int(delete_count, "delete_count")
+        if dc_parsed is None:
             dc = n - s
         else:
-            dc = int(delete_count)
+            dc = dc_parsed
             if dc < 0:
                 dc = 0
             dc = min(dc, n - s)
@@ -160,8 +187,8 @@ class ListSpliceNode(NewPointer):
         return {
             "required": {
                 "py_list": ("LIST",),
-                "start": ("INT", {"default": None, "min": -1_000_000, "max": 1_000_000, "step": 1, "tooltip": "Optional start index. Blank -> 0. Negative -> n+start (clamped). Positive clamped to [0,n]."}),
-                "delete_count": ("INT", {"default": None, "min": -1_000_000, "max": 1_000_000, "step": 1, "tooltip": "Optional number of elements to delete. Blank -> delete to end. Negative -> 0. Clamped to [0, n-start]."}),
+                "start": ("STRING", {"default": None, "tooltip": "Optional start index as integer string. Blank/whitespace -> 0. Negative -> n+start (clamped)."}),
+                "delete_count": ("STRING", {"default": None, "tooltip": "Optional number of elements to delete as integer string. Blank/whitespace -> delete to end. Negative -> 0. Clamped to [0, n-start]."}),
                 "insert_list": ("LIST", {"default": None, "tooltip": "Optional list of items to insert at start. Blank -> insert nothing."}),
             }
         }
@@ -261,10 +288,11 @@ class IndexOfNode(NewPointer):
         if not isinstance(py_list, list):
             raise ValueError("Input must be a Python list")
         n = len(py_list)
-        if start in (None, ""):
+        s_parsed = _parse_optional_int(start, "start")
+        if s_parsed is None:
             s = 0
         else:
-            s = int(start)
+            s = s_parsed
             if s < 0:
                 s = max(n + s, 0)
             else:
@@ -280,7 +308,7 @@ class IndexOfNode(NewPointer):
             "required": {
                 "py_list": ("LIST",),
                 "search_element": (anyType,),
-                "start": ("INT", {"default": None, "min": -1_000_000, "max": 1_000_000, "step": 1, "tooltip": "Optional fromIndex. Blank -> 0. Negative -> n+start clamped."}),
+                "start": ("STRING", {"default": None, "tooltip": "Optional fromIndex as integer string. Blank/whitespace -> 0. Negative -> n+start clamped."}),
             }
         }
 
@@ -340,9 +368,11 @@ class XRangeNode(NewPointer):
 
     @staticmethod
     def _compute_range_params(start, stop, step):
-        # Normalize optional inputs
-        s = 0 if start in (None, "") else int(start)
-        stp = 1 if step in (None, "") else int(step)
+        # Normalize optional inputs (STRING widgets for start/step)
+        s_opt = _parse_optional_int(start, "start")
+        s = 0 if s_opt is None else s_opt
+        stp_opt = _parse_optional_int(step, "step")
+        stp = 1 if stp_opt is None else stp_opt
         if stop in (None, ""):
             raise ValueError("'stop' must be provided for XRange")
         if stp == 0:
@@ -370,11 +400,9 @@ class XRangeNode(NewPointer):
             # Degenerate: no values. Define outputs sanely.
             return (0, full_list, True)
 
-        # Normalize cursor within [0, n]
-        try:
-            cur = int(cursor)
-        except Exception:
-            cur = 0
+        # Normalize cursor within [0, n] (STRING widget)
+        cur_opt = _parse_optional_int(cursor, "cursor")
+        cur = 0 if cur_opt is None else cur_opt
         exhausted_or_looped = False
 
         # If cursor is already out of range
@@ -419,10 +447,10 @@ class XRangeNode(NewPointer):
                 "stop": ("INT", {"default": 1, "min": -1_000_000, "max": 1_000_000, "step": 1, "tooltip": "End (exclusive). Required."}),
             },
             "optional": {
-                "start": ("INT", {"default": None, "min": -1_000_000, "max": 1_000_000, "step": 1, "tooltip": "Optional start. Blank -> 0."}),
-                "step": ("INT", {"default": None, "min": -1_000_000, "max": 1_000_000, "step": 1, "tooltip": "Optional step. Blank -> 1. Non-zero. Can be negative."}),
+                "start": ("STRING", {"default": None, "tooltip": "Optional start as integer string. Blank/whitespace -> 0."}),
+                "step": ("STRING", {"default": None, "tooltip": "Optional step as integer string. Blank/whitespace -> 1. Non-zero. Can be negative."}),
                 "repeat": ("BOOLEAN", {"default": False, "tooltip": "When enabled, wraps to beginning after reaching the end (or to end for negative step)."}),
-                "cursor": ("INT", {"default": 0, "min": -1_000_000, "max": 1_000_000, "step": 1, "tooltip": "Current index into the range. Updated manually or by upstream."}),
+                "cursor": ("STRING", {"default": None, "tooltip": "Current index into the range as integer string. Blank/whitespace -> 0."}),
                 "advance": ("BOOLEAN", {"default": True, "tooltip": "Advance the cursor by 1 each evaluation (use with Repeat/Trigger)."}),
             }
         }
