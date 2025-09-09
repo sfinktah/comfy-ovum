@@ -394,11 +394,31 @@ export class Logger {
     /**
      * Append a rule to the end of the chain.
      * Similar to 'iptables -A' command.
-     * @param {Object} rule Rule specification
+     * @param {'allow'|'deny'|string|Object} actionOrRule Optional action ('allow'|'deny', any case) or the rule object
+     * @param {Object} [maybeRule] Rule specification when action is provided separately
      * @returns {number|undefined} Rule number if successful
      */
-    static appendRule(rule) {
-        const sanitized = this._sanitizeRule(rule);
+    static appendRule(actionOrRule, maybeRule) {
+        let action = null;
+        let rule = null;
+
+        if (typeof actionOrRule === 'string') {
+            const a = actionOrRule.toLowerCase();
+            if (a === 'allow' || a === 'deny') {
+                action = a;
+                rule = maybeRule;
+            } else {
+                // Not a valid action keyword; treat as invalid usage unless it's actually a rule object (it isn't)
+                rule = maybeRule;
+            }
+        } else {
+            rule = actionOrRule;
+        }
+
+        if (!rule || typeof rule !== 'object') return;
+
+        const toSanitize = action ? { ...rule, action } : rule;
+        const sanitized = this._sanitizeRule(toSanitize);
         if (!sanitized) return;
         this._rules.push(sanitized);
         this._saveRules();
@@ -409,15 +429,34 @@ export class Logger {
      * Insert a rule at the specified position.
      * Similar to 'iptables -I' command.
      * @param {number} position 1-based position (1 = first rule)
-     * @param {Object} rule Rule specification
+     * @param {'allow'|'deny'|string|Object} actionOrRule Optional action ('allow'|'deny', any case) or the rule object
+     * @param {Object} [maybeRule] Rule specification when action is provided separately
      * @returns {number|undefined} Rule number if successful
      */
-    static insertRule(position, rule) {
-        const sanitized = this._sanitizeRule(rule);
+    static insertRule(position, actionOrRule, maybeRule) {
+        let action = null;
+        let rule = null;
+
+        if (typeof actionOrRule === 'string') {
+            const a = actionOrRule.toLowerCase();
+            if (a === 'allow' || a === 'deny') {
+                action = a;
+                rule = maybeRule;
+            } else {
+                rule = actionOrRule; // not a valid action keyword; treat as rule (likely invalid if not object)
+            }
+        } else {
+            rule = actionOrRule;
+        }
+
+        if (!rule || typeof rule !== 'object') return;
+
+        const toSanitize = action ? { ...rule, action } : rule;
+        const sanitized = this._sanitizeRule(toSanitize);
         if (!sanitized) return;
 
         // Convert 1-based position to 0-based index
-        let index = position - 1;
+        let index = (typeof position === 'number' ? position : 1) - 1;
         if (index < 0) index = 0;
         if (index > this._rules.length) index = this._rules.length;
 
@@ -455,14 +494,33 @@ export class Logger {
      * Replace a rule at the specified position.
      * Similar to 'iptables -R' command.
      * @param {number} position 1-based position
-     * @param {Object} rule New rule specification
+     * @param {'allow'|'deny'|string|Object} actionOrRule Optional action ('allow'|'deny', any case) or the new rule object
+     * @param {Object} [maybeRule] New rule specification when action is provided separately
      * @returns {boolean} True if rule was replaced
      */
-    static replaceRule(position, rule) {
+    static replaceRule(position, actionOrRule, maybeRule) {
         const index = position - 1;
         if (index < 0 || index >= this._rules.length) return false;
 
-        const sanitized = this._sanitizeRule(rule);
+        let action = null;
+        let rule = null;
+
+        if (typeof actionOrRule === 'string') {
+            const a = actionOrRule.toLowerCase();
+            if (a === 'allow' || a === 'deny') {
+                action = a;
+                rule = maybeRule;
+            } else {
+                rule = actionOrRule; // not a valid action keyword; treat as rule (likely invalid if not object)
+            }
+        } else {
+            rule = actionOrRule;
+        }
+
+        if (!rule || typeof rule !== 'object') return false;
+
+        const toSanitize = action ? { ...rule, action } : rule;
+        const sanitized = this._sanitizeRule(toSanitize);
         if (!sanitized) return false;
 
         this._rules[index] = sanitized;
@@ -525,9 +583,10 @@ export class Logger {
 
     /**
      * @deprecated Use deleteRule instead
+     * Accepts a 1-based position to align with iptables-style numbering.
      */
     static removeRule(index) {
-        return this.deleteRule(index + 1) ? this.getRules() : undefined;
+        return this.deleteRule(index) ? this.getRules() : undefined;
     }
 
     /**
