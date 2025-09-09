@@ -1,10 +1,14 @@
 /** @typedef {import("@comfyorg/comfyui-frontend-types").INodeInputSlot} INodeInputSlot */
 import { log } from "../common/logger.js";
-import {last} from "./graphHelpers";
+import {last} from "./graphHelpers.js";
 
 export function getDynamicInputs(node) {
     /** @type {INodeInputSlot[]} */
-    const inputs = node.inputs;
+    const inputs = node?.inputs;
+    if (!inputs) {
+        // console.log('[ovum.format] getDynamicInputs: no inputs found on node', node?.id, 'node.inputs:', inputs, 'node.name:', node?.name, 'node.type:', node?.type, 'node.constructor.name:', node?.constructor.name, 'node.constructor.toString():', node?.constructor.toString(), 'node.constructor.toString().split(\' \'):', node?.constructor.toString().split(''))
+        return [];
+    }
     return inputs
         .map(/**
          * Creates and returns an object containing the provided input and index.
@@ -17,6 +21,7 @@ export function getDynamicInputs(node) {
             return {input, index};
         })
         .filter(o => o.input && typeof o.input.name === "string" && /^arg\d+$/.test(o.input.name))
+        .map((o, key) => ({...o, logicalIndex: key}))
         // // Sorting them is just going to get super confusing
         // .sort((a, b) => {
         //     const an = getInputArgNumber(a);
@@ -41,17 +46,17 @@ export function ensureDynamicInputsImpl(node, isConnecting) {
         }
 
         // Give inputs pretty labels if they don't have user assigned labels
-        for (const {input, index} of dynamicInputs) {
+        for (const {input, index, logicalIndex} of dynamicInputs) {
             const argNumber = getInputArgNumber(input);
-            if (argNumber !== index) {
+            if (argNumber !== logicalIndex) {
                 log({class: "formatter", method: "ensureDynamicInputsImpl", severity: "warn", tag: "input_mismatch"},
-                    `input index mismatch, renaming input #${index} from ${input.name} to arg${index}`);
-                if (input.label && input.label.startsWith(input.name)) {
-                    // TODO: can we just set this to empty or null or something?
-                    // TODO: perform such resets in a helper function so when we find the answer, we can fix 1 spot
-                    input.label = `arg${index}`;
+                    `input index mismatch, renaming input #${index} from ${input.name} to arg${logicalIndex}`);
+                if (input.label && (input.label.startsWith(input.name) || input.label.startsWith("arg"))) {
+                    // can we just set this to empty or null or something?
+                    // Yes, we can set it to undefined (null probably works, but undefined is what it actually is)
+                    input.label = undefined;
                 }
-                input.name = `arg${index}`;
+                input.name = `arg${logicalIndex}`;
             }
             if (!input.label || input.label === input.name || input.label.split(' ')[0] === input.name) {
                 const t = input.type || "*";
@@ -63,7 +68,6 @@ export function ensureDynamicInputsImpl(node, isConnecting) {
         if (lastInput && lastInput.link != null) {
             const nextNum = getInputArgNumber(lastInput) + 1;
             node.addInput(`arg${nextNum}`, "*");
-            console.log("[ovum.format] new inputs have a label of: ", node.inputs[nextNum].label);
             // return; // addInput already dirties the canvas
         }
 
@@ -84,17 +88,14 @@ export function ensureDynamicInputsImpl(node, isConnecting) {
                     // the last entry after we've removed the physical input.
                     // const fresh = getDynamicInputs(node);
                     
-                    // TODO: ISSUE: .index does not refer to the physical index of the input, but the logical index
-                    // (i.e., arg0 with always be the 0th dynamicInput, even if there are two previous inputs)
-                    // const lastIdx = dynamicInputs[dynamicInputs.length - 1].index;
-                    // THIS SHOULD FIX THAT:
-                    const lastIdx = node.inputs.indexOf(lastInp);
-                    if (lastIdx === -1) {
-                        log({class: "formatter", method: "ensureDynamicInputsImpl", severity: "warn", tag: "input_mismatch"}, `input index not found while removing extra input`);
-                        break;
-                    }
+                    // const lastIdx = node.inputs.indexOf(lastInp);
+                    const lastIdx = dynamicInputs[dynamicInputs.length - 1].index
+                    // if (lastIdx === -1) {
+                    //     log({class: "formatter", method: "ensureDynamicInputsImpl", severity: "warn", tag: "input_mismatch"}, `input index not found while removing extra input`);
+                    //     break;
+                    // }
                     node.removeInput(lastIdx);
-                    // This is smarter than recomputing via getDynamicInputs
+                    // This is smarter than recomputing via getDynamicInputs. Could use pop perhaps?
                     dynamicInputs.splice(-1, 1);
                 } else {
                     break;
@@ -102,6 +103,7 @@ export function ensureDynamicInputsImpl(node, isConnecting) {
             }
         }
     } catch (err) {
-        console.warn("[formatter] ensureDynamicInputs failed:", err);
+        log({class: "formatter", method: "ensureDynamicInputsImpl", severity: "warn", tag: "input_mismatch"},
+            `ensureDynamicInputsFailed: ${err.message}`, err.stack);
     }
 }
