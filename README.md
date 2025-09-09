@@ -133,6 +133,17 @@ How long does the workflow spend in each node?
 
 ## Environment Bridge: Set Environment Variable and Get Environment Variable
 
+### Browser Local Storage: Set LocalStorage and Get LocalStorage
+
+Persist small strings in the browser between sessions without touching the server environment.
+
+- Set LocalStorage: Writes a key/value into the browser's localStorage (strings only). Includes an optional passthrough to help enforce execution order. If overwrite=false and the key exists in localStorage, the value is left unchanged.
+- Get LocalStorage: Reads a key from the browser's localStorage with a default fallback. Returns (value, exists).
+
+Notes:
+- Backend nodes cannot directly access the browser; the Set node triggers a frontend action to store the value using ComfyUI's UI-return channel. The Get node returns the provided default at execution time but is useful for coordinating UI state; use environment variables if you need true backend-readable values.
+- Keys and values are stored as strings. If you need structures, encode/decode to JSON in the graph.
+
 Publish and subscribe values anywhere in your workflow (and even across workflows) using the process environment as a lightweight, global message bus.
 
 What they do:
