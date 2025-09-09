@@ -85,8 +85,9 @@ class GetLocalStorage:
         return (default, False)
 
 
-# noinspection PyUnresolvedReferences
+# noinspection PyUnresolvedReferences,PyPackageRequirements
 from server import PromptServer
+# noinspection PyPackageRequirements
 from aiohttp import web
 
 _local_cache = {}
