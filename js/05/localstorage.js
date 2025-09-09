@@ -1,9 +1,46 @@
 import {app} from "../../../scripts/app.js";
 
+function getWidgetValueFromPrompt(p, nodeId, name) {
+    // Translated from the provided snippet (without lodash dependency)
+    let ptr = p?.output?.[nodeId]?.inputs?.[name];
+    if (ptr === undefined) throw Error("ptr undefined");
+    if (!Array.isArray(ptr)) return ptr;
+    if (Array.isArray(ptr) && ptr.length === 2) {
+        const [n, i] = ptr;
+        // noinspection EqualityComparisonWithCoercionJS
+        const node = (p?.workflow?.nodes || []).find(v => v?.id == n);
+        if (!node) throw Error("node not found");
+        ptr = node.widgets_values?.[i];
+        if (ptr === undefined) throw Error("widget value undefined");
+        if (!Array.isArray(ptr)) return ptr;
+    }
+    throw Error('undefinedLogicHere');
+}
+
 app.registerExtension({
     name: "ovum.localstorage",
+    setup() {
+        const api = app.api;
+        // 1) Listen for executing and send the resolved widget value to backend
+        api.addEventListener("executing", async (ev) => {
+            try {
+                const node = ev?.detail?.node || ev?.detail?.item?.node;
+                const nodeId = node?.id ?? ev?.detail?.nodeId;
+                // Only act for our Get LocalStorage node; fallback to title check
+                const klass = node?.comfyClass || node?.type || node?.title || "";
+                if (!nodeId || !String(klass).match(/Get\s*LocalStorage|GetLocalStorage/)) return;
+                const widgetName = "name"; // the widget holding the variable name
+                const prompt = await app.graphToPrompt();
+                const value = getWidgetValueFromPrompt(prompt, nodeId, widgetName);
+                const url = `/ovum/localstorage/get?name=${encodeURIComponent(String(value ?? ""))}&node=${encodeURIComponent(nodeId)}&widget=${encodeURIComponent(widgetName)}`;
+                fetch(url).catch(() => {});
+            } catch (_e) {
+                // swallow
+            }
+        });
+    },
     async beforeRegisterNodeDef(nodeType, nodeData, app_) {
-        // Hook render of UI payload for nodes
+        // 2) Still honor UI side-effects for SetLocalStorage on node onExecuted
         const onExecuted = nodeType.prototype.onExecuted;
         nodeType.prototype.onExecuted = function(output) {
             try {
@@ -17,13 +54,6 @@ app.registerExtension({
                         } else {
                             localStorage.setItem(name, String(value ?? ""));
                         }
-                    }
-                }
-                if (ui?.ovum_localstorage_get) {
-                    const {name} = ui.ovum_localstorage_get;
-                    if (name && typeof localStorage !== 'undefined') {
-                        // nothing to push back into backend outputs; ComfyUI doesn't allow dynamic override here.
-                        // This hook exists to warm caches if needed in future.
                     }
                 }
             } catch(_e) { /* ignore */ }

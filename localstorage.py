@@ -48,6 +48,7 @@ class GetLocalStorage:
     DESCRIPTION = """
     Get a value from the browser's localStorage via the frontend.
     Works like Get Environment Variable. Returns (value, exists).
+    Is a total kludge, and should be avoided at all costs. 
     """
 
     @classmethod
@@ -82,5 +83,30 @@ class GetLocalStorage:
         # Request frontend to fetch the value; meanwhile return default. Frontend widget code can update UI output.
         ui = {"ovum_localstorage_get": {"name": name}}
         return (default, False)
+
+
+# noinspection PyUnresolvedReferences
+from server import PromptServer
+from aiohttp import web
+
+_local_cache = {}
+
+@PromptServer.instance.routes.get('/ovum/localstorage/get')
+async def ovum_localstorage_get(request:web.Request):
+    try:
+        name = request.query.get('name','')
+        node_id = request.query.get('node','')
+        widget = request.query.get('widget','')
+        value = request.query.get('value', None)
+        exists = request.query.get('exists', None)
+        # Cache the latest reported value from browser for optional use
+        if name:
+            if value is not None:
+                _local_cache[name] = (value, True)
+            elif exists is not None:
+                _local_cache[name] = (None, bool(exists))
+        return web.json_response({"ok": True})
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
 
 CLAZZES = [SetLocalStorage, GetLocalStorage]
