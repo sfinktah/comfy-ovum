@@ -268,6 +268,19 @@ export class Logger {
         const match = this._matchRules({ severity, tags, source });
         const allowed = match?.action ? match.action === 'allow' : true;
 
+        // Increment per-rule counters when a rule matches (iptables-style counters)
+        if (match && typeof match.index === 'number') {
+            const r = this._rules[match.index];
+            if (r) {
+                r._hits = (r._hits || 0) + 1;
+                if (allowed) {
+                    r._allowHits = (r._allowHits || 0) + 1;
+                } else {
+                    r._denyHits = (r._denyHits || 0) + 1;
+                }
+            }
+        }
+
         // Update stats
         this._updateStats({ severity, tags, source }, allowed, match?.index);
 
@@ -375,8 +388,8 @@ export class Logger {
     static listRules(verbose = false) {
         this.init();
         console.log('Logger Rules (processed in order):');
-        console.log('num  action   criteria');
-        console.log('---  ------   ---------');
+        console.log('num  hits  action   criteria');
+        console.log('---  ----  ------   ---------');
 
         if (this._rules.length === 0) {
             console.log('(no rules - default ACCEPT)');
@@ -385,10 +398,15 @@ export class Logger {
 
         this._rules.forEach((rule, i) => {
             const num = (i + 1).toString().padStart(3);
+            const hits = ((rule && typeof rule._hits === 'number') ? rule._hits : 0).toString().padStart(4);
             const action = rule.action.toUpperCase().padEnd(6);
             const criteria = this._formatRuleCriteria(rule, verbose);
-            console.log(`${num}  ${action}   ${criteria}`);
+            console.log(`${num}  ${hits}  ${action}   ${criteria}`);
         });
+    }
+
+    static list(verbose = false) {
+        this.listRules(verbose);
     }
 
     /**
@@ -880,6 +898,11 @@ export class Logger {
                 if (regex.length) norm._srcRegex = regex;
             }
         }
+        // Initialize runtime counters (not persisted)
+        norm._hits = 0;
+        norm._allowHits = 0;
+        norm._denyHits = 0;
+
         return norm;
     }
 
