@@ -41,11 +41,29 @@ app.registerExtension({
     },
     async beforeRegisterNodeDef(nodeType, nodeData, app_) {
         // 2) Still honor UI side-effects for SetLocalStorage on node onExecuted
+        if (nodeType?.comfyClass !== "SetLocalStorage") {
+            // console.log("[ovum.format] early return: unsupported comfyClass", nodeType?.comfyClass);
+            return;
+        }
+        Logger.log({
+            class: 'SetLocalStorage',
+            method: 'beforeRegisterNodeDef',
+            severity: 'trace',
+        }, 'nodeData.name matches "SetLocalStorage"');
+
+        // StyleGuide: https://docs.comfy.org/development/comfyui-server/comms_messages#using-executed
         const onExecuted = nodeType.prototype.onExecuted;
-        nodeType.prototype.onExecuted = function(output) {
+        nodeType.prototype.onExecuted = function(message) {
+            Logger.log({
+                class: 'SetLocalStorage',
+                method: 'onExecuted',
+                severity: 'trace',
+            }, {message: message});
             try {
-                const ui = output?.ui || output?.[0]?.ui || null;
-                if (ui?.ovum_localstorage_set) {
+
+                /** @type {{ ovum_localstorage_set?: { name: string, value: string, overwrite: boolean } }} */
+                const ui = message || null;
+                if (ui && ui.ovum_localstorage_set) {
                     const {name, value, overwrite} = ui.ovum_localstorage_set;
                     if (name && typeof localStorage !== 'undefined') {
                         if (!overwrite) {
