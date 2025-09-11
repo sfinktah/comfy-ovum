@@ -135,8 +135,24 @@ class SetTwinNodes extends TwinNodes {
         const names = extractWidgetNames(this);
         this.title = computeTwinNodeTitle(names, "set", disablePrefix);
 
-        // After updating the title/color, apply shortened labels to outputs when appropriate
-        this.applyAbbreviatedOutputLabels();
+        if (this.flags?.collapsed) {
+            if (this.title.length > 20) {
+                this.title = this.title.substring(0, 19) + "…";
+            }
+        }
+        else {
+            // After updating the title, apply shortened labels to outputs when appropriate
+            this.applyAbbreviatedOutputLabels();
+        }
+    }
+
+    onMinimize() {
+        log({ class: "SetTwinNodes", method: "onMinimize", severity: "trace", tag: "function_entered" }, "onMinimize");
+        this.updateTitle();
+    }
+    onMaximize() {
+        log({ class: "SetTwinNodes", method: "onMaximize", severity: "trace", tag: "function_entered" }, "onMaximize");
+        this.updateTitle();
     }
 
 
@@ -156,9 +172,10 @@ class SetTwinNodes extends TwinNodes {
         if (analysis && analysis.use) {
             items.forEach((it, j) => {
                 const short = analysis.shortNames[j] || it.name;
+                const displayName = short.length > 12 ? short.substring(0, 8) + "…" : short;
                 this.setOutput(it.index, {
                     name: short,
-                    label: short
+                    label: displayName
                 });
             });
         }
