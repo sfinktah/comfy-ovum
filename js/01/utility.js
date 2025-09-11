@@ -6,7 +6,7 @@
  * @param {function} callback 
  */
 export function chainCallback(object, property, callback) {
-    if (object == undefined) {
+    if (!object) {
         console.error("Tried to add callback to a non-existent object");
         return;
     }
