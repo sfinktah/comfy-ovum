@@ -129,6 +129,23 @@ Use cases:
 
 ## Timer
 
+## Live Crop (interactive)
+
+Visually crop, expand, and rotate an image with interactive guides rendered directly in the node.
+
+- Inputs:
+  - crop_top, crop_bottom, crop_left, crop_right (FLOAT [-1..1]):
+    - Negative: crops that fraction of the original dimension from that side (e.g., -0.1 removes 10% from that edge).
+    - Positive: expands/pads that fraction with white on that side (e.g., +0.1 adds 10% of the original dimension).
+  - rotation (FLOAT [-180..180]): rotation in degrees; applied after crop/expand. Clockwise positive in UI.
+  - image (IMAGE, optional), mask (MASK, optional): both are processed with the same operations; masks use white=255 for padding.
+- Outputs: IMAGE, MASK
+- UI: The node shows a preview of the incoming image with red lines indicating where the crop will occur. Adjust the sliders to see the guides update. (Dragging the guides is planned.)
+
+Notes:
+- When no image is connected, the node returns None; when connected, the preview is downscaled for responsiveness.
+- Rotation uses PIL’s rotate with expand and a white fill (255 for masks).
+
 How long does the workflow spend in each node?
 
 ## Environment Bridge: Set Environment Variable and Get Environment Variable
