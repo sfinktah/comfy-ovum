@@ -312,4 +312,40 @@ class JoinListNode(NewPointer):
         }
 
 
-CLAZZES = [ListSliceNode, ListSpliceNode, RepeatItemNode, ReverseListNode, ConcatListsNode, IndexOfNode, JoinListNode, XRangeNode]
+class UniqueListNode(NewPointer):
+    DESCRIPTION = """
+    Return a new list with duplicate values removed, preserving the first occurrence order.
+    """
+    FUNCTION = "list_unique"
+    RETURN_TYPES = ("LIST",)
+    CATEGORY = "Data"
+    custom_name = "Pyobjects/Unique List"
+
+    @staticmethod
+    def list_unique(py_list):
+        if not isinstance(py_list, list):
+            raise ValueError("Input must be a Python list")
+        result = []
+        seen_hashables = set()
+        for item in py_list:
+            try:
+                # Try hashable fast-path
+                if item not in seen_hashables:
+                    seen_hashables.add(item)
+                    result.append(item)
+            except TypeError:
+                # Unhashable: fall back to equality-based containment
+                if not any(item == existing for existing in result):
+                    result.append(item)
+        return (result,)
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "py_list": ("LIST",),
+            }
+        }
+
+
+CLAZZES = [ListSliceNode, ListSpliceNode, RepeatItemNode, ReverseListNode, ConcatListsNode, IndexOfNode, JoinListNode, UniqueListNode, XRangeNode]
