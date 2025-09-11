@@ -8,7 +8,7 @@ import {app} from "../../../scripts/app.js";
 import {$el} from "../../../scripts/ui.js";
 
 import { graphGetNodeById  } from '../01/graphHelpers.js';
-import {chainCallback, debounce} from '../01/utility.js';
+import { chainCallback, debounce} from '../01/utility.js';
 import { ensureTooltipLib } from '../01/tooltipHelpers.js';
 import { ensureDynamicInputsImpl} from "../01/dynamicInputHelpers.js";
 import { Timer } from '../04/timer-class.js';
