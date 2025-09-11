@@ -59,18 +59,22 @@ app.registerExtension({
             constructor(title) {
                 super(title)
                 if (!this.properties) {
-                    this.properties = { 
-                        bgcolors: [],
-                        previousNames: Array(this.numberOfWidgets || 2).fill(""),
-                    };
-                } else if (this.numberOfWidgets == null) {
+                    this.properties = {};
+                }
+                this.properties = {
+                    bgcolors: [],
+                    previousNames: Array(this.numberOfWidgets || 2).fill(""),
+                    numberOfWidgets: 2,
+                    showOutputText: GetTwinNodes.defaultVisibility,
+                    failSilently: false,
+                    ...this.properties
+                };
+                if (!this.numberOfWidgets) {
                     this.numberOfWidgets = 2;
                 }
                 if (!Array.isArray(this.properties.previousNames) || this.properties.previousNames.length !== this.numberOfWidgets) {
                     this.properties.previousNames = Array(this.numberOfWidgets).fill("");
                 }
-
-                this.properties.showOutputText = GetTwinNodes.defaultVisibility;
 
                 const initialCount = this.numberOfWidgets || 2;
                 console.log("initialWidgetCount", this.widgets?.length || 0);
@@ -268,11 +272,6 @@ app.registerExtension({
                 this.serialize();
             }
 
-            // Backward-compatible two-name setter
-            setNames(nameA, nameB) {
-                this.setNamesArray([nameA, nameB]);
-            }
-
             onRename(widgetIndex) {
                 let widgetValue = safeStringTrim(this.widgets[widgetIndex]?.value);
                 if (!widgetValue) {
@@ -292,7 +291,7 @@ app.registerExtension({
                     this.updateTitle();
                     this.serialize();
                 } else {
-                    this.setType('*');
+                    this.setType('*', widgetIndex);
                 }
             }
 
@@ -517,33 +516,11 @@ app.registerExtension({
                 }
             }
 
-            // Support arbitrary number of types
-            setTypesArray(typesArr) {
-                const min = this.numberOfWidgets || 2;
-                const targetCount = Math.max(min, Array.isArray(typesArr) ? typesArr.length : 0);
-                ensureSlotCounts(this);
-                for (let i = 0; i < targetCount; i++) {
-                    const t = (typesArr && typesArr[i]) ? typesArr[i] : '*';
-                    if (this.outputs?.[i]) {
-                        this.setOutput(i, {
-                            name: t,
-                            type: t
-                        });
-                    }
-                }
-                this.validateLinks();
-            }
 
-            // Backward-compatible two-slot setter delegates to array-based version
-            setTypes(typeA, typeB) {
-                this.setTypesArray([typeA, typeB]);
-            }
-
-            // TODO: Check - legacy single-output setter kept for compatibility with callers that expect setType
-            setType(type, _widgetIndex) {
+            setType(type, widgetIndex) {
                 ensureSlotCounts(this);
-                if (this.outputs[_widgetIndex]) {
-                    this.setOutput(_widgetIndex, {
+                if (this.outputs[widgetIndex]) {
+                    this.setOutput(widgetIndex, {
                         name: type,
                         type: type
                     });
@@ -575,10 +552,10 @@ app.registerExtension({
              * @returns {LLink|undefined} The found link, or undefined if no matching setter/link exists.
              */
             getInputLink(slot) {
-                const wv = safeStringTrim(this.widgets?.[slot]?.value) || '';
-                if (!wv) return;
+                const widgetValue = safeStringTrim(this.widgets?.[slot]?.value) || '';
+                if (!widgetValue) return;
 
-                const found = findSetter(this, wv);
+                const found = findSetter(this, widgetValue);
                 if (!found) return;
 
                 const setter = found.node;
@@ -587,8 +564,11 @@ app.registerExtension({
                     const input = setter.inputs[slot];
                     return GraphHelpers.getLink(this.graph, input.link);
                 } else {
+                    if (this.properties.failSilently) {
+                        return;
+                    }
                     // No SetTwinNodes found for BOOLEAN(GetTwinNodes). Most likely you're missing custom nodes
-                    const errorMessage = "No SetTwinNode found for the first input (" + this.widgets[slot].value + ") of the GetTwinNodes titled " + this.title;
+                    const errorMessage = "No SetTwinNode found for the input (" + this.widgets[slot].value + ") of the GetTwinNodes titled " + this.title;
                     showAlert(errorMessage, {
                         summary: "GetTwinNodes Error",
                         severity: "error",
