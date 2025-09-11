@@ -76,6 +76,7 @@ export class TwinNodes extends LGraphNode {
      * @param {CanvasRenderingContext2D} ctx
      */
     onDrawBackground(ctx) {
+        if (this.flags && this.flags.collapsed) return;
         try {
             const colors = Array.isArray(this.properties?.bgcolors) ? this.properties.bgcolors : [];
             if (colors.length < 2 || colors[0] === colors[1]) return;
