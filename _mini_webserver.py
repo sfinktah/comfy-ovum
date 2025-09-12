@@ -2,14 +2,15 @@
 # Uses ComfyUI PromptServer routes (aiohttp).
 
 from __future__ import annotations
-import os
-import posixpath
+
 import html
 import mimetypes
+import posixpath
 from pathlib import Path
 
 # noinspection PyPackageRequirements
 from aiohttp import web
+from markdown_it import MarkdownIt
 # noinspection PyUnresolvedReferences,PyPackageRequirements
 from server import PromptServer
 
@@ -32,47 +33,23 @@ def _is_subpath(child: Path, parent: Path) -> bool:
 
 
 def _markdown_to_html(md_text: str) -> str:
-    # Minimal conversion: escape HTML, then very basic formatting for headings and paragraphs.
-    # Avoid heavy dependencies; good enough for simple README viewing.
-    lines = md_text.splitlines()
-    out = []
-    for line in lines:
-        stripped = line.strip()
-        if stripped.startswith("#"):
-            # count leading #
-            hashes = len(stripped) - len(stripped.lstrip('#'))
-            hashes = max(1, min(6, hashes))
-            content = stripped[hashes:].strip()
-            out.append(f"<h{hashes}>" + html.escape(content) + f"</h{hashes}>")
-        elif stripped.startswith("-") or stripped.startswith("*"):
-            # crude list handling: start a new line with bullet
-            out.append("<li>" + html.escape(stripped[1:].strip()) + "</li>")
-        else:
-            if stripped:
-                out.append("<p>" + html.escape(stripped) + "</p>")
-            else:
-                out.append("")
-    body = "\n".join(out)
-    if "<li>" in body:
-        # wrap loose lis
-        body = body.replace("<li>", "\n<li>")
-        body = "<ul>" + body + "</ul>"
+    # Render Markdown using markdown-it-py with GFM-like features
+    md = MarkdownIt("commonmark", {"linkify": True, "typographer": True})
+    md.enable("table")
+    md.enable("strikethrough")
+    body = md.render(md_text)
     return f"""
 <!doctype html>
-<html><head>
+<html lang="en"><head>
 <meta charset='utf-8'>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>README</title>
-<style>
-body{{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:2rem;}}
-code,pre{{font-family:ui-monospace,Menlo,Consolas,monospace;background:#f6f8fa;padding:2px 4px;border-radius:4px}}
-ul{{margin-left:1.2rem}}
-a{{color:#0366d6;text-decoration:none}}
-a:hover{{text-decoration:underline}}
-</style>
+<link rel="stylesheet" href="/ovum/web/css/base.css">
+<link rel="stylesheet" href="/ovum/web/css/markdown.css">
 </head><body>
 {body}
 </body></html>
-""".replace("{body}", body)
+"""
 
 
 def _directory_listing(base_url: str, directory: Path, rel: Path) -> web.Response:
@@ -84,18 +61,21 @@ def _directory_listing(base_url: str, directory: Path, rel: Path) -> web.Respons
             items.append(f"<li><a href='{html.escape(link)}'>{html.escape(name)}</a></li>")
     except Exception as e:
         items.append(f"<li>Error reading directory: {html.escape(str(e))}</li>")
+    escaped_rel = html.escape(str(rel).replace('\\', '/'))
+    items_html = "\n" + "\n".join(items)
     body = f"""
 <!doctype html>
-<html><head>
-<meta charset='utf-8'><title>Index of /{html.escape(str(rel).replace('\\\\','/'))}</title>
-<style>body{{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:2rem}} a{{text-decoration:none}} a:hover{{text-decoration:underline}}</style>
+<html lang="en"><head>
+<meta charset='utf-8'><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Index of /{escaped_rel}</title>
+<link rel="stylesheet" href="/ovum/web/css/base.css">
 </head><body>
-<h1>Index of /{html.escape(str(rel).replace('\\\\','/'))}</h1>
+<h1>Index of /{escaped_rel}</h1>
 <ul>
-{items}
+{items_html}
 </ul>
 </body></html>
-""".replace("{items}", "\n" + "\n".join(items))
+"""
     return web.Response(text=body, content_type="text/html")
 
 
