@@ -135,18 +135,19 @@ class SetTwinNodes extends TwinNodes {
         const names = extractWidgetNames(this);
         this.title = computeTwinNodeTitle(names, "set", disablePrefix);
 
-        if (this.flags?.collapsed) {
-            if (this.title.length > 20) {
-                this.title = this.title.substring(0, 19) + "…";
-            }
+        // can find the event for collapsing a node, so we'll just apply the title shortening all the time
+        if (this.title.length > 20) {
+            this.title = this.title.substring(0, 19) + "…";
         }
+        if (this.flags?.collapsed) {}
         else {
             // After updating the title, apply shortened labels to outputs when appropriate
             this.applyAbbreviatedOutputLabels();
         }
     }
 
-    onMinimize() {
+    /** @param {boolean} force */
+    collapse(force) {
         log({ class: "SetTwinNodes", method: "onMinimize", severity: "trace", tag: "function_entered" }, "onMinimize");
         this.updateTitle();
     }

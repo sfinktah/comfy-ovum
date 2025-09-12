@@ -58,6 +58,7 @@ app.registerExtension({
              */
             constructor(title) {
                 super(title)
+                // properties is not actually readable at this point, so we could probably avoid this careful non-overwriting stuff
                 if (!this.properties) {
                     this.properties = {};
                 }
@@ -69,24 +70,38 @@ app.registerExtension({
                     failSilently: false,
                     ...this.properties
                 };
-                if (!this.numberOfWidgets) {
-                    this.numberOfWidgets = 2;
-                }
-                if (!Array.isArray(this.properties.previousNames) || this.properties.previousNames.length !== this.numberOfWidgets) {
-                    this.properties.previousNames = Array(this.numberOfWidgets).fill("");
+
+                const node = this;
+
+                TwinNodes.prototype.onPropertyChanged = function(name, value, previousValue) {
+                    if (name === "numberOfWidgets") {
+                        console.log("initialWidgetCount: onPropertyChanged: numberOfWidgets", value, previousValue);
+                        this.numberOfWidgets = value;
+                        this.numberOfOutputSlots = value;
+                        if (!Array.isArray(this.properties.previousNames) || this.properties.previousNames.length < this.numberOfWidgets) {
+                            this.properties.previousNames = Array(this.numberOfWidgets).fill("");
+                        }
+                        node.ensureGetterWidgetCount(value);
+                        ensureSlotCounts(this);
+                        // ensureSlotCounts(node);
+                        // node.updateTitle();
+                    }
                 }
 
-                const initialCount = this.numberOfWidgets || 2;
-                console.log("initialWidgetCount", this.widgets?.length || 0);
-                
-                this.ensureGetterWidgetCount(initialCount);
+                // console.log("initialWidgetCount", this.widgets?.length || 0);
+                // console.log("initialWidgetCount: numberOfWidgets", this.numberOfWidgets);
+                // console.log("initialWidgetCount: numberOfOutputSlots", this.numberOfOutputSlots);
+                // console.log("initialWidgetCount: previousNames", this.properties.previousNames);
+                // console.log("initialWidgetCount: properties", this.properties);
+
+                this.ensureGetterWidgetCount(this.numberOfWidgets);
+                console.log("afterEnsureGetterWidgetCount", this.widgets?.length || 0);
 
                 // Ensure the number of outputs matches count
                 ensureSlotCounts(this);
 
                 // Determine colors using all connected input types in order
 
-                const node = this;
                 // bit of a nasty hack
                 setTimeout(() => {
                     node.widgets.forEach((widgetValue, widgetIndex) => {
@@ -104,6 +119,11 @@ app.registerExtension({
                 this.isVirtualNode = true;
             }
 
+            /** @override */
+            /** @param {MissingNodeType[]} missingNodeTypes */
+            async afterConfigureGraph(missingNodeTypes) {
+            }
+
             // Return combined constant names from SetTwinNodes and Kijai's SetNode (prefixed)
             getCombinedConstantNames() {
                 const names = [];
@@ -118,9 +138,20 @@ app.registerExtension({
                 }
 
                 const uniq = Array.from(new Set(names)).sort();
-                // Add reset optiont to allow unsetting the selection
+                // Add reset option to allow unsetting the selection
                 uniq.unshift("(unset)");
                 return uniq;
+            }
+
+            addAnotherWidget() {
+                this.numberOfWidgets += 1;
+                this.numberOfOutputSlots += 1;
+                this.properties.numberOfWidgets = this.numberOfWidgets;
+                ensureSlotCounts(this);
+                this.ensureGetterWidgetCount(this.numberOfWidgets);
+                this.properties.previousNames.push("");
+                this.updateTitle();
+                this.serialize();
             }
 
             // Ensure there are at least N combo widgets for constants, each with a values provider
@@ -176,9 +207,8 @@ app.registerExtension({
             ) {
                 // Respect serialized data on restore: skip auto-derive during deserialization
                 log({ class: "GetTwinNodes", method: "onConnectionsChange", severity: "trace", tag: "function_entered" }, "[GetTwinNodes] onConnectionsChange");
-                if (this.__restoring) { log({ class: "GetTwinNodes", method: "onConnectionsChange", severity: "debug", tag: "restore_skip" }, "[GetTwinNodes] aborted due to __restoring state"); return; }
+                // if (this.__restoring) { log({ class: "GetTwinNodes", method: "onConnectionsChange", severity: "debug", tag: "restore_skip" }, "[GetTwinNodes] aborted due to __restoring state"); return; }
 
-                this.validateLinks();
 
                 // If an output is connected and the constant for that slot is unset,
                 // auto-select if there's only one known option for that widgetIndex.
@@ -236,15 +266,15 @@ app.registerExtension({
                             }
                         }
                     }
-                    this.complicatedRenamingStuff();
+                    // this.complicatedRenamingStuff();
                 }
 
-                // Also refresh on output disconnects to update color/title when links are removed
+                // Validate
                 if (slotType === LiteGraph.OUTPUT && !isChangeConnect) {
-                    this.complicatedRenamingStuff();
+                    // this.complicatedRenamingStuff();
                 }
 
-                this.updateTitle();
+                this.validateLinks();
             }
 
             // Backward-compatible single-name setter
@@ -253,40 +283,44 @@ app.registerExtension({
                 if (this.widgets?.[_widgetIndex]) {
                     setWidgetValue(this, _widgetIndex, name);
                 }
-                this.complicatedRenamingStuff();
-                this.serialize();
-            }
-
-            // New names setter (array-based) for arbitrary number of names
-            setNamesArray(names) {
-                const min = this.properties?.constCount || 2;
-                const targetCount = Math.max(min, Array.isArray(names) ? names.length : 0);
-                this.ensureGetterWidgetCount(targetCount);
-                const count = Array.isArray(names) ? names.length : 0;
-                for (let i = 0; i < count; i++) {
-                    if (this.widgets?.[i]) {
-                        setWidgetValue(this, i, names[i]);
-                    }
-                }
-                this.complicatedRenamingStuff();
+                // this.complicatedRenamingStuff();
                 this.serialize();
             }
 
             onRename(widgetIndex) {
+                log({ class: "GetTwinNodes", method: "onRename", severity: "trace", tag: "function_entered" });
                 let widgetValue = safeStringTrim(this.widgets[widgetIndex]?.value);
                 if (!widgetValue) {
                     return;
                 }
+                if (widgetValue === '(unset)') {
+                    if (this.outputs?.[widgetIndex]?.links?.length) {
+                        const links = [...this.outputs[widgetIndex].links];
+                        for (const linkId of links) {
+                            const link = GraphHelpers.getLink(this.graph, linkId);
+                            if (link) GraphHelpers.removeLink(this.graph, linkId);
+                        }
+                    }
+                    ensureSlotCounts(this);
+                    this.setType('*', widgetIndex);
+                    setWidgetValue(this, widgetIndex, '');
+                    this.updateColors();
+                    this.updateTitle();
+                    this.serialize();
+
+                    return;
+                }
+
                 app.api.dispatchCustomEvent('getnode_rename', {
                     nodeId: this.id,
                     widgetIndex: widgetIndex,
                     value: widgetValue,
                 });
+
                 const setter = findSetter(this, widgetValue);
                 if (setter) {
                     let linkType = (setter.node.inputs[setter.widgetIndex].type);
-
-                    this.setType(linkType, setter.widgetIndex);
+                    this.setType(linkType, widgetIndex);
                     this.updateColors();
                     this.updateTitle();
                     this.serialize();
@@ -304,7 +338,7 @@ app.registerExtension({
             complicatedRenamingStuff() {
                 // Respect serialized data on restore: skip auto-derive during deserialization
                 log({ class: "GetTwinNodes", method: "complicatedRenamingStuff", severity: "trace", tag: "function_entered" }, "[GetTwinNodes] onRename");
-                if (this.__restoring) { log({ class: "GetTwinNodes", method: "complicatedRenamingStuff", severity: "debug", tag: "restore_skip" }, "[GetTwinNodes] aborted due to __restoring state"); return; }
+                // if (this.__restoring) { log({ class: "GetTwinNodes", method: "complicatedRenamingStuff", severity: "debug", tag: "restore_skip" }, "[GetTwinNodes] aborted due to __restoring state"); return; }
 
                 // Support "(unset)" option: clear widget value and possibly remove the first extra unset widget and its output
                 const RESET_LABEL = "(unset)";
@@ -464,7 +498,7 @@ app.registerExtension({
              * @returns {GetTwinNodes} The cloned node.
              */
             clone() {
-                const cloned = GetTwinNodes.prototype.clone.apply(this);
+                const cloned = TwinNodes.prototype.clone.apply(this);
                 cloned.size = cloned.computeSize();
                 return cloned;
             }
@@ -518,8 +552,20 @@ app.registerExtension({
 
 
             setType(type, widgetIndex) {
+                log({
+                    class: "GetTwinNodes",
+                    method: "setType",
+                    severity: "trace",
+                    tag: "function_entered"
+                }, {
+                    type: type,
+                    widgetIndex: widgetIndex,
+                    callee: "" + (new Error().stack.split('\n')[2]?.match(/at\s+([\w$.<>]+|\[object\s\w+\])/)?.[1] || 'unknown')
+                });
+
+
                 ensureSlotCounts(this);
-                if (this.outputs[widgetIndex]) {
+                if (this.outputs?.[widgetIndex]) {
                     this.setOutput(widgetIndex, {
                         name: type,
                         type: type
@@ -561,7 +607,7 @@ app.registerExtension({
                 const setter = found.node;
 
                 if (setter) {
-                    const input = setter.inputs[slot];
+                    const input = setter.inputs[found.widgetIndex];
                     return GraphHelpers.getLink(this.graph, input.link);
                 } else {
                     if (this.properties.failSilently) {
@@ -587,6 +633,9 @@ app.registerExtension({
              * @returns {void}
              */
             onAdded(graph) {
+                // Kijai would call this.validateName(graph) on the setter, nothing on the getter
+                console.log("initialWidgetCount: onAdded: properties", this.properties);
+                console.log("initialWidgetCount: onAdded: properties.numberOfWidgets", this.properties.numberOfWidgets);
                 if (Array.isArray(this.widgets)) {
                     for (let i = 0; i < this.widgets.length; i++) {
                         try { wrapWidgetValueSetter(this.widgets[i]); } catch (_e) {}
@@ -606,6 +655,12 @@ app.registerExtension({
                 let menuEntry = node.drawConnection ? "Hide connections" : "Show connections";
 
                 options.unshift(
+                    {
+                        content: "Add another entry",
+                        callback: () => {
+                            node.addAnotherWidget();
+                        },
+                    },
                     {
                         content: "Go to setter",
                         callback: () => {

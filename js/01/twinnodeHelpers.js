@@ -24,6 +24,55 @@ import { safeStringTrim } from "./stringHelper.js";
 import { log } from "../common/logger.js";
 
 /**
+ * Resolve the logging class name based on the given context(s).
+ * 1) If `ctx` exists and its constructor/name contains "TwinNode", use it.
+ * 2) Otherwise try to obtain a meaningful class/type name from any provided context.
+ * 3) Fallback to "TwinNodeHelpers".
+ */
+function resolveLogClass(ctx, ...otherCtxs) {
+    try {
+        const tryGetName = (obj) => {
+            if (!obj) return '';
+            // constructor name
+            if (obj.constructor && typeof obj.constructor.name === 'string' && obj.constructor.name) {
+                return obj.constructor.name;
+            }
+            // common node "type" field
+            if (typeof obj.type === 'string' && obj.type) {
+                return obj.type;
+            }
+            // function name if a function is passed
+            if (typeof obj === 'function' && obj.name) {
+                return obj.name;
+            }
+            // generic name property
+            if (typeof obj.name === 'string' && obj.name) {
+                return obj.name;
+            }
+            // proto constructor name as last resort
+            const protoCtorName = obj?.__proto__?.constructor?.name;
+            if (typeof protoCtorName === 'string' && protoCtorName) {
+                return protoCtorName;
+            }
+            return '';
+        };
+
+        const nameFromThis = tryGetName(ctx);
+        if (nameFromThis && nameFromThis.indexOf('TwinNode') !== -1) {
+            return nameFromThis;
+        }
+
+        for (const c of [ctx, ...otherCtxs]) {
+            const n = tryGetName(c);
+            if (n) return n;
+        }
+    } catch (_e) {
+        // ignore resolution errors
+    }
+    return "TwinNodeHelpers";
+}
+
+/**
  * @param {string[]|string} types - Array of types to evaluate for color mapping; if string provided, it will be treated as a single-item array.
  */
 export function setColorAndBgColor(types) {
@@ -171,7 +220,7 @@ export function wrapWidgetValueSetter(widget) {
                 // Consider invalid a string that is empty (after trim) or equals '*'
                 const vt = (typeof v === 'string') ? v.trim() : v;
                 const isInvalidString = (typeof v === 'string') && (vt === '' || vt === '*');
-                log({ class: "TwinNodeHelpers", method: "wrapWidgetValueSetter", severity: "debug", tag: "widget_value_set" }, `[wrapWidgetValueSetter] "${current}" -> "${v}"`);
+                log({ class: resolveLogClass(this), method: "wrapWidgetValueSetter", severity: "debug", tag: "widget_value_set" }, `[wrapWidgetValueSetter] "${current}" -> "${v}"`);
 
                 if (current !== v && !isInvalidString) {
                     try {
@@ -237,7 +286,7 @@ export function showAlert(detail, options = {}) {
  *
  * @param {TwinNodes} node - The node to use for deriving source names or comparing target nodes.
  * @param {string} [name] - Optional name to filter by. If omitted, names are derived from the node's widgets.
- * @return {Array<{ node: LiteGraph.LGraphNode|ComfyNode, widget: IWidget, widgetIndex: number }>} A list of matches, each containing the setter node, the matching widget, and its widgetIndex.
+ * @return {Array<{ node: SetTwinNodes, widget: IWidget, widgetIndex: number }>} A list of matches, each containing the setter node, the matching widget, and its widgetIndex.
  * @throws {Error} If the `node` parameter is not an instance of `LiteGraph.LGraphNode`.
  */
 export function findSetters(node, name = undefined) {
@@ -319,13 +368,13 @@ export function findGetters(node, checkForPreviousName, widgetIndex) {
 
 // Slot management helper functions
 export function ensureInputSlots(node, count) {
-    log({ class: "TwinNodeHelpers", method: "ensureInputSlots", severity: "trace", tag: "function_entered" }, "[ensureInputSlots] count:", count);
+    log({ class: resolveLogClass(this, node), method: "ensureInputSlots", severity: "trace", tag: "function_entered" }, "[ensureInputSlots] count:", count);
     while ((node.inputs?.length || 0) < count) node.addInput("*", "*");
     while ((node.inputs?.length || 0) > count) node.removeInput(node.inputs.length - 1);
 }
 
 export function ensureOutputSlots(node, count) {
-    log({ class: "TwinNodeHelpers", method: "ensureOutputSlots", severity: "trace", tag: "function_entered" }, "[ensureOutputSlots] count:", count);
+    log({ class: resolveLogClass(this, node), method: "ensureOutputSlots", severity: "trace", tag: "function_entered" }, {count, outputsLength: node.outputs?.length});
     while ((node.outputs?.length || 0) < count) node.addOutput("*", "*");
     while ((node.outputs?.length || 0) > count) node.removeOutput(node.outputs.length - 1);
 }
@@ -340,7 +389,7 @@ export function ensureSlotCounts(node) {
 
 // Widget management helper functions
 export function ensureWidgetCount(node, count, widgetType, namePrefix, callback, options) {
-    log({ class: "TwinNodeHelpers", method: "ensureWidgetCount", severity: "trace", tag: "function_entered" }, "[ensureWidgetCount] count:", count, "type:", widgetType);
+    log({ class: resolveLogClass(this, node), method: "ensureWidgetCount", severity: "trace", tag: "function_entered" }, "[ensureWidgetCount] count:", count, "type:", widgetType);
     const current = node.widgets?.length || 0;
     for (let i = current; i < count; i++) {
         const idx = i;
@@ -357,7 +406,7 @@ export function ensureWidgetCount(node, count, widgetType, namePrefix, callback,
 }
 
 export function normalizeWidgetLabels(node, namePrefix) {
-    log({ class: "TwinNodeHelpers", method: "normalizeWidgetLabels", severity: "trace", tag: "function_entered" }, "[normalizeWidgetLabels] namePrefix:", namePrefix);
+    log({ class: resolveLogClass(this, node), method: "normalizeWidgetLabels", severity: "trace", tag: "function_entered" }, "[normalizeWidgetLabels] namePrefix:", namePrefix);
     if (!Array.isArray(node.widgets)) return;
     for (let i = 0; i < node.widgets.length; i++) {
         if (node.widgets[i] && typeof node.widgets[i].name !== "undefined") {
@@ -366,18 +415,20 @@ export function normalizeWidgetLabels(node, namePrefix) {
     }
 }
 
-// Link validation helper function
+// Removes invalid links from the node's output slots
 export function validateNodeLinks(node) {
-    log({ class: "TwinNodeHelpers", method: "validateNodeLinks", severity: "trace", tag: "function_entered" }, "[validateNodeLinks]");
+    log({ class: resolveLogClass(this, node), method: "validateNodeLinks", severity: "trace", tag: "function_entered" }, "[validateNodeLinks]");
     if (!node.outputs) return;
 
     for (let i = 0; i < node.outputs.length; i++) {
         if (node.outputs[i].type !== '*' && node.outputs[i].links) {
             node.outputs[i].links.filter(linkId => {
+                // Splits on commas to support links with multiple allowed types.
+                // Ensures only valid connections remain within the graph.
                 const link = GraphHelpers.getLink(node.graph, linkId);
                 return link && (!link.type.split(",").includes(node.outputs[i].type) && link.type !== '*');
             }).forEach(linkId => {
-                log({ class: "TwinNodeHelpers", method: "validateNodeLinks", severity: "info", tag: "link_removed" }, "[validateNodeLinks] Removing invalid link", linkId);
+                log({ class: resolveLogClass(this, node), method: "validateNodeLinks", severity: "trace", tag: "link_removed" }, "[validateNodeLinks] Removing invalid link", linkId);
                 GraphHelpers.removeLink(node.graph, linkId);
             });
         }
@@ -433,7 +484,7 @@ export function validateWidgetName(node, idx) {
 
 // Slot label helper function
 export function getPreferredSlotLabel(fromNode, originSlotIndex) {
-    log({ class: "TwinNodeHelpers", method: "getPreferredSlotLabel", severity: "trace", tag: "function_entered" }, "[getPreferredSlotLabel]");
+    log({ class: resolveLogClass(this, fromNode), method: "getPreferredSlotLabel", severity: "trace", tag: "function_entered" }, "[getPreferredSlotLabel]");
     const srcSlot = fromNode?.outputs?.[originSlotIndex];
     const lbl = srcSlot?.label || srcSlot?.name || srcSlot?.type;
     return (lbl && String(lbl).trim()) || "";

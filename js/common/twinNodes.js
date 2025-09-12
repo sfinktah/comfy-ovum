@@ -6,6 +6,7 @@
 import {app} from "../../../scripts/app.js";
 import {getPreviousWidgetName, setColorAndBgColor, wrapWidgetValueSetter} from "../01/twinnodeHelpers.js";
 import {log, Logger} from "./logger.js";
+import {uniq} from "../01/graphHelpers.js";
 
 // const LGraphNode = LiteGraph.LGraphNode
 export class TwinNodes extends LGraphNode {
@@ -56,10 +57,13 @@ export class TwinNodes extends LGraphNode {
     updateColors() {
         // Note: we don't actually have a settings panel yet
         if (app.ui.settings.getSettingValue("ovum.nodeAutoColor")) {
-            const typesArr = (this.outputs || [])
-                .filter(i => i?.type && i.type !== '*')
-                .map(i => i.type);
-            if (typesArr.length) setColorAndBgColor.call(this, typesArr);
+            const typesArr = uniq((this.outputs || [])
+                .filter(o => o?.type && o.type !== '*')
+                .map(o => o.type));
+            if (typesArr.length) {
+                Logger.log({ class: 'TwinNodes', method: 'updateColors', severity: 'debug', tag: 'type color outputs' }, 'types filtered: ', typesArr.join(','));
+                setColorAndBgColor.call(this, typesArr);
+            }
             else Logger.log({ class: 'TwinNodes', method: 'updateColors', severity: 'debug', tag: 'no_outputs' }, 'No outputs found for color computation');
         } else {
             Logger.log({ class: 'TwinNodes', method: 'updateColors', severity: 'info', tag: 'settings' }, 'Node auto-coloring disabled by settings');
