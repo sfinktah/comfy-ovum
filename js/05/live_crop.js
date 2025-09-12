@@ -85,15 +85,24 @@ app.registerExtension({
                 container.style.backgroundSize = "contain";
                 container.style.backgroundRepeat = "no-repeat";
                 container.style.backgroundPosition = "center";
+                // Prevent any content from spilling out when the node is smaller than the canvas
+                container.style.overflow = "hidden";
+                container.style.boxSizing = "border-box";
 
                 // Compensate for ComfyUI's left indentation so the canvas appears centered
                 // LEFT compensation is exposed on window.LiveCropLeftComp for console tweaking.
                 const overlay = document.createElement("canvas");
+                // Make the canvas fill and anchor to the container so it doesn't drift vertically
                 overlay.style.position = "absolute";
                 overlay.style.left = "0";
                 overlay.style.top = "0";
-                overlay.width = Math.max(1, 512 - (typeof window !== "undefined" ? (window.LiveCropLeftComp || 0) : 0));
-                overlay.height = 512;
+                overlay.style.right = "0";
+                overlay.style.bottom = "0";
+                overlay.style.width = "100%";
+                overlay.style.height = "100%";
+                // Start tiny; redraw will size the drawing buffer to the live container size
+                overlay.width = 1;
+                overlay.height = 1;
                 container.appendChild(overlay);
 
                 Logger.log({
@@ -120,6 +129,17 @@ app.registerExtension({
                 });
                 this.previewWidget.parentEl = container;
                 this._livecrop = { container, overlay, img: null, imgW: 0, imgH: 0 };
+
+                // Keep the canvas sized to the actual DOM container and redraw when it changes
+                try {
+                    const ro = new ResizeObserver(() => {
+                        if (this._livecrop_redraw) this._livecrop_redraw();
+                    });
+                    ro.observe(container);
+                    this._livecrop.resizeObserver = ro;
+                } catch (e) {
+                    // ResizeObserver might not exist in some environments; safely ignore
+                }
 
                 Logger.log({
                     class: 'LiveCrop',
@@ -190,8 +210,12 @@ app.registerExtension({
 
                     // Reduce the canvas width slightly to compensate for left indentation in the UI
                     const comp = (typeof window !== "undefined" ? (window.LiveCropLeftComp || 0) : 0);
-                    const W = overlayEl.width = Math.max(1, this.size[0] - comp);
-                    const H = overlayEl.height = this.size[1];
+                    // Use the actual rendered container size so the canvas doesn't drift or overflow
+                    const cont = this._livecrop?.container;
+                    const cw = cont ? cont.clientWidth : this.size[0];
+                    const ch = cont ? cont.clientHeight : this.size[1];
+                    const W = overlayEl.width = Math.max(1, Math.floor(cw - comp));
+                    const H = overlayEl.height = Math.max(1, Math.floor(ch));
                     ctx.clearRect(0, 0, W, H);
 
                     Logger.log({
@@ -413,6 +437,45 @@ app.registerExtension({
             widgetsToHook.forEach(hookWidget);
 
             this._livecrop_redraw = redraw;
+
+            // If no image yet, load a default placeholder so the user sees something immediately
+            if (!this._livecrop?.img) {
+                try {
+                    const placeholder = new Image();
+                    placeholder.onload = () => {
+                        if (!this._livecrop) return;
+                        this._livecrop.img = placeholder;
+                        this._livecrop.imgW = placeholder.width;
+                        this._livecrop.imgH = placeholder.height;
+
+                        // Resize node to placeholder size (cap to 512)
+                        const maxSide = 512;
+                        const scale = Math.min(maxSide / placeholder.width, maxSide / placeholder.height, 1);
+                        const w = Math.round(placeholder.width * scale);
+                        const h = Math.round(placeholder.height * scale);
+                        this.setSize([w, h]);
+
+                        // Draw it
+                        this._livecrop_redraw?.();
+                    };
+                    placeholder.onerror = (err) => {
+                        Logger.log({
+                            class: 'LiveCrop',
+                            method: 'onNodeCreated',
+                            severity: 'warn',
+                            tag: 'placeholder_load_error'
+                        }, 'Failed to load placeholder image', { error: String(err) });
+                    };
+                    placeholder.src = "/ovum/web/images/pm5540.png";
+                } catch (e) {
+                    Logger.log({
+                        class: 'LiveCrop',
+                        method: 'onNodeCreated',
+                        severity: 'warn',
+                        tag: 'placeholder_setup_error'
+                    }, 'Error setting up placeholder image', { error: e?.message, stack: e?.stack });
+                }
+            }
 
             Logger.log({ 
                 class: 'LiveCrop', 
