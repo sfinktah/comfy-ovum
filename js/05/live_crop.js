@@ -66,7 +66,7 @@ app.registerExtension({
             // Expose LEFT compensation on window for console tweaking and cross-scope access.
             // You can modify it in the browser console, e.g. window.LiveCropLeftComp = 12;
             if (typeof window !== "undefined") {
-                window.LiveCropLeftComp = typeof window.LiveCropLeftComp === "number" ? window.LiveCropLeftComp : 8;
+                window.LiveCropLeftComp = typeof window.LiveCropLeftComp === "number" ? window.LiveCropLeftComp : 20;
             }
 
             try {
