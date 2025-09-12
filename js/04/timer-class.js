@@ -33,7 +33,7 @@ export class Timer {
     static cudnn_enabled = null;
     // Cache for node names: id -> { name: string, updatedAt: number }
     static nodeNameCache = {};
-    static NAME_CACHE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+    static NAME_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
     static isHidden(key, where) {
         // where: 'display' | 'copy'
