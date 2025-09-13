@@ -1,5 +1,28 @@
 /**
- * Centralized logging utility (static class).
+ * MIT License
+ *
+ * Copyright 2025 Christopher Anderson (https://github.com/sfinktah)
+ * Directors: Stewart & Roald
+ * Composers: A.I & Bots
+ *
+ * Plain Language License Summary:
+ *
+ * This is a plain-language approximation—if you need the real legal details, the
+ * official MIT License can be found at https://opensource.org/license/mit/.  If
+ * anything in this summary conflicts with the MIT text, the official MIT license
+ * takes priority.
+ *
+ * You can use this code for whatever you want. Copy it, fork it, break it, enchant
+ * it, distribute it, or sell it, all without asking.  Just leave the names and
+ * this license where people can see them. There's no warranty, so if it explodes,
+ * curses your ancestors,  or ruins your resurrection, it's on you, not us.  Now go
+ * make something cool (or catastrophic).
+ */
+
+/**
+ * Centralized logging utility (static class) that has iptables-style rule management and stats.
+ *
+ *
  *
  * Overview:
  * - Provides a single entry point for all logging in the app (Logger.log()).
@@ -9,7 +32,7 @@
  * - Persists rules to localStorage and restores them on load.
  * - Exposes a simple console API for rule management and stats (e.g., Logger.addRule, Logger.listRules, Logger.showStats).
  *
- * Meta object format (first argument to Logger.log()):
+ * Meta-object format (first argument to Logger.log()):
  * {
  *   class: 'ClassName',               // optional; used to form "source" with method
  *   method: 'methodName',             // optional; used to form "source" with class
@@ -57,14 +80,14 @@
  *      * }
  *      *
  *      * Priority:
- *      * - If widgetIndex is provided, inserts at that widgetIndex (0 = highest priority).
+ *      * - If index is provided, inserts at that index (0 = highest priority).
  *      * - Otherwise appends to the end (lowest priority).
  *      *
  *      * Persistence:
  *      * - The updated rule list is persisted to localStorage.
  *      *
  *      * @param {Object} rule The rule object; invalid rules are ignored.
- *      * @param {number|null} [index=null] Optional insertion widgetIndex.
+ *      * @param {number|null} [index=null] Optional insertion index.
  *      * @returns {Array<Object>|undefined} The updated rule list as returned by listRules(), or undefined if rule was invalid.
  *
  * Stats:
@@ -142,7 +165,7 @@ function stripSuperfluousArgs(meta, args) {
         // Remove if the string appears to be just redundant source information
         if (containsSource || (containsClass && containsMethod)) {
             // Additional check: if the string is mostly just the redundant info, remove it
-            const cleanArg = arg.replace(/\[.*?\]/g, '').trim();
+            const cleanArg = arg.replace(/\[.*?]/g, '').trim();
             if (!cleanArg || cleanArg === method || cleanArg === cls) {
                 return false;
             }
@@ -194,6 +217,7 @@ function tryMakeRegExp(pattern) {
     }
 }
 
+// noinspection JSUnusedGlobalSymbols
 /**
  * Logger (static class)
  *
@@ -267,6 +291,7 @@ export class Logger {
 
         const match = this._matchRules({ severity, tags, source });
         const allowed = match?.action ? match.action === 'allow' : true;
+        const index = match?.index;
 
         // Increment per-rule counters when a rule matches (iptables-style counters)
         if (match && typeof match.index === 'number') {
@@ -282,7 +307,7 @@ export class Logger {
         }
 
         // Update stats
-        this._updateStats({ severity, tags, source }, allowed, match?.index);
+        this._updateStats({ severity, tags, source }, allowed, index);
 
         if (!allowed) return;
 
@@ -418,7 +443,7 @@ export class Logger {
      */
     static appendRule(actionOrRule, maybeRule) {
         let action = null;
-        let rule = null;
+        let rule;
 
         if (typeof actionOrRule === 'string') {
             const a = actionOrRule.toLowerCase();
@@ -453,7 +478,7 @@ export class Logger {
      */
     static insertRule(position, actionOrRule, maybeRule) {
         let action = null;
-        let rule = null;
+        let rule;
 
         if (typeof actionOrRule === 'string') {
             const a = actionOrRule.toLowerCase();
@@ -521,7 +546,7 @@ export class Logger {
         if (index < 0 || index >= this._rules.length) return false;
 
         let action = null;
-        let rule = null;
+        let rule;
 
         if (typeof actionOrRule === 'string') {
             const a = actionOrRule.toLowerCase();
@@ -638,6 +663,7 @@ export class Logger {
 
     // ---- Internal helpers ----
 
+    // noinspection JSUnusedLocalSymbols
     /**
      * Format rule criteria for display in iptables-style listing.
      * @param {Object} rule Rule object
@@ -720,9 +746,9 @@ export class Logger {
 
         const src1 = normalize(rule1.source);
         const src2 = normalize(rule2.source);
-        if (!compareArrays(src1, src2)) return false;
+        return compareArrays(src1, src2);
 
-        return true;
+
     }
 
     static _updateStats({ severity, tags, source }, allowed, matchedRuleIndex) {
@@ -754,7 +780,7 @@ export class Logger {
      * Determine the first matching rule for the given attributes.
      *
      * Matching rules:
-     * - First match wins; the list is treated as prioritized from widgetIndex 0 upwards.
+     * - First match wins; the list is treated as prioritized from index 0 upwards.
      * - For each criterion:
      *   - If rule.severity is present, severity must match either an exact string or any provided RegExp.
      *   - If rule.tag is present, at least one of the log's tags must match either an exact string or any provided RegExp.
@@ -763,11 +789,11 @@ export class Logger {
      * - Omitted criteria are treated as wildcards.
      *
      * Return value:
-     * - { widgetIndex: number, action: 'allow'|'deny' } for a match
+     * - { index: number, action: 'allow'|'deny' } for a match
      * - null when no rule matches (which defaults to 'allow')
      *
      * @param {{ severity: string, tags: string[], source: string }} attrs
-     * @returns {{ widgetIndex:number, action:'allow'|'deny' } | null}
+     * @returns {{ index:number, action:'allow'|'deny' } | null}
      * @private
      */
     static _matchRules({ severity, tags, source }) {
@@ -950,5 +976,3 @@ export const log = Logger.log.bind(Logger);
 
 // Initialize on module load
 Logger.init();
-
-export default Logger;
