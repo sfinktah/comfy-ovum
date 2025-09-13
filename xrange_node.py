@@ -31,7 +31,7 @@ class XRangeNode(NewPointer):
     - Optionally connect a trigger to both minutes.reset and hours.reset to restart both counters from zero.
     """
     FUNCTION = "xrange_node"
-    RETURN_TYPES = ("INT", "LIST", "BOOL")
+    RETURN_TYPES = ("INT", "LIST", "BOOLEAN")
     RETURN_NAMES = ("current_value", "range_list", "overflow")
     CATEGORY = "Data"
     custom_name = "Pyobjects/XRange"
