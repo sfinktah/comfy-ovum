@@ -923,17 +923,24 @@ export class Logger {
         const raw = safeLocalStorageGet(RULES_STORAGE_KEY);
         if (!raw) {
             this._rules = [];
-            return;
-        }
-        try {
-            const parsed = JSON.parse(raw);
-            if (Array.isArray(parsed)) {
-                this._rules = this._sanitizeRulesArray(parsed);
-            } else {
+        } else {
+            try {
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed)) {
+                    this._rules = this._sanitizeRulesArray(parsed);
+                } else {
+                    this._rules = [];
+                }
+            } catch (_e) {
                 this._rules = [];
             }
-        } catch (_e) {
-            this._rules = [];
+        }
+
+        // Ensure default rules are added if no rules exist
+        if (this._rules.length === 0) {
+            this.appendRule({ action: 'allow', severity: ['warn', 'error'], comment: 'Default rule: allow warnings and errors' });
+            this.appendRule({ action: 'deny', comment: 'Default rule: deny all other logs' });
+            this._saveRules();
         }
     }
 }
