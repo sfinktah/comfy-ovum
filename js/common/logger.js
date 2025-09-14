@@ -36,8 +36,9 @@
  * {
  *   class: 'ClassName',               // optional; used to form "source" with method
  *   method: 'methodName',             // optional; used to form "source" with class
+ *   nodeName: 'NodeName',             // optional; node identifier; stored as null if undefined
  *   severity: 'trace'|'debug'|'info'|'warn'|'error', // optional; defaults to 'debug'
- *   tag: 'tag' | ['tagA','tagB']      // optional; array or string; can be used for filtering and stats
+ *   tag: 'tag' | ['tagA','tagB']      // optional; array or space separated string; can be used for filtering and stats
  * }
  *
  * Severity mapping:
@@ -123,14 +124,24 @@ const RULES_STORAGE_KEY = 'ovum.logger.rules.v1';
 
 function normalizeTag(tag) {
     if (Array.isArray(tag)) return tag.filter(Boolean).map(String);
-    if (typeof tag === 'string' && tag) return [tag];
+    if (typeof tag === 'string' && tag.trim().length) {
+        return tag.split(/\s+/)
+            .map(t => t.trim())
+            .filter(Boolean);
+    }
     return [];
 }
 
 function buildSource(meta) {
     const cls = meta?.class ? String(meta.class) : '';
     const method = meta?.method ? String(meta.method) : '';
-    return (cls || method) ? `${cls}${cls && method ? '::' : ''}${method}` : '';
+    const nodeName = meta?.nodeName ? String(meta.nodeName) : null;
+
+    let source = (cls || method) ? `${cls}${cls && method ? '::' : ''}${method}` : '';
+    if (nodeName) {
+        source = source ? `${nodeName}:${source}` : nodeName;
+    }
+    return source;
 }
 
 function buildPrefix(meta) {
@@ -149,24 +160,27 @@ function stripSuperfluousArgs(meta, args) {
 
     const cls = meta?.class ? String(meta.class) : '';
     const method = meta?.method ? String(meta.method) : '';
+    const nodeName = meta?.nodeName ? String(meta.nodeName) : '';
 
-    // If we don't have class or method info, return args unchanged
-    if (!cls && !method) return args;
+    // If we don't have class, method, or nodeName info, return args unchanged
+    if (!cls && !method && !nodeName) return args;
 
     return args.filter(arg => {
         // Only filter string arguments
         if (typeof arg !== 'string') return true;
 
-        // Check if the string contains redundant class/method information
+        // Check if the string contains redundant class/method/nodeName information
         let containsClass = cls && arg.includes(`[${cls}]`);
         let containsMethod = method && arg.includes(method);
-        let containsSource = cls && method && arg.includes(`[${cls}]`) && arg.includes(method);
+        let containsNodeName = nodeName && arg.includes(nodeName);
+        let containsSource = (cls && method && arg.includes(`[${cls}]`) && arg.includes(method)) || 
+                           (nodeName && (containsClass || containsMethod));
 
         // Remove if the string appears to be just redundant source information
-        if (containsSource || (containsClass && containsMethod)) {
+        if (containsSource || (containsClass && containsMethod) || containsNodeName) {
             // Additional check: if the string is mostly just the redundant info, remove it
             const cleanArg = arg.replace(/\[.*?]/g, '').trim();
-            if (!cleanArg || cleanArg === method || cleanArg === cls) {
+            if (!cleanArg || cleanArg === method || cleanArg === cls || cleanArg === nodeName) {
                 return false;
             }
         }
@@ -270,10 +284,11 @@ export class Logger {
      * - Updates statistics counters regardless of suppression status.
      *
      * Source and tags:
-     * - Source is derived from meta.class and meta.method as "Class::method".
+     * - Source is derived from meta.nodeName, meta.class and meta.method as "NodeName:Class::method".
      * - Tags may be a string or an array; internally normalized to an array; if absent, stats use "(no-tag)" placeholder.
+     * - nodeName is stored as null if undefined.
      *
-     * @param {{class?: string, method?: string, severity?: 'trace'|'debug'|'info'|'warn'|'error', tag?: string|string[]}} meta
+     * @param {{class?: string, method?: string, nodeName?: string, severity?: 'trace'|'debug'|'info'|'warn'|'error', tag?: string|string[]}} meta
      *        Structured metadata describing the log source and attributes.
      * @param  {...any} args
      *        Any additional arguments; forwarded identically to the underlying console function.
@@ -287,9 +302,10 @@ export class Logger {
             : 'debug';
         const consoleMethod = LEVEL_TO_CONSOLE[severity] || 'log';
         const tags = normalizeTag(meta?.tag);
-        const source = buildSource(meta);
+        const nodeName = meta?.nodeName !== undefined ? (meta.nodeName ? String(meta.nodeName) : null) : null;
+        const source = buildSource({ ...meta, nodeName });
 
-        const match = this._matchRules({ severity, tags, source });
+        const match = this._matchRules({ severity, tags, source, nodeName });
         const allowed = match?.action ? match.action === 'allow' : true;
         const index = match?.index;
 
@@ -689,6 +705,11 @@ export class Logger {
             parts.push(`source ${sources.join(',')}`);
         }
 
+        if (rule.nodeName) {
+            const nodeNames = Array.isArray(rule.nodeName) ? rule.nodeName : [rule.nodeName];
+            parts.push(`nodeName ${nodeNames.join(',')}`);
+        }
+
         if (parts.length === 0) {
             parts.push('all');
         }
@@ -746,12 +767,14 @@ export class Logger {
 
         const src1 = normalize(rule1.source);
         const src2 = normalize(rule2.source);
-        return compareArrays(src1, src2);
+        if (!compareArrays(src1, src2)) return false;
 
-
+        const node1 = normalize(rule1.nodeName);
+        const node2 = normalize(rule2.nodeName);
+        return compareArrays(node1, node2);
     }
 
-    static _updateStats({ severity, tags, source }, allowed, matchedRuleIndex) {
+    static _updateStats({ severity, tags, source, nodeName }, allowed, matchedRuleIndex) {
         this._stats.total += 1;
         if (allowed) this._stats.emitted += 1; else this._stats.suppressed += 1;
 
@@ -785,6 +808,7 @@ export class Logger {
      *   - If rule.severity is present, severity must match either an exact string or any provided RegExp.
      *   - If rule.tag is present, at least one of the log's tags must match either an exact string or any provided RegExp.
      *   - If rule.source is present, source must match either an exact string or any provided RegExp.
+     *   - If rule.nodeName is present, nodeName must match either an exact string or any provided RegExp.
      *   - String criteria are treated as regular expressions when possible; if compilation fails, they are matched as exact strings.
      * - Omitted criteria are treated as wildcards.
      *
@@ -792,11 +816,11 @@ export class Logger {
      * - { index: number, action: 'allow'|'deny' } for a match
      * - null when no rule matches (which defaults to 'allow')
      *
-     * @param {{ severity: string, tags: string[], source: string }} attrs
+     * @param {{ severity: string, tags: string[], source: string, nodeName: string|null }} attrs
      * @returns {{ index:number, action:'allow'|'deny' } | null}
      * @private
      */
-    static _matchRules({ severity, tags, source }) {
+    static _matchRules({ severity, tags, source, nodeName }) {
         // First match wins. Empty rules array => allow.
         if (!Array.isArray(this._rules) || this._rules.length === 0) return null;
 
@@ -818,7 +842,14 @@ export class Logger {
                 (rule._srcSet?.has(source) === true) ||
                 ((rule._srcRegex && rule._srcRegex.length > 0) ? rule._srcRegex.some(re => re.test(source)) : false);
 
-            if (sevOk && tagOk && srcOk) {
+            const nodeOk =
+                !rule.nodeName ||
+                (nodeName !== null && (
+                    (rule._nodeSet?.has(nodeName) === true) ||
+                    ((rule._nodeRegex && rule._nodeRegex.length > 0) ? rule._nodeRegex.some(re => re.test(nodeName)) : false)
+                ));
+
+            if (sevOk && tagOk && srcOk && nodeOk) {
                 return { index: i, action: rule.action };
             }
         }
@@ -853,8 +884,8 @@ export class Logger {
      * Sanitize a single rule object.
      *
      * - Validates 'action' to be either 'allow' or 'deny'.
-     * - Normalizes severity, tag, and source to arrays of strings (when provided).
-     * - Builds internal exact-match Sets (_sevSet/_tagSet/_srcSet) and RegExp arrays (_sevRegex/_tagRegex/_srcRegex) for efficient matching.
+     * - Normalizes severity, tag, source, and nodeName to arrays of strings (when provided).
+     * - Builds internal exact-match Sets (_sevSet/_tagSet/_srcSet/_nodeSet) and RegExp arrays (_sevRegex/_tagRegex/_srcRegex/_nodeRegex) for efficient matching.
      * - Preserves original string arrays for persistence and display.
      * - Preserves a human-readable 'comment' field if provided.
      *
@@ -863,9 +894,9 @@ export class Logger {
      * - Otherwise the string is compiled as a bare RegExp (new RegExp(str)). If that fails, falls back to exact string match.
      *
      * @param {any} rule A candidate rule object.
-     * @returns {{ action:'allow'|'deny', severity?:string[], tag?:string[], source?:string[], comment?:string,
-     *             _sevSet?:Set<string>, _tagSet?:Set<string>, _srcSet?:Set<string>,
-     *             _sevRegex?:RegExp[], _tagRegex?:RegExp[], _srcRegex?:RegExp[] } | null}
+     * @returns {{ action:'allow'|'deny', severity?:string[], tag?:string[], source?:string[], nodeName?:string[], comment?:string,
+     *             _sevSet?:Set<string>, _tagSet?:Set<string>, _srcSet?:Set<string>, _nodeSet?:Set<string>,
+     *             _sevRegex?:RegExp[], _tagRegex?:RegExp[], _srcRegex?:RegExp[], _nodeRegex?:RegExp[] } | null}
      * @private
      */
     static _sanitizeRule(rule) {
@@ -924,6 +955,22 @@ export class Logger {
                 if (regex.length) norm._srcRegex = regex;
             }
         }
+        if (rule.nodeName != null) {
+            const list = Array.isArray(rule.nodeName) ? rule.nodeName : [rule.nodeName];
+            const cleaned = list.map(String).filter(Boolean);
+            if (cleaned.length) {
+                norm.nodeName = cleaned; // preserve original criteria for persistence
+                const exact = [];
+                const regex = [];
+                for (const s of cleaned) {
+                    const re = tryMakeRegExp(s);
+                    if (re) regex.push(re);
+                    else exact.push(s);
+                }
+                if (exact.length) norm._nodeSet = new Set(exact);
+                if (regex.length) norm._nodeRegex = regex;
+            }
+        }
         // Initialize runtime counters (not persisted)
         norm._hits = 0;
         norm._allowHits = 0;
@@ -939,6 +986,7 @@ export class Logger {
                 severity: r.severity,
                 tag: r.tag,
                 source: r.source,
+                nodeName: r.nodeName,
                 comment: r.comment,
             }));
             safeLocalStorageSet(RULES_STORAGE_KEY, JSON.stringify(serializable));
