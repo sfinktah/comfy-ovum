@@ -193,6 +193,16 @@ class SetTwinNodes extends TwinNodes {
      */
     onBeforeConnectInput(target_slot, requested_slot) {
         log({ class: "SetTwinNodes", method: "onBeforeConnectInput", severity: "trace", tag: "function_entered" }, "onBeforeConnectInput", { target_slot, requested_slot });
+        // Prefer explicitly requested slot if valid
+        if (typeof requested_slot === "number" && Number.isFinite(requested_slot) && requested_slot >= 0) {
+            return requested_slot | 0;
+        }
+        // Fallback to current target slot if valid
+        if (typeof target_slot === "number" && Number.isFinite(target_slot) && target_slot >= 0) {
+            return target_slot | 0;
+        }
+        // Default to 0 to avoid cancelling the connection
+        return 0;
     }
 
     onWidgetChanged(name, value, oldValue, widget) {
@@ -207,6 +217,41 @@ class SetTwinNodes extends TwinNodes {
             widgetIndex,
             nodeId: this.id
         });
+    }
+
+    onRemoved() {
+        log({ class: "SetTwinNodes", method: "onRemoved", severity: "trace", tag: "function_entered" }, "onRemoved");
+        for (let i = 0; i < this.widgets?.length || 0; i++) {
+            this.graph.sendEventToAllNodes("setnodeNameChange", {
+                oldValue: this.widgets[0]?.value,
+                value: null,
+                type: null,
+                widgetIndex: i,
+            });
+        }
+    }
+
+    setType(type, widgetIndex) {
+        // Robustly find the first callsite with a function name (Class.function or function) from the stack
+        const widget = this.widgets?.[widgetIndex];
+        const widgetName = widget?.name;
+        const widgetValue = widget?.value;
+        log({
+            class: "SetTwinNodes",
+            method: "setType",
+            severity: "trace",
+            tag: "function_entered"
+        }, {
+            type: type,
+            ourName: this.widgets?.[widgetIndex]?.value,
+            widgetIndex: widgetIndex,
+        });
+
+        ensureSlotCounts(this);
+        if (this.inputs?.[widgetIndex]) {
+            this.inputs[widgetIndex].type = type;
+            this.onWidgetChanged(widgetName, widgetValue, widgetValue, widget);
+        }
     }
 
     /**
@@ -287,8 +332,8 @@ class SetTwinNodes extends TwinNodes {
             }
         }
 
-        // this.updateTitle();
-        // this.updateColors();
+        this.updateTitle();
+        this.updateColors();
 
     }
 

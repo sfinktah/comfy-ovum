@@ -10,6 +10,7 @@ import { chainCallback, stripTrailingId } from '../01/utility.js';
 import { ensureTooltipLib, attachTooltip } from '../01/tooltipHelpers.js';
 import { onUploadGraphData, onCopyGraphData, onCopyButton } from "../01/copyButton.js";
 import { bestConfigTracker } from "../01/best-config-tracker.js";
+import { Logger } from "../common/logger.js";
 
 const LOCALSTORAGE_KEY = 'ovum.timer.history';
 
@@ -60,7 +61,7 @@ export class Timer {
             localStorage.setItem(LOCALSTORAGE_KEY + '.runs_since_clear', JSON.stringify(Timer.runs_since_clear));
             localStorage.setItem(LOCALSTORAGE_KEY + '.node_name_cache', JSON.stringify(Timer.nodeNameCache));
         } catch (e) {
-            console.warn('[Timer] Failed to save timer history:', e);
+            Logger.log({class:'ovum.timer',method:'saveToLocalStorage',severity:'warn',tag:'error', nodeName:'ovum.timer'}, '[Timer] Failed to save timer history:', e);
         }
     }
 
@@ -69,7 +70,7 @@ export class Timer {
             // Local-only persistence
             Timer.saveToLocalStorage();
         } catch (e) {
-            console.warn('[Timer] Failed to save timer data to storage:', e);
+            Logger.log({class:'ovum.timer',method:'saveToStorage',severity:'warn',tag:'error', nodeName:'ovum.timer'}, '[Timer] Failed to save timer data to storage:', e);
         }
     }
 
@@ -146,11 +147,11 @@ export class Timer {
                         Timer.pruneOldCachedNames();
                     }
                 } catch (err) {
-                    console.warn('[Timer] Failed to parse node name cache:', err);
+                    Logger.log({class:'ovum.timer',method:'loadFromLocalStorage',severity:'warn',tag:'error', nodeName:'ovum.timer'}, '[Timer] Failed to parse node name cache:', err);
                 }
             }
         } catch (e) {
-            console.warn('[Timer] Failed to load timer history:', e);
+            Logger.log({class:'ovum.timer',method:'loadFromLocalStorage',severity:'warn',tag:'error', nodeName:'ovum.timer'}, '[Timer] Failed to load timer history:', e);
         }
     }
 
@@ -160,7 +161,7 @@ export class Timer {
             Timer.loadFromLocalStorage();
             if (Timer.onChange) Timer.onChange();
         } catch (e) {
-            console.warn('[Timer] Failed to load timer data from storage:', e);
+            Logger.log({class:'ovum.timer',method:'loadFromStorage',severity:'warn',tag:'error', nodeName:'ovum.timer'}, '[Timer] Failed to load timer data from storage:', e);
         }
     }
 
@@ -174,9 +175,9 @@ export class Timer {
             localStorage.removeItem(LOCALSTORAGE_KEY + '.runs_since_clear');
             localStorage.removeItem(LOCALSTORAGE_KEY + '.node_name_cache');
 
-            if (Timer.debug) console.log('[Timer] Timer data cleared from storage');
+            if (Timer.debug) { Logger.log({class:'ovum.timer',method:'clearStorage',severity:'debug',tag:'flow', nodeName:'ovum.timer'}, '[Timer] Timer data cleared from storage'); }
         } catch (e) {
-            console.warn('[Timer] Failed to clear timer data from storage:', e);
+            Logger.log({class:'ovum.timer',method:'clearStorage',severity:'warn',tag:'error', nodeName:'ovum.timer'}, '[Timer] Failed to clear timer data from storage:', e);
         }
     }
 
@@ -738,7 +739,6 @@ export class Timer {
             }
             return averages;
         })(lastNRunIds);
-        // console.log("[Timer] averagesByK: ", averagesByK);
 
         // Sort by aggregated totals (desc), defaulting to 0 when missing
         Timer.all_times.sort((a, b) => (averagesByK[b.id] ?? 0) - (averagesByK[a.id] ?? 0));

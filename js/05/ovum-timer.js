@@ -26,7 +26,6 @@ function forwardWheelToCanvas(widgetEl, canvasEl) {
     widgetEl.addEventListener('wheel', (e) => {
         // Only intercept and forward when Ctrl is held
         if (!e.ctrlKey) return;
-        console.log('forwardWheelToCanvas', e);
 
         // Stop the widget from consuming the scroll and forward it
         e.preventDefault();
@@ -168,7 +167,6 @@ app.registerExtension({
                 // this.widgets_up = true;
 
                 // ComfyNode
-                // console.log('ovum.timer.onNodeCreated', this);
 
                 this.addWidget("button", "clear", "", Timer.clear);
 
