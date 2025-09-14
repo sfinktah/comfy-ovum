@@ -13,6 +13,7 @@ import { graphGetNodeById } from "../01/graphHelpers.js";
 import { chainCallback } from "../01/utility.js";
 import {getDynamicInputs, ensureDynamicInputsImpl, getInputArgNumber} from "../01/dynamicInputHelpers.js";
 import {GraphHelpers} from "../common/graphHelpersForTwinNodes.js";
+import { Logger } from "../common/logger.js";
 
 app.registerExtension({
     name: "ovum.format",
@@ -41,12 +42,11 @@ app.registerExtension({
     async beforeRegisterNodeDef(nodeType, nodeData, appInstance) {
         // Target the Python class that supports many dynamic inputs
         if (nodeType?.comfyClass !== "PythonStringFormat") {
-            // console.log("[ovum.format] early return: unsupported comfyClass", nodeType?.comfyClass);
             return;
         }
-        if (nodeData.name !== "PythonStringFormat") { console.log("[ovum.format] early return: unsupported node name", nodeData.name); return; }
+        if (nodeData.name !== "PythonStringFormat") { Logger.log({class:'ovum.format',method:'beforeRegisterNodeDef',severity:'debug',tag:'early_return', nodeName:'ovum.format'}, "early return: unsupported node name", nodeData.name); return; }
 
-        console.log('[ovum.format] registered');
+        Logger.log({class:'ovum.format',method:'beforeRegisterNodeDef',severity:'info',tag:'registered', nodeName:'ovum.format'}, 'registered');
         /** @type {ComfyApp} */
         // this.nodeCreated()
         chainCallback(nodeType.prototype, "onNodeCreated", function () {
@@ -78,12 +78,12 @@ app.registerExtension({
                         node.addInput(`arg${nextNum}`, "*", { label: `arg${nextNum}` });
                     }
                 } catch (err) {
-                    console.warn("[formatter] removeInput guard error:", err);
+                    Logger.log({class:'ovum.format',method:'removeInput',severity:'warn',tag:'error', nodeName:'ovum.format'}, 'removeInput guard error:', err);
                 }
             };
 
             const ensureDynamicInputs = (isConnecting = true) => {
-                console.log("[ovum.format] ensureDynamicInputs isConnecting:", isConnecting);
+                Logger.log({class:'ovum.format',method:'ensureDynamicInputs',severity:'debug',tag:'flow', nodeName:'ovum.format'}, 'ensureDynamicInputs isConnecting:', isConnecting);
                 ensureDynamicInputsImpl(node, isConnecting);
             };
 
@@ -95,7 +95,7 @@ app.registerExtension({
                 try {
                     ensureDynamicInputs(false);
                 } catch (err) {
-                    console.warn("[formatter] onConfigure error:", err);
+                    Logger.log({class:'ovum.format',method:'onConfigure',severity:'warn',tag:'error', nodeName:'ovum.format'}, 'onConfigure error:', err);
                 }
             });
 
@@ -112,41 +112,41 @@ app.registerExtension({
                  * @param {INodeInputSlot|INodeOutputSlot|SubgraphIO} inputOrOutput
                  */
                 function (type, index, isConnected, link_info, inputOrOutput) {
-                    console.log("[ovum.format] onConnectionsChange", { type, index, isConnected, link_info, inputOrOutput });
+                    Logger.log({class:'ovum.format',method:'onConnectionsChange',severity:'debug',tag:'event', nodeName:'ovum.format'}, 'onConnectionsChange', { type, index, isConnected, link_info, inputOrOutput });
                     try {
                         const graph = node.graph;
-                        if (type !== LiteGraph.INPUT) { console.log("[ovum.format] early return: connection not for INPUT slot, type:", type); return; }
+                        if (type !== LiteGraph.INPUT) { Logger.log({class:'ovum.format',method:'onConnectionsChange',severity:'debug',tag:'early_return', nodeName:'ovum.format'}, 'early return: connection not for INPUT slot, type:', type); return; }
                         /** @type {INodeInputSlot} */
                         const input = this.inputs?.[index];
-                        if (!input) { console.log("[ovum.format] early return: no input found at widgetIndex", index); return; }
+                        if (!input) { Logger.log({class:'ovum.format',method:'onConnectionsChange',severity:'debug',tag:'early_return', nodeName:'ovum.format'}, 'early return: no input found at widgetIndex', index); return; }
 
                         const stackTrace = new Error().stack;
 
                         // HOTFIX: subgraph
                         if (stackTrace.includes('convertToSubgraph') || stackTrace.includes('Subgraph.configure')) {
-                            console.log("[ovum.format] early return: subgraph conversion/configure in progress");
+                            Logger.log({class:'ovum.format',method:'onConnectionsChange',severity:'debug',tag:'early_return', nodeName:'ovum.format'}, 'early return: subgraph conversion/configure in progress');
                             return;
                         }
 
                         if (stackTrace.includes('loadGraphData')) {
                             // might need to do stuff
-                            console.log("[ovum.format] early return: loadGraphData in progress");
+                            Logger.log({class:'ovum.format',method:'onConnectionsChange',severity:'debug',tag:'early_return', nodeName:'ovum.format'}, 'early return: loadGraphData in progress');
                             return;
                         }
 
                         if(stackTrace.includes('pasteFromClipboard')) {
                             // might need to do stuff
-                            console.log("[ovum.format] early return: pasteFromClipboard in progress");
+                            Logger.log({class:'ovum.format',method:'onConnectionsChange',severity:'debug',tag:'early_return', nodeName:'ovum.format'}, 'early return: pasteFromClipboard in progress');
                             return;
                         }
 
                         if(!link_info)
-                            { console.log("[ovum.format] early return: no link_info provided"); return; }
+                            { Logger.log({class:'ovum.format',method:'onConnectionsChange',severity:'debug',tag:'early_return', nodeName:'ovum.format'}, 'early return: no link_info provided'); return; }
 
                         if (!/^arg\d+$/.test(input.name)) {
                             // Only react to argN inputs, but call ensureDynamicInputs just in case
                             ensureDynamicInputs(isConnected);
-                            console.log("[ovum.format] early return: input name is not argN:", input.name);
+                            Logger.log({class:'ovum.format',method:'onConnectionsChange',severity:'debug',tag:'early_return', nodeName:'ovum.format'}, 'early return: input name is not argN:', input.name);
                             return;
                         }
 
@@ -157,8 +157,7 @@ app.registerExtension({
                                 // A change in connection
                             }
 
-                            // console.log("[formatter] onConnectionsChange isConnected", link_info, "input:", input, "link_info:", link_info, "inputOrOutput:", inputOrOutput, "type:", type, "widgetIndex:", widgetIndex, "isConnected:", isConnected, "stackTrace:", stackTrace);
-                            console.log(`[ovum.format] link_info.origin_id = ${link_info.origin_id}`);
+                            Logger.log({class:'ovum.format',method:'onConnectionsChange',severity:'debug',tag:'flow', nodeName:'ovum.format'}, `link_info.origin_id = ${link_info.origin_id}`);
                             const fromNode = GraphHelpers.getNodeById(graph, link_info.origin_id);
                             const type = fromNode?.outputs?.[link_info.origin_slot]?.type ?? "*";
                             input.type = type || "*";
@@ -176,7 +175,7 @@ app.registerExtension({
 
                         ensureDynamicInputs(isConnected);
                     } catch (err) {
-                    console.warn("[formatter] onConnectionsChange error:", err);
+                    Logger.log({class:'ovum.format',method:'onConnectionsChange',severity:'warn',tag:'error', nodeName:'ovum.format'}, 'onConnectionsChange error:', err);
                 }
             });
         });
