@@ -275,7 +275,7 @@ These nodes are complementary to the excellent collection at https://github.com/
   - Output:
     - STRING: Joined string.
 
-- XRange
+- XRange (alpha, possible issues with stop being inclusive)
   - What it does: Python-like xrange/range iterator without generators. Outputs current value, full list, and a boolean flag for exhausted/looped.
   - Inputs:
     - stop (INT): End (exclusive). Required.
@@ -287,7 +287,7 @@ These nodes are complementary to the excellent collection at https://github.com/
   - Outputs:
     - INT: current value at the cursor.
     - LIST: the full expanded list of values (range(start, stop, step)).
-    - BOOL: exhausted_or_looped — true when the range is exhausted (with repeat disabled) or when it loops (with repeat enabled).
+    - BOOLEAN: exhausted_or_looped — true when the range is exhausted (with repeat disabled) or when it loops (with repeat enabled).
   - Notes:
     - Negative steps are supported exactly like Python range. If the computed range is empty, the list is empty and the flag is true; current value returns 0.
 
