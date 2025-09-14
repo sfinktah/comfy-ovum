@@ -42,7 +42,6 @@ app.registerExtension({
     async beforeRegisterNodeDef(nodeType, nodeData, app_) {
         // 2) Still honor UI side-effects for SetLocalStorage on node onExecuted
         if (nodeType?.comfyClass !== "SetLocalStorage") {
-            // console.log("[ovum.format] early return: unsupported comfyClass", nodeType?.comfyClass);
             return;
         }
         Logger.log({
