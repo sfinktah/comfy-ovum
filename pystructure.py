@@ -348,4 +348,44 @@ class UniqueListNode(NewPointer):
         }
 
 
-CLAZZES = [ListSliceNode, ListSpliceNode, RepeatItemNode, ReverseListNode, ConcatListsNode, IndexOfNode, JoinListNode, UniqueListNode, XRangeNode]
+class StringListEditorNode(NewPointer):
+    DESCRIPTION = """
+    Create and edit a list of strings with UI support for adding items and drag & drop of files.
+    UI behavior (frontend):
+    - A multiline text area representing one string per line.
+    - An 'Add' button appends a new empty line.
+    - A drop zone: dropping files appends their full path(s) as new lines.
+    Backend behavior:
+    - Splits the multiline text into a list of strings (one per non-empty line, trimming whitespace).
+    - Returns a new list (non-mutating).
+    """
+    FUNCTION = "string_list_editor"
+    RETURN_TYPES = ("LIST",)
+    CATEGORY = "Data"
+    custom_name = "Pyobjects/String List Editor"
+
+    @staticmethod
+    def string_list_editor(items_text=""):
+        # Ensure items_text is a string
+        try:
+            s = "" if items_text is None else str(items_text)
+        except Exception:
+            s = ""
+        # Split into lines, trim, drop empties
+        lines = []
+        for line in s.splitlines():
+            t = line.strip()
+            if t != "":
+                lines.append(t)
+        return (lines,)
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "items_text": ("STRING", {"multiline": True, "default": "", "tooltip": "One string per line. Use the 'Add' button to append, or drop files to add their path(s)."}),
+            }
+        }
+
+
+CLAZZES = [ListSliceNode, ListSpliceNode, RepeatItemNode, ReverseListNode, ConcatListsNode, IndexOfNode, JoinListNode, UniqueListNode, StringListEditorNode, XRangeNode]
