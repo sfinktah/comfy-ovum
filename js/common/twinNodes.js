@@ -145,7 +145,10 @@ export class TwinNodes extends LGraphNode {
     setInput(index, overrides = {}) {
         if (this.inputs?.[index]) {
             Object.keys(overrides).forEach(key => {
-                if (key !== 'label' && key in this.inputs[index]) {
+                if (key === 'type') {
+                    this.setType(overrides.type, index);
+                }
+                else if (key !== 'label' && key in this.inputs[index]) {
                     this.inputs[index][key] = overrides[key];
                 }
             });

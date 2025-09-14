@@ -75,7 +75,6 @@ app.registerExtension({
 
                 TwinNodes.prototype.onPropertyChanged = function(name, value, previousValue) {
                     if (name === "numberOfWidgets") {
-                        console.log("initialWidgetCount: onPropertyChanged: numberOfWidgets", value, previousValue);
                         this.numberOfWidgets = value;
                         this.numberOfOutputSlots = value;
                         if (!Array.isArray(this.properties.previousNames) || this.properties.previousNames.length < this.numberOfWidgets) {
@@ -88,14 +87,7 @@ app.registerExtension({
                     }
                 }
 
-                // console.log("initialWidgetCount", this.widgets?.length || 0);
-                // console.log("initialWidgetCount: numberOfWidgets", this.numberOfWidgets);
-                // console.log("initialWidgetCount: numberOfOutputSlots", this.numberOfOutputSlots);
-                // console.log("initialWidgetCount: previousNames", this.properties.previousNames);
-                // console.log("initialWidgetCount: properties", this.properties);
-
                 this.ensureGetterWidgetCount(this.numberOfWidgets);
-                console.log("afterEnsureGetterWidgetCount", this.widgets?.length || 0);
 
                 // Ensure the number of outputs matches count
                 ensureSlotCounts(this);
@@ -187,6 +179,25 @@ app.registerExtension({
                 // Clear restoration flag shortly after configuration to allow normal behavior thereafter
                 setTimeout(() => { this.__restoring = false; }, 1000);
             }
+
+            onRemoved() {
+                log({
+                    class: "GetTwinNodes",
+                    method: "onRemoved",
+                    severity: "trace",
+                    tag: "function_entered"
+                }, "onRemoved");
+                for (let i = 0; i < this.widgets?.length || 0; i++) {
+                    setTimeout(() => {
+                        app.api.dispatchCustomEvent('getnode_rename', {
+                            nodeId: this.id,
+                            widgetIndex: i,
+                            value: null,
+                        });
+                    }, 500);
+                }
+            }
+
 
             /**
              * Called when a connection is created or removed for this node.
@@ -290,6 +301,13 @@ app.registerExtension({
             onRename(widgetIndex) {
                 log({ class: "GetTwinNodes", method: "onRename", severity: "trace", tag: "function_entered" });
                 let widgetValue = safeStringTrim(this.widgets[widgetIndex]?.value);
+
+                app.api.dispatchCustomEvent('getnode_rename', {
+                    nodeId: this.id,
+                    widgetIndex: widgetIndex,
+                    value: widgetValue,
+                });
+
                 if (!widgetValue) {
                     return;
                 }
@@ -311,11 +329,6 @@ app.registerExtension({
                     return;
                 }
 
-                app.api.dispatchCustomEvent('getnode_rename', {
-                    nodeId: this.id,
-                    widgetIndex: widgetIndex,
-                    value: widgetValue,
-                });
 
                 const setter = findSetter(this, widgetValue);
                 if (setter) {
@@ -520,38 +533,59 @@ app.registerExtension({
              * @param {string} e.oldValue - Previous value before the rename.
              * @param {string} e.value - New value after the rename.
              * @param {string} e.type - Type of the renamed widget.
-             * @param {number} e.widgetIndex - Index of the widget that was renamed.
+             * @param {number} e.widgetIndex - Index (on the SetNode) of the widget that was renamed.
              * @returns {void}
              */
             setnodeNameChange(e) {
-                // log({ class: "GetTwinNodes", method: "setnodeNameChange", severity: "trace", tag: "function_entered" }, `[GetTwinNodes] setnodeNameChange "${oldValue}" -> "${value}" (${type})`, oldValue, value);
+                // e: {oldValue: 'width', value: 'width', type: 'INT', widgetIndex: 0, nodeId: 4}
                 log({ class: "GetTwinNodes", method: "setnodeNameChange", severity: "trace", tag: "function_entered" }, e);
                 const prev = safeStringTrim(e.oldValue);
                 const next = safeStringTrim(e.value);
-                if (!prev || !next || prev === next) return;
 
                 const changed = [];
                 if (Array.isArray(this.widgets)) {
                     for (let i = 0; i < this.widgets.length; i++) {
                         const val = safeStringTrim(this.widgets[i]?.value);
                         if (val && val === prev) {
-                            setWidgetValue(this, i, next);
-
+                            if (prev && next && prev !== next) {
+                                setWidgetValue(this, i, next);
+                            }
                             changed.push(i);
                         }
                     }
                 }
-                if (changed.length) {
-                    // This is basically what Kijai's onRename function does, but we'll do it here because our `onRename` function was a huge mess.
-                    this.setType(e.type, e.widgetIndex);
-                    this.updateColors();
-                    this.updateTitle();
-                    this.serialize();
-                }
+                changed.forEach(i => {
+                    this.setType(e.type, i);
+                    this.onRename(i);
+                });
             }
 
 
             setType(type, widgetIndex) {
+                // Robustly find the first callsite with a function name (Class.function or function) from the stack
+                let callee = "unknown";
+                try {
+                    const stackLines = new Error().stack.split('\n');
+                    // Try to find first line with function context
+                    for (let i = 1; i < stackLines.length; i++) {
+                        const m = stackLines[i].match(/at\s+([A-Za-z0-9_$.[\]<>]+)\s*\(/);
+                        if (m && m[1] && !/^Object\./.test(m[1]) && !/^<anonymous>/.test(m[1])) {
+                            callee = m[1];
+                            break;
+                        }
+                    }
+                    if (callee === "unknown") {
+                        // Show a few lines for debugging, as before
+                        const contextLines = stackLines.slice(1, 6).join('\n');
+                        console.warn(
+                            "GetTwinNodes.setType: failed to find a function callsite in stack for callee.\n" +
+                            "Stack context:\n" + contextLines
+                        );
+                    }
+                } catch (_e) {
+                    // In case anything unexpected happens, don't crash
+                }
+
                 log({
                     class: "GetTwinNodes",
                     method: "setType",
@@ -559,8 +593,9 @@ app.registerExtension({
                     tag: "function_entered"
                 }, {
                     type: type,
+                    ourName: this.widgets?.[widgetIndex]?.value,
                     widgetIndex: widgetIndex,
-                    callee: "" + (new Error().stack.split('\n')[2]?.match(/at\s+([\w$.<>]+|\[object\s\w+\])/)?.[1] || 'unknown')
+                    callee: callee
                 });
 
 
@@ -634,8 +669,6 @@ app.registerExtension({
              */
             onAdded(graph) {
                 // Kijai would call this.validateName(graph) on the setter, nothing on the getter
-                console.log("initialWidgetCount: onAdded: properties", this.properties);
-                console.log("initialWidgetCount: onAdded: properties.numberOfWidgets", this.properties.numberOfWidgets);
                 if (Array.isArray(this.widgets)) {
                     for (let i = 0; i < this.widgets.length; i++) {
                         try { wrapWidgetValueSetter(this.widgets[i]); } catch (_e) {}

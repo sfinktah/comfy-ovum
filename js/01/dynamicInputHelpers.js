@@ -6,7 +6,6 @@ export function getDynamicInputs(node) {
     /** @type {INodeInputSlot[]} */
     const inputs = node?.inputs;
     if (!inputs) {
-        // console.log('[ovum.format] getDynamicInputs: no inputs found on node', node?.id, 'node.inputs:', inputs, 'node.name:', node?.name, 'node.type:', node?.type, 'node.constructor.name:', node?.constructor.name, 'node.constructor.toString():', node?.constructor.toString(), 'node.constructor.toString().split(\' \'):', node?.constructor.toString().split(''))
         return [];
     }
     return inputs

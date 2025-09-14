@@ -296,7 +296,6 @@ export function findSetters(node, name = undefined) {
     }
     const sourceNames = Array.isArray(node.widgets) ? node.widgets.map(w => safeStringTrim(w?.value)) : [];
     const names = name != null ? [safeStringTrim(name)] : sourceNames.filter(v => !!v);
-    // console.log("[findSetters]", { node: node, names: names });
     if (!node.graph || names.length === 0) return [];
     const nameSet = new Set(names.filter(Boolean));
 
@@ -352,7 +351,6 @@ export function findGetters(node, checkForPreviousName, widgetIndex) {
         .map(v => safeStringTrim(v))
         .filter(v => v !== "");
 
-    // console.log("[findGetters]", { node: node, checkForPreviousName: checkForPreviousName, widgetIndex: widgetIndex, names: names });
     if (!node.graph || names.length === 0) return [];
     const nameSet = new Set(names);
 
