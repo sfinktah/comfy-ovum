@@ -67,6 +67,57 @@ def _make_preview_base64(img: Image.Image, max_side: int = 512) -> str:
     img.save(bio, format="PNG")
     return base64.b64encode(bio.getvalue()).decode("ascii")
 
+def _flatten_image_like(image):
+    """
+    Yield (is_mask, tensor(H,W,C or H,W or H,W,1)) for any supported input:
+    - torch.Tensor 3D (H,W,C) image
+    - torch.Tensor 4D (N,H,W,C) image batch
+    - list/tuple of any of the above (recursively)
+    """
+    if image is None:
+        return
+    # Tensor case
+    if isinstance(image, torch.Tensor):
+        if image.dim() == 3:
+            yield (False, image)
+        elif image.dim() == 4:
+            for i in range(image.shape[0]):
+                yield (False, image[i])
+        else:
+            raise ValueError("Unsupported IMAGE tensor dims (expected 3D or 4D).")
+    # List/tuple case
+    elif isinstance(image, (list, tuple)):
+        for item in image:
+            # Recurse
+            for out in _flatten_image_like(item):
+                yield out
+    else:
+        raise ValueError("Unsupported IMAGE type; expected torch.Tensor or list/tuple.")
+
+def _flatten_mask_like(mask):
+    if mask is None:
+        return
+    if isinstance(mask, torch.Tensor):
+        if mask.dim() == 2 or (mask.dim() == 3 and (mask.shape[-1] == 1 or mask.shape[0] == 1)):
+            yield (True, mask)
+        elif mask.dim() == 3:
+            # Could be (N,H,W) mask batch
+            if mask.shape[0] > 1 and mask.shape[-1] != 1:
+                for i in range(mask.shape[0]):
+                    yield (True, mask[i])
+            else:
+                yield (True, mask)
+        elif mask.dim() == 4:
+            for i in range(mask.shape[0]):
+                yield (True, mask[i])
+        else:
+            raise ValueError("Unsupported MASK tensor dims.")
+    elif isinstance(mask, (list, tuple)):
+        for item in mask:
+            for out in _flatten_mask_like(item):
+                yield out
+    else:
+        raise ValueError("Unsupported MASK type; expected torch.Tensor or list/tuple.")
 
 class LiveCrop:
     NAME = "Live Crop"
@@ -132,20 +183,23 @@ class LiveCrop:
     def apply(self, crop_top, crop_bottom, crop_left, crop_right, image=None, mask=None):
         out_images = []
         out_masks = []
-        preview_img: Optional[Image.Image] = None
+        previews = []
 
+        # Process images from any accepted form (single, batch, list, or list of batches)
         if image is not None:
-            # image is a batch (N,H,W,C)
-            for i in range(image.shape[0]):
-                pil = _tensor_image_to_pil(image[i])
-                if preview_img is None:
-                    preview_img = pil.copy()
+            count = 0
+            for _is_mask, img_t in _flatten_image_like(image):
+                pil = _tensor_image_to_pil(img_t)
+                if count < 3:
+                    previews.append(pil.copy())
                 pil2 = self._crop_expand_rotate(pil, crop_top, crop_bottom, crop_left, crop_right, is_mask=False)
                 out_images.append(_pil_to_tensor_image(pil2))
+                count += 1
 
+        # Process masks likewise
         if mask is not None:
-            for i in range(mask.shape[0]):
-                mpil = _tensor_mask_to_pil(mask[i])
+            for _is_mask, m_t in _flatten_mask_like(mask):
+                mpil = _tensor_mask_to_pil(m_t)
                 mpil2 = self._crop_expand_rotate(mpil, crop_top, crop_bottom, crop_left, crop_right, is_mask=True)
                 out_masks.append(_pil_to_tensor_mask(mpil2))
 
@@ -154,12 +208,16 @@ class LiveCrop:
 
         ui = None
         try:
-            if preview_img is None and image is not None and image.shape[0] > 0:
-                preview_img = _tensor_image_to_pil(image[0])
-            if preview_img is not None:
-                # draw nothing; frontend will overlay guides based on widgets
-                b64 = _make_preview_base64(preview_img)
-                ui = {"live_crop": [b64]}
+            # Prefer previews we built; if none and we had image tensor(s), fallback to first item
+            if not previews and image is not None:
+                # Try to extract first image for preview
+                for _is_mask, img_t in _flatten_image_like(image):
+                    previews = [_tensor_image_to_pil(img_t)]
+                    break
+
+            if previews:
+                b64s = [_make_preview_base64(p) for p in previews[:3]]
+                ui = {"live_crop": b64s}
         except Exception:
             pass
 

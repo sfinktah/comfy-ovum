@@ -128,7 +128,8 @@ app.registerExtension({
                     hideOnZoom: false,
                 });
                 this.previewWidget.parentEl = container;
-                this._livecrop = { container, overlay, img: null, imgW: 0, imgH: 0 };
+                // Support multiple images in UI
+                this._livecrop = { container, overlay, img: null, imgW: 0, imgH: 0, images: [] };
 
                 // Keep the canvas sized to the actual DOM container and redraw when it changes
                 try {
@@ -188,29 +189,17 @@ app.registerExtension({
                 try {
                     const overlayEl = this._livecrop?.overlay;
                     if (!overlayEl) {
-                        Logger.log({
-                            class: 'LiveCrop',
-                            method: 'redraw',
-                            severity: 'error',
-                            tag: 'canvas_error'
-                        }, 'Overlay canvas not available', { overlayExists: !!this._livecrop?.overlay });
+                        Logger.log({ class: 'LiveCrop', method: 'redraw', severity: 'error', tag: 'canvas_error' }, 'Overlay canvas not available', { overlayExists: !!this._livecrop?.overlay });
                         return;
                     }
 
                     const ctx = overlayEl.getContext("2d");
                     if (!ctx) {
-                        Logger.log({
-                            class: 'LiveCrop',
-                            method: 'redraw',
-                            severity: 'error',
-                            tag: 'canvas_error'
-                        }, 'Failed to get canvas context', { overlayExists: !!overlayEl });
+                        Logger.log({ class: 'LiveCrop', method: 'redraw', severity: 'error', tag: 'canvas_error' }, 'Failed to get canvas context', { overlayExists: !!overlayEl });
                         return;
                     }
 
-                    // Reduce the canvas width slightly to compensate for left indentation in the UI
                     const comp = (typeof window !== "undefined" ? (window.LiveCropLeftComp || 0) : 0);
-                    // Use the actual rendered container size so the canvas doesn't drift or overflow
                     const cont = this._livecrop?.container;
                     const cw = cont ? cont.clientWidth : this.size[0];
                     const ch = cont ? cont.clientHeight : this.size[1];
@@ -218,119 +207,67 @@ app.registerExtension({
                     const H = overlayEl.height = Math.max(1, Math.floor(ch));
                     ctx.clearRect(0, 0, W, H);
 
-                    Logger.log({
-                        class: 'LiveCrop',
-                        method: 'redraw',
-                        severity: 'trace',
-                        tag: 'canvas_setup'
-                    }, 'Canvas setup complete', {
+                    Logger.log({ class: 'LiveCrop', method: 'redraw', severity: 'trace', tag: 'canvas_setup' }, 'Canvas setup complete', {
                         canvasDimensions: { width: W, height: H },
                         cleared: true
                     });
 
-                    const bg = this._livecrop?.img;
-                    if (bg) {
-                        Logger.log({
-                            class: 'LiveCrop',
-                            method: 'redraw',
-                            severity: 'trace',
-                            tag: 'image_draw'
-                        }, 'Drawing background image');
+                    // Prepare images list: prefer multiple images if available, fallback to single
+                    const imgs = (this._livecrop?.images?.length
+                        ? this._livecrop.images
+                        : (this._livecrop?.img ? [{ img: this._livecrop.img, w: this._livecrop.imgW, h: this._livecrop.imgH }] : []));
 
-                        // Draw background image to fit node size (contain)
-                        const iw = this._livecrop.imgW, ih = this._livecrop.imgH;
-                        const scale = Math.min(W / iw, H / ih);
-                        const dw = Math.round(iw * scale);
-                        const dh = Math.round(ih * scale);
-                        const dx = Math.floor((W - dw) / 2);
-                        const dy = Math.floor((H - dh) / 2);
-
-                        Logger.log({
-                            class: 'LiveCrop',
-                            method: 'redraw',
-                            severity: 'trace',
-                            tag: 'image_calculations'
-                        }, 'Image scaling calculations', {
-                            originalSize: { width: iw, height: ih },
-                            canvasSize: { width: W, height: H },
-                            scale,
-                            drawSize: { width: dw, height: dh },
-                            drawPosition: { x: dx, y: dy }
-                        });
-
-                        ctx.drawImage(bg, dx, dy, dw, dh);
-
-                        // Read widget values
-                        const get = (name, def) => {
-                            const w = (this.widgets || []).find(w => w && w.name === name);
-                            const value = (typeof w?.value === 'number') ? w.value : def;
-                            Logger.log({
-                                class: 'LiveCrop',
-                                method: 'redraw',
-                                severity: 'trace',
-                                tag: 'widget_value'
-                            }, `Widget value: ${name}`, {
-                                widgetName: name,
-                                widgetFound: !!w,
-                                value,
-                                defaultUsed: value === def
-                            });
-                            return value;
-                        }
-                        const top = get("crop_top", 0);
-                        const bottom = get("crop_bottom", 0);
-                        const left = get("crop_left", 0);
-                        const right = get("crop_right", 0);
-
-                        Logger.log({ 
-                            class: 'LiveCrop', 
-                            method: 'redraw', 
-                            severity: 'debug',
-                            tag: 'crop_params'
-                        }, 'Crop parameters read', { top, bottom, left, right });
-
-                        // Draw guides in scaled coordinates
-                        ctx.save();
-                        ctx.translate(dx, dy);
-
-                        Logger.log({ 
-                            class: 'LiveCrop', 
-                            method: 'redraw', 
-                            severity: 'trace',
-                            tag: 'guides_draw'
-                        }, 'Drawing crop guides', { 
-                            guideArea: { width: dw, height: dh },
-                            cropParams: { top, bottom, left, right }
-                        });
-
-                        drawGuides(ctx, dw, dh, { top, bottom, left, right });
-                        ctx.restore();
-
-                        Logger.log({ 
-                            class: 'LiveCrop', 
-                            method: 'redraw', 
-                            severity: 'trace',
-                            tag: 'redraw_complete'
-                        }, 'Redraw completed successfully');
-                    } else {
-                        Logger.log({ 
-                            class: 'LiveCrop', 
-                            method: 'redraw', 
-                            severity: 'debug',
-                            tag: 'no_image'
-                        }, 'No background image available for drawing', { 
+                    if (!imgs.length) {
+                        Logger.log({ class: 'LiveCrop', method: 'redraw', severity: 'debug', tag: 'no_image' }, 'No image(s) available for drawing', {
                             hasLivecrop: !!this._livecrop,
                             imgProperty: this._livecrop?.img
                         });
+                        return;
                     }
-                } catch (e) { 
-                    Logger.log({ 
-                        class: 'LiveCrop', 
-                        method: 'redraw', 
+
+                    // Read crop widget values once; apply same guides to all previews
+                    const get = (name, def) => {
+                        const w = (this.widgets || []).find(w => w && w.name === name);
+                        return (typeof w?.value === 'number') ? w.value : def;
+                    }
+                    const top = get("crop_top", 0);
+                    const bottom = get("crop_bottom", 0);
+                    const left = get("crop_left", 0);
+                    const right = get("crop_right", 0);
+
+                    // Layout: stack vertically up to 3 images with spacing
+                    const SPACING = 6;
+                    let y = 0;
+                    for (const entry of imgs.slice(0, 3)) {
+                        const bg = entry.img;
+                        const iw = entry.w, ih = entry.h;
+
+                        // Scale to fit width; height constrained by remaining H
+                        const scale = Math.min(W / iw, H / ih, 1);
+                        const dw = Math.max(1, Math.round(iw * scale));
+                        const dh = Math.max(1, Math.round(ih * scale));
+                        const dx = Math.floor((W - dw) / 2);
+                        const dy = y;
+
+                        ctx.drawImage(bg, dx, dy, dw, dh);
+
+                        // Guides for this tile
+                        ctx.save();
+                        ctx.translate(dx, dy);
+                        drawGuides(ctx, dw, dh, { top, bottom, left, right });
+                        ctx.restore();
+
+                        y += dh + SPACING;
+                        if (y > H) break;
+                    }
+                } catch (e) {
+                    Logger.log({
+                        class: 'LiveCrop',
+                        method: 'redraw',
                         severity: 'error',
                         tag: 'redraw_error'
-                    }, 'Error during redraw', { 
-                        error: e.message, 
+                    }, 'Error during redraw', {
+                        error: e.message,
                         stack: e.stack,
                         nodeId: this.id,
                         overlayExists: !!this._livecrop?.overlay
@@ -501,128 +438,59 @@ app.registerExtension({
             });
 
             try {
-                const lc = message?.live_crop ;
-                const b64 = lc?.[0];
-
-                Logger.log({ 
-                    class: 'LiveCrop', 
-                    method: 'onExecuted', 
-                    severity: 'debug',
-                    tag: 'message_parse'
-                }, 'Parsing execution message', { 
-                    hasLiveCropData: !!lc,
-                    hasBase64Image: !!b64,
-                    base64Length: b64?.length || 0,
-                    liveCropKeys: lc ? Object.keys(lc) : []
-                });
-
-                if (!b64) {
-                    Logger.log({ 
-                        class: 'LiveCrop', 
-                        method: 'onExecuted', 
-                        severity: 'warn',
-                        tag: 'no_image_data'
-                    }, 'No base64 image data found in execution message', { 
-                        messageStructure: {
-                            hasMessage: !!message,
-                            hasUI: !!message,
-                            hasLiveCrop: !!message?.live_crop,
-                            liveCropKeys: message?.live_crop ? Object.keys(message.ui.live_crop) : []
-                        }
-                    });
+                const lc = message?.live_crop;
+                // lc is expected to be an array of base64 strings (max 3), but support single too
+                const b64s = Array.isArray(lc) ? lc.filter(Boolean).slice(0, 3) : (lc ? [lc] : []);
+                if (!b64s.length) {
+                    Logger.log({ class: 'LiveCrop', method: 'onExecuted', severity: 'warn', tag: 'no_image_data' }, 'No base64 image data found in execution message');
                     return;
                 }
 
-                Logger.log({ 
-                    class: 'LiveCrop', 
-                    method: 'onExecuted', 
-                    severity: 'debug',
-                    tag: 'image_loading'
-                }, 'Creating new image from base64 data', { 
-                    base64Length: b64.length
+                const imgs = [];
+                let loaded = 0;
+
+                const finalize = () => {
+                    if (loaded !== b64s.length) return;
+
+                    // Save multiple images
+                    this._livecrop.images = imgs.map(i => ({ img: i, w: i.width, h: i.height }));
+                    // Also keep single fields for backward-compat
+                    const first = this._livecrop.images[0];
+                    if (first) {
+                        this._livecrop.img = first.img;
+                        this._livecrop.imgW = first.w;
+                        this._livecrop.imgH = first.h;
+                    }
+
+                    // Compute node size to fit stacked previews (max width 512)
+                    const maxW = 512;
+                    const widths = this._livecrop.images.map(e => e.w);
+                    const targetW = Math.min(maxW, Math.max(...widths, 1));
+                    const SPACING = 6;
+                    let totalH = 0;
+                    this._livecrop.images.slice(0, 3).forEach((e, i, arr) => {
+                        const scale = Math.min(1, targetW / Math.max(e.w, 1));
+                        const dh = Math.round(e.h * scale);
+                        totalH += dh + (i < arr.length - 1 ? SPACING : 0);
+                    });
+
+                    this.setSize([targetW, Math.max(1, totalH)]);
+                    this._livecrop_redraw?.();
+                };
+
+                b64s.forEach((b64) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        imgs.push(img);
+                        loaded += 1;
+                        finalize();
+                    };
+                    img.onerror = () => {
+                        loaded += 1;
+                        finalize();
+                    };
+                    img.src = `data:image/png;base64,${b64}`;
                 });
-
-                const img = new Image();
-
-                img.onload = () => {
-                    Logger.log({ 
-                        class: 'LiveCrop', 
-                        method: 'onExecuted', 
-                        severity: 'info',
-                        tag: 'image_loaded'
-                    }, 'Image loaded successfully', { 
-                        imageSize: { width: img.width, height: img.height },
-                        hasLivecropObject: !!this._livecrop
-                    });
-
-                    if (!this._livecrop) {
-                        Logger.log({ 
-                            class: 'LiveCrop', 
-                            method: 'onExecuted', 
-                            severity: 'error',
-                            tag: 'missing_livecrop'
-                        }, 'LiveCrop object not initialized');
-                        return;
-                    }
-
-                    this._livecrop.img = img;
-                    this._livecrop.imgW = img.width;
-                    this._livecrop.imgH = img.height;
-
-                    // Resize node to image size (cap to 512)
-                    const maxSide = 512;
-                    const scale = Math.min(maxSide / img.width, maxSide / img.height, 1);
-                    const w = Math.round(img.width * scale);
-                    const h = Math.round(img.height * scale);
-
-                    Logger.log({ 
-                        class: 'LiveCrop', 
-                        method: 'onExecuted', 
-                        severity: 'debug',
-                        tag: 'node_resize'
-                    }, 'Resizing node to fit image', { 
-                        originalImageSize: { width: img.width, height: img.height },
-                        maxSide,
-                        scale,
-                        newNodeSize: { width: w, height: h },
-                        currentNodeSize: this.size
-                    });
-
-                    this.setSize([w, h]);
-
-                    if (this._livecrop_redraw) {
-                        Logger.log({ 
-                            class: 'LiveCrop', 
-                            method: 'onExecuted', 
-                            severity: 'debug',
-                            tag: 'trigger_redraw'
-                        }, 'Triggering redraw after image load');
-                        this._livecrop_redraw();
-                    } else {
-                        Logger.log({ 
-                            class: 'LiveCrop', 
-                            method: 'onExecuted', 
-                            severity: 'warn',
-                            tag: 'missing_redraw'
-                        }, 'Redraw function not available');
-                    }
-                };
-
-                img.onerror = (error) => {
-                    Logger.log({ 
-                        class: 'LiveCrop', 
-                        method: 'onExecuted', 
-                        severity: 'error',
-                        tag: 'image_load_error'
-                    }, 'Failed to load image', { 
-                        error,
-                        base64Length: b64.length,
-                        base64Preview: b64.substring(0, 50) + '...'
-                    });
-                };
-
-                img.src = `data:image/png;base64,${b64}`;
-
             } catch(e) { 
                 Logger.log({ 
                     class: 'LiveCrop', 
