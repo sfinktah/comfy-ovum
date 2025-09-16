@@ -269,7 +269,7 @@ app.registerExtension({
                     const matched = findSetter(this);
                     if (matched) {
                         const needed = matched.widgets?.length || 0;
-                        const min = this.properties?.constCount || 2;
+                        const min = this.properties?.numberOfWidgets || 2;
                         this.ensureGetterWidgetCount(Math.max(min, needed));
                         for (let i = 0; i < needed; i++) {
                             if (!this.widgets?.[i]?.value && matched.widgets?.[i]?.value) {
@@ -447,16 +447,16 @@ app.registerExtension({
                                 }
                             }
                         }
-                        // If only one constant is selected, ensure at least constCount widgets exist
+                        // If only one constant is selected, ensure at least numberOfWidgets widgets exist
                         const selectedCount = Array.from(selectedVals).length;
-                        const min = this.properties?.constCount || 2;
+                        const min = this.properties?.numberOfWidgets || 2;
                         if (selectedCount === 1 && (this.widgets?.length || 0) < min) {
                             this.ensureGetterWidgetCount(min);
                         }
                     } else {
                         // If didUnset but we still have only one selected and have fewer than min widgets, ensure additional empty widgets
                         const valList = (this.widgets || []).map(w => safeStringTrim(w?.value)).filter(Boolean);
-                        const min = this.properties?.constCount || 2;
+                        const min = this.properties?.numberOfWidgets || 2;
                         if (valList.length === 1 && (this.widgets?.length || 0) < min) {
                             this.ensureGetterWidgetCount(min);
                         }
@@ -492,7 +492,7 @@ app.registerExtension({
                     const selectedVals = (this.widgets || [])
                         .map(w => safeStringTrim(w?.value))
                         .filter(Boolean);
-                    const min = this.properties?.constCount || 2;
+                    const min = this.properties?.numberOfWidgets || 2;
                     if (selectedVals.length === 1 && (this.widgets?.length || 0) < min) {
                         this.ensureGetterWidgetCount(min); // adds empty widgets up to min
                     }
