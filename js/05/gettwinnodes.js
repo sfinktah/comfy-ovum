@@ -758,11 +758,11 @@ app.registerExtension({
 
                 // Choose first typed input on setter as anchor (fallback to slot 0)
                 let inIdx = 0;
-                if (Array.isArray(this.currentSetter.inputs)) {
-                    const fin = this.currentSetter.inputs.findIndex(i => i && i.type && i.type !== '*');
+                if (Array.isArray(this.currentSetter.node.inputs)) {
+                    const fin = this.currentSetter.node.inputs.findIndex(i => i && i.type && i.type !== '*');
                     if (fin >= 0) inIdx = fin;
                 }
-                const absStart = this.currentSetter.getConnectionPos(false, inIdx);
+                const absStart = this.currentSetter.node.getConnectionPos(false, inIdx);
                 const start_node_slotpos = [
                     absStart[0] - this.pos[0],
                     absStart[1] - this.pos[1],
