@@ -137,11 +137,33 @@ app.registerExtension({
                         this._livecrop_drag.startX = x;
                         this._livecrop_drag.startY = y;
 
-                        // Get current widget value
-                        const widget = this.widgets.find(w => w.name === `crop_${dragType}`);
-                        this._livecrop_drag.startValue = widget ? widget.value : 0;
+                        // For corners, store both axis values
+                        if (dragType.includes('top') || dragType.includes('bottom')) {
+                            const hWidget = this.widgets.find(w => w.name === `crop_${dragType.includes('top') ? 'top' : 'bottom'}`);
+                            this._livecrop_drag.startValueH = hWidget ? hWidget.value : 0;
+                        }
+                        if (dragType.includes('left') || dragType.includes('right')) {
+                            const vWidget = this.widgets.find(w => w.name === `crop_${dragType.includes('left') ? 'left' : 'right'}`);
+                            this._livecrop_drag.startValueV = vWidget ? vWidget.value : 0;
+                        }
 
-                        overlay.style.cursor = (dragType === 'top' || dragType === 'bottom') ? 'ns-resize' : 'ew-resize';
+                        // For single axis, store in startValue for backward compatibility
+                        if (!dragType.includes('top') && !dragType.includes('bottom') && !dragType.includes('left') && !dragType.includes('right')) {
+                            const widget = this.widgets.find(w => w.name === `crop_${dragType}`);
+                            this._livecrop_drag.startValue = widget ? widget.value : 0;
+                        } else if (dragType === 'top' || dragType === 'bottom' || dragType === 'left' || dragType === 'right') {
+                            const widget = this.widgets.find(w => w.name === `crop_${dragType}`);
+                            this._livecrop_drag.startValue = widget ? widget.value : 0;
+                        }
+
+                        // Set appropriate cursor
+                        let cursor;
+                        if (dragType === 'top' || dragType === 'bottom') cursor = 'ns-resize';
+                        else if (dragType === 'left' || dragType === 'right') cursor = 'ew-resize';
+                        else if (dragType === 'topleft' || dragType === 'bottomright') cursor = 'nw-resize';
+                        else if (dragType === 'topright' || dragType === 'bottomleft') cursor = 'ne-resize';
+                        overlay.style.cursor = cursor;
+
                         document.addEventListener('mousemove', this._livecrop_onMouseMove);
                         document.addEventListener('mouseup', this._livecrop_onMouseUp);
                     }
@@ -155,9 +177,14 @@ app.registerExtension({
                         const x = (e.clientX - rect.left + comp) / scale;
                         const y = (e.clientY - rect.top) / scale;
                         const dragType = this._livecrop_hitTest(x, y);
-                        overlay.style.cursor = dragType ?
-                            ((dragType === 'top' || dragType === 'bottom') ? 'ns-resize' : 'ew-resize') :
-                            'default';
+                        let cursor = 'default';
+                        if (dragType) {
+                            if (dragType === 'top' || dragType === 'bottom') cursor = 'ns-resize';
+                            else if (dragType === 'left' || dragType === 'right') cursor = 'ew-resize';
+                            else if (dragType === 'topleft' || dragType === 'bottomright') cursor = 'nw-resize';
+                            else if (dragType === 'topright' || dragType === 'bottomleft') cursor = 'ne-resize';
+                        }
+                        overlay.style.cursor = cursor;
                     }
                 });
 
@@ -418,6 +445,24 @@ app.registerExtension({
                     const leftX = left < 0 ? dx + Math.round(Math.abs(left) * dw) : dx;
                     const rightX = right < 0 ? dx + Math.round(dw - Math.abs(right) * dw) : dx + dw;
 
+                    // Check for corner intersections first (higher priority)
+                    if (Math.abs(x - leftX) <= tolerance && Math.abs(y - topY) <= tolerance) {
+                        this._livecrop_drag.activeImageArea = area;
+                        return 'topleft';
+                    }
+                    if (Math.abs(x - rightX) <= tolerance && Math.abs(y - topY) <= tolerance) {
+                        this._livecrop_drag.activeImageArea = area;
+                        return 'topright';
+                    }
+                    if (Math.abs(x - leftX) <= tolerance && Math.abs(y - bottomY) <= tolerance) {
+                        this._livecrop_drag.activeImageArea = area;
+                        return 'bottomleft';
+                    }
+                    if (Math.abs(x - rightX) <= tolerance && Math.abs(y - bottomY) <= tolerance) {
+                        this._livecrop_drag.activeImageArea = area;
+                        return 'bottomright';
+                    }
+
                     // Check horizontal lines (existing crop lines or image edges)
                     if (Math.abs(y - topY) <= tolerance && x >= dx && x <= dx + dw) {
                         // Store which image area was hit for drag operations
@@ -449,7 +494,7 @@ app.registerExtension({
                 if (!activeArea) return;
 
                 const { dx, dy, dw, dh } = activeArea;
-                const { dragType, startX, startY, startValue } = this._livecrop_drag;
+                const { dragType, startX, startY, startValue, startValueH, startValueV } = this._livecrop_drag;
 
                 const get = (name, def) => {
                     const w = (this.widgets || []).find(w => w && w.name === name);
@@ -457,54 +502,64 @@ app.registerExtension({
                 }
 
                 const minRemaining = 0.1; // At least 10% of image must remain
+                let updated = false;
 
-                let newValue = startValue;
+                // Helper function to update a crop value with constraints
+                const updateCropValue = (cropType, delta, dimension, startVal) => {
+                    let unconstrained = startVal - delta;
+                    if (cropType === 'bottom' || cropType === 'right') {
+                        unconstrained = startVal + delta;
+                    }
 
-                if (dragType === 'top') {
+                    let maxCrop;
+                    if (cropType === 'top' || cropType === 'bottom') {
+                        const otherValue = get(cropType === 'top' ? "crop_bottom" : "crop_top", 0);
+                        maxCrop = (1 - minRemaining) - Math.abs(otherValue);
+                    } else {
+                        const otherValue = get(cropType === 'left' ? "crop_right" : "crop_left", 0);
+                        maxCrop = (1 - minRemaining) - Math.abs(otherValue);
+                    }
+
+                    const maxValue = -maxCrop;
+                    const newValue = Math.max(-1, Math.min(0, Math.max(maxValue, unconstrained)));
+
+                    const widget = this.widgets.find(w => w.name === `crop_${cropType}`);
+                    if (widget && widget.value !== newValue) {
+                        widget.value = Math.round(newValue * 100) / 100;
+                        if (widget.callback) {
+                            widget.callback(widget.value, null, this);
+                        }
+                        updated = true;
+                    }
+                };
+
+                // Handle corner dragging
+                if (dragType.includes('top') || dragType.includes('bottom')) {
                     const deltaY = y - startY;
-                    const relativeDelta = deltaY / dh;
-                    const unconstrained = startValue - relativeDelta;
-                    const bottomValue = get("crop_bottom", 0);
-                    // Ensure abs(top) + abs(bottom) <= 1 - minRemaining
-                    const maxTopCrop = (1 - minRemaining) - Math.abs(bottomValue);
-                    const maxTop = -maxTopCrop;
-                    newValue = Math.max(-1, Math.min(0, Math.max(maxTop, unconstrained)));
-                } else if (dragType === 'bottom') {
-                    const deltaY = y - startY;
-                    const relativeDelta = deltaY / dh;
-                    const unconstrained = startValue + relativeDelta;
-                    const topValue = get("crop_top", 0);
-                    // Ensure abs(top) + abs(bottom) <= 1 - minRemaining
-                    const maxBottomCrop = (1 - minRemaining) - Math.abs(topValue);
-                    const maxBottom = -maxBottomCrop;
-                    newValue = Math.max(-1, Math.min(0, Math.max(maxBottom, unconstrained)));
-                } else if (dragType === 'left') {
-                    const deltaX = x - startX;
-                    const relativeDelta = deltaX / dw;
-                    const unconstrained = startValue - relativeDelta;
-                    const rightValue = get("crop_right", 0);
-                    // Ensure abs(left) + abs(right) <= 1 - minRemaining
-                    const maxLeftCrop = (1 - minRemaining) - Math.abs(rightValue);
-                    const maxLeft = -maxLeftCrop;
-                    newValue = Math.max(-1, Math.min(0, Math.max(maxLeft, unconstrained)));
-                } else if (dragType === 'right') {
-                    const deltaX = x - startX;
-                    const relativeDelta = deltaX / dw;
-                    const unconstrained = startValue + relativeDelta;
-                    const leftValue = get("crop_left", 0);
-                    // Ensure abs(left) + abs(right) <= 1 - minRemaining
-                    const maxRightCrop = (1 - minRemaining) - Math.abs(leftValue);
-                    const maxRight = -maxRightCrop;
-                    newValue = Math.max(-1, Math.min(0, Math.max(maxRight, unconstrained)));
+                    const relativeDeltaY = deltaY / dh;
+                    const vCropType = dragType.includes('top') ? 'top' : 'bottom';
+                    updateCropValue(vCropType, relativeDeltaY, dh, startValueH || startValue);
                 }
 
-                // Update the widget
-                const widget = this.widgets.find(w => w.name === `crop_${dragType}`);
-                if (widget && widget.value !== newValue) {
-                    widget.value = Math.round(newValue * 100) / 100; // Round to 2 decimal places
-                    if (widget.callback) {
-                        widget.callback(widget.value, null, this);
-                    }
+                if (dragType.includes('left') || dragType.includes('right')) {
+                    const deltaX = x - startX;
+                    const relativeDeltaX = deltaX / dw;
+                    const hCropType = dragType.includes('left') ? 'left' : 'right';
+                    updateCropValue(hCropType, relativeDeltaX, dw, startValueV || startValue);
+                }
+
+                // Handle single axis dragging
+                if (dragType === 'top' || dragType === 'bottom') {
+                    const deltaY = y - startY;
+                    const relativeDelta = deltaY / dh;
+                    updateCropValue(dragType, relativeDelta, dh, startValue);
+                } else if (dragType === 'left' || dragType === 'right') {
+                    const deltaX = x - startX;
+                    const relativeDelta = deltaX / dw;
+                    updateCropValue(dragType, relativeDelta, dw, startValue);
+                }
+
+                if (updated) {
                     this._livecrop_redraw();
                 }
             };
