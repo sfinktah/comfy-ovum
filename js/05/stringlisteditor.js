@@ -30,45 +30,80 @@ app.registerExtension({
 
             // Small hint label
             node.addWidget("info", "Drop files onto this node to add full paths", "", null, { serialize: false });
-        });
 
-        // Handle file(s) drag & drop onto the node
-        if (typeof nodeType.prototype.onDragDrop !== "function") {
-            nodeType.prototype.onDragDrop = function (e) {
+            // Hidden file input to choose files and add their paths
+            const fileInput = document.createElement("input");
+            Object.assign(fileInput, {
+                type: "file",
+                multiple: true,
+                style: "display: none",
+                onchange: () => {
+                    try {
+                        const files = Array.from(fileInput.files || []);
+                        if (!files.length) return;
+                        const paths = files.map(f => f.path || f.name).filter(Boolean);
+                        if (!paths.length) return;
+
+                        const w = node.widgets?.find?.(w => w?.name === "items_text") || node.widgets?.[0];
+                        const cur = (w?.value ?? "");
+                        const base = cur.length === 0 ? "" : (cur.endsWith("\n") ? cur : cur + "\n");
+                        const newVal = base + paths.join("\n");
+
+                        if (w) w.value = newVal;
+                        if (node.onInputChanged) node.onInputChanged();
+                        if (node.canvas?.setDirty) node.canvas.setDirty(true, true);
+                    } catch (_e) {}
+                },
+            });
+
+            // Ensure the input is removed when the node is removed
+            chainCallback(this, "onRemoved", () => {
+                fileInput?.remove();
+            });
+
+            // Append the input to the document
+            document.body.append(fileInput);
+
+            // Button to open file picker and add selected file paths
+            const chooseWidget = node.addWidget("button", "Choose files to add", null, () => {
+                //clear the active click event
+                app.canvas.node_widget = null;
+
+                fileInput.click();
+            });
+            chooseWidget.options.serialize = false;
+
+            // Per-node drag & drop handling using the example style
+            this.onDragOver = (e) => !!e?.dataTransfer?.types?.includes?.("Files");
+            this.onDragDrop = async (e) => {
                 try {
-                    if (!e?.dataTransfer?.files?.length) return false;
-                    const files = Array.from(e.dataTransfer.files);
-                    const paths = files.map(f => f?.path || f?.name).filter(Boolean);
+                    if (!e?.dataTransfer?.types?.includes?.("Files")) {
+                        return false;
+                    }
+
+                    const files = Array.from(e.dataTransfer?.files || []);
+                    if (!files.length) return false;
+
+                    const paths = files.map(f => f.path || f.name).filter(Boolean);
                     if (!paths.length) return false;
+
                     const w = this.widgets?.find?.(w => w?.name === "items_text") || this.widgets?.[0];
                     const cur = (w?.value ?? "");
                     const base = cur.length === 0 ? "" : (cur.endsWith("\n") ? cur : cur + "\n");
-                    const appended = base + paths.join("\n");
-                    if (w) w.value = appended;
+                    const newVal = base + paths.join("\n");
+
+                    if (w) w.value = newVal;
                     if (this.onInputChanged) this.onInputChanged();
                     if (this.canvas?.setDirty) this.canvas.setDirty(true, true);
+
                     return true;
-                } catch (_e) {
+                } catch (err) {
+                    console.error("Error handling onDragDrop:", err);
                     return false;
                 }
-            }
-        } else {
-            // If already defined, extend existing behavior
-            chainCallback(nodeType.prototype, "onDragDrop", function (e) {
-                try {
-                    if (!e?.dataTransfer?.files?.length) return;
-                    const files = Array.from(e.dataTransfer.files);
-                    const paths = files.map(f => f?.path || f?.name).filter(Boolean);
-                    if (!paths.length) return;
-                    const w = this.widgets?.find?.(w => w?.name === "items_text") || this.widgets?.[0];
-                    const cur = (w?.value ?? "");
-                    const base = cur.length === 0 ? "" : (cur.endsWith("\n") ? cur : cur + "\n");
-                    const appended = base + paths.join("\n");
-                    if (w) w.value = appended;
-                    if (this.onInputChanged) this.onInputChanged();
-                    if (this.canvas?.setDirty) this.canvas.setDirty(true, true);
-                } catch (_e) {}
-            });
-        }
+            };
+        });
+
+        // Drag & drop handlers are now defined per-node in onNodeCreated using a hidden file input.
     },
 });
