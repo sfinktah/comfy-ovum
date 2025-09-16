@@ -103,7 +103,7 @@ class SetEnvVar:
 
     def set_env(self, name, value, overwrite, any_input=None):
         if not isinstance(name, str) or len(name) == 0:
-            print("[set_env] name is empty; no changes applied.")
+            # print("[set_env] name is empty; no changes applied.")
             return (any_input, False, "")
         if _is_blocked_env(name):
             print(f"[set_env] blocked dangerous environment variable '{name}'; no changes applied.")
@@ -112,10 +112,10 @@ class SetEnvVar:
         applied = True
         if (name in os.environ) and (not overwrite):
             applied = False
-            print(f"[set_env] '{name}' exists and overwrite=False; leaving value unchanged.")
+            # print(f"[set_env] '{name}' exists and overwrite=False; leaving value unchanged.")
         else:
             os.environ[name] = value
-            print(f"[set_env] set {name}={'***' if 'KEY' in name or 'SECRET' in name or 'TOKEN' in name else value} (prev={prev_value})")
+            # print(f"[set_env] set {name}={'***' if 'KEY' in name or 'SECRET' in name or 'TOKEN' in name else value} (prev={prev_value})")
 
         return (any_input, applied, prev_value if prev_value is not None else "")
 
@@ -160,14 +160,14 @@ class GetEnvVar:
     @classmethod
     def get_env(self, name, default):
         if not isinstance(name, str) or len(name) == 0:
-            print("[get_env] name is empty; returning default.")
+            # print("[get_env] name is empty; returning default.")
             return (default, False)
         if _is_blocked_env(name):
             print(f"[get_env] blocked dangerous environment variable '{name}'; returning default.")
             return (default, False)
         exists = name in os.environ
         value = os.environ.get(name, default)
-        print(f"[get_env] get {name} -> {'***' if 'KEY' in name or 'SECRET' in name or 'TOKEN' in name else value} (exists={exists})")
+        # print(f"[get_env] get {name} -> {'***' if 'KEY' in name or 'SECRET' in name or 'TOKEN' in name else value} (exists={exists})")
         return (value, exists)
 
 CLAZZES = [SetEnvVar, GetEnvVar]
