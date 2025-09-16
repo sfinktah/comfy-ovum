@@ -12,8 +12,6 @@
 /** @typedef {import("@comfyorg/comfyui-frontend-types").SubgraphIO} SubgraphIO */
 /** @typedef {import('@comfyorg/comfyui-frontend-types').ComfyApp} ComfyApp */
 /** @typedef {import("@comfyorg/comfyui-frontend-types").IWidget} IWidget */
-/** @typedef {import("@comfyorg/comfyui-frontend-types").ContextMenuItem} ContextMenuItem */
-/** @typedef {import("@comfyorg/comfyui-frontend-types").ComfyNode} ComfyNode */
 /** @typedef {import("@comfyorg/comfyui-frontend-types").Subgraph} Subgraph */
 /** @typedef {import('../01/typedefs.js').INodeInputSlot} INodeInputSlot */
 
