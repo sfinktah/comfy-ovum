@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>File System Access API Test – Record Dropped/Chosen File Name and Path</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
+      margin: 2rem;
+      line-height: 1.4;
+    }
+    .row {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    #dropzone {
+      border: 2px dashed #888;
+      border-radius: 10px;
+      padding: 2rem;
+      text-align: center;
+      min-height: 120px;
+      display: grid;
+      place-items: center;
+      transition: background 120ms ease, border-color 120ms ease;
+      user-select: none;
+    }
+    #dropzone.dragover {
+      background: rgba(0, 128, 255, 0.1);
+      border-color: #08f;
+    }
+    table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+    th, td {
+      border-bottom: 1px solid #4444;
+      padding: 0.5rem;
+      text-align: left;
+      vertical-align: top;
+      font-variant-numeric: tabular-nums;
+      word-break: break-all;
+    }
+    caption { text-align: left; font-weight: 600; margin-bottom: 0.5rem; }
+    .muted { opacity: 0.75; font-size: 0.95em; }
+    .support {
+      margin: 0.5rem 0 1rem 0;
+      padding: 0.5rem 0.75rem;
+      border-radius: 8px;
+      background: color-mix(in oklab, Canvas, CanvasText 5%);
+    }
+    .support code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    }
+    button {
+      padding: 0.5rem 0.75rem;
+      border: 1px solid #8886;
+      border-radius: 8px;
+      background: color-mix(in oklab, Canvas, CanvasText 3%);
+      cursor: pointer;
+    }
+    button:hover { background: color-mix(in oklab, Canvas, CanvasText 7%); }
+  </style>
+</head>
+<body>
+  <h1>File System Access API Test</h1>
+  <p class="muted">
+    Use the button to choose a folder with <code>showDirectoryPicker()</code>, or drag and drop files/folders here.
+    This page records each file's name and relative path using the File System Access API.
+  </p>
+
+  <div class="support" id="supportInfo"></div>
+
+  <div class="row" style="margin: 0.75rem 0 1rem 0;">
+    <div>
+      <button id="pickDirBtn" type="button">Pick directory</button>
+    </div>
+    <div>
+      <button id="clearBtn" type="button">Clear results</button>
+    </div>
+  </div>
+
+  <div id="dropzone" aria-label="Drop files or folders here" tabindex="0">
+    Drop files or folders here
+  </div>
+
+  <table aria-describedby="resultCaption">
+    <caption id="resultCaption">Recorded files</caption>
+    <thead>
+      <tr>
+        <th style="width: 40%;">Path</th>
+        <th style="width: 40%;">Name</th>
+        <th style="width: 20%;">Source</th>
+      </tr>
+    </thead>
+    <tbody id="results"></tbody>
+  </table>
+
+  <script>
+    const dropzone = document.getElementById('dropzone');
+    const resultsTbody = document.getElementById('results');
+    const supportInfo = document.getElementById('supportInfo');
+    const pickDirBtn = document.getElementById('pickDirBtn');
+    const clearBtn = document.getElementById('clearBtn');
+
+    // State: directories are stored separately from explicitly added files.
+    // - directories: array of { handle: FileSystemDirectoryHandle, rootLabel: string, source: string }
+    // - files: array of { handle: FileSystemFileHandle, name: string, source: string }
+    const state = {
+      directories: [],
+      files: [],
+    };
+
+    function renderSupport() {
+      const supportsShowDir = typeof window.showDirectoryPicker === 'function';
+      const supportsDTItem = typeof DataTransferItem !== 'undefined';
+      const supportsGetHandle = supportsDTItem && !!DataTransferItem.prototype.getAsFileSystemHandle;
+      const secure = !!(window.isSecureContext);
+
+      supportInfo.innerHTML = `
+        <div><strong>Support status</strong></div>
+        <ul>
+          <li><code>isSecureContext</code>: ${secure ? 'Yes' : 'No'}</li>
+          <li><code>showDirectoryPicker()</code>: ${supportsShowDir ? 'Yes' : 'No'}</li>
+          <li><code>DataTransferItem.getAsFileSystemHandle()</code>: ${supportsGetHandle ? 'Yes' : 'No'}</li>
+        </ul>
+        <div class="muted">Note: The File System Access API is available in most Chromium-based desktop browsers in secure contexts (https or localhost).</div>
+      `;
+    }
+
+    function clearResults() {
+      // Reset state and UI
+      state.directories = [];
+      state.files = [];
+      resultsTbody.innerHTML = '';
+    }
+
+    function addResult(path, name, source) {
+      const tr = document.createElement('tr');
+      const tdPath = document.createElement('td');
+      const tdName = document.createElement('td');
+      const tdSource = document.createElement('td');
+      tdPath.textContent = path || '';
+      tdName.textContent = name || '';
+      tdSource.textContent = source || '';
+      tr.appendChild(tdPath);
+      tr.appendChild(tdName);
+      tr.appendChild(tdSource);
+      resultsTbody.appendChild(tr);
+    }
+
+    // Recursively scan a directory and collect file handles with relative paths.
+    async function scanDirectory(dirHandle, baseRel = '') {
+      const out = [];
+      for await (const [name, handle] of dirHandle.entries()) {
+        if (handle.kind === 'file') {
+          out.push({ handle, relPath: baseRel, name });
+        } else if (handle.kind === 'directory') {
+          const nested = await scanDirectory(handle, baseRel + name + '/');
+          out.push(...nested);
+        }
+      }
+      return out;
+    }
+
+    // Recompute visible rows based on state (directories scans + explicit files), then render.
+    async function recomputeAndRender() {
+      const rows = [];
+      const scanned = []; // { handle }
+
+      // Scan all stored directories
+      for (const dir of state.directories) {
+        try {
+          const entries = await scanDirectory(dir.handle, '');
+          for (const e of entries) {
+            rows.push({
+              path: (dir.rootLabel || '') + e.relPath,
+              name: e.name,
+              source: dir.source ? `${dir.source}:scan` : 'scan',
+            });
+            scanned.push({ handle: e.handle });
+          }
+        } catch (err) {
+          console.error('scanDirectory error:', err);
+        }
+      }
+
+      // Add explicit files that are not covered by any stored directory scan
+      for (const file of state.files) {
+        let covered = false;
+        for (const s of scanned) {
+          try {
+            if (await s.handle.isSameEntry(file.handle)) {
+              covered = true;
+              break;
+            }
+          } catch (err) {
+            // ignore comparison errors
+          }
+        }
+        if (!covered) {
+          rows.push({
+            path: '',
+            name: file.name,
+            source: file.source || 'file',
+          });
+        }
+      }
+
+      // Render rows
+      resultsTbody.innerHTML = '';
+      for (const r of rows) {
+        addResult(r.path, r.name, r.source);
+      }
+    }
+
+    // Add/normalize a directory: remove existing subdirectories; ignore if it is a subdir of any existing directory.
+    async function addDirectory(dirHandle, rootLabel, sourceLabel) {
+      // Ignore if same as any existing directory
+      for (const existing of state.directories) {
+        try {
+          if (await existing.handle.isSameEntry(dirHandle)) {
+            return;
+          }
+        } catch (err) {
+          // ignore compare error and continue
+        }
+      }
+
+      // Check relationships and filter existing list
+      const remaining = [];
+      let isSubdirOfExisting = false;
+
+      for (const existing of state.directories) {
+        try {
+          // If new is parent of existing -> drop existing (new will replace it)
+          const newIsParentOfExisting = await dirHandle.resolve(existing.handle);
+          if (Array.isArray(newIsParentOfExisting)) {
+            // skip pushing existing (remove it)
+            continue;
+          }
+        } catch (err) {
+          // ignore errors from resolve
+        }
+
+        try {
+          // If new is subdir of existing -> ignore new
+          const existingIsParentOfNew = await existing.handle.resolve(dirHandle);
+          if (Array.isArray(existingIsParentOfNew)) {
+            isSubdirOfExisting = true;
+            break;
+          }
+        } catch (err) {
+          // ignore errors from resolve
+        }
+
+        // keep existing by default
+        remaining.push(existing);
+      }
+
+      if (isSubdirOfExisting) {
+        // Nothing to change; existing parent already covers it
+        await recomputeAndRender();
+        return;
+      }
+
+      state.directories = remaining;
+      state.directories.push({ handle: dirHandle, rootLabel: rootLabel || '', source: sourceLabel || 'dir' });
+
+      await recomputeAndRender();
+    }
+
+    // Add a single file if not already present
+    async function addFile(fileHandle, sourceLabel) {
+      for (const existing of state.files) {
+        try {
+          if (await existing.handle.isSameEntry(fileHandle)) {
+            return; // already tracked
+          }
+        } catch (err) {
+          // ignore compare error and continue
+        }
+      }
+      state.files.push({ handle: fileHandle, name: fileHandle.name, source: sourceLabel || 'file' });
+      await recomputeAndRender();
+    }
+
+    // Button: showDirectoryPicker -> track directory (paths relative to root: no root label)
+    async function pickDirectory() {
+      if (typeof window.showDirectoryPicker !== 'function') {
+        alert('showDirectoryPicker() is not supported in this browser.');
+        return;
+      }
+      try {
+        const dirHandle = await window.showDirectoryPicker({ id: 'fs-access-test', mode: 'read' });
+        // For a user-picked directory we record paths relative to the root (no root folder name prefix)
+        await addDirectory(dirHandle, '', 'picker');
+      } catch (err) {
+        if (err && err.name === 'AbortError') {
+          // User canceled; ignore silently
+          return;
+        }
+        console.error('showDirectoryPicker error:', err);
+      }
+    }
+
+    // Drag-and-drop using DataTransferItem.getAsFileSystemHandle()
+    async function handleDrop(event) {
+      event.preventDefault();
+      event.stopPropagation();
+      dropzone.classList.remove('dragover');
+
+      const dt = event.dataTransfer;
+      const items = dt && dt.items ? Array.from(dt.items) : [];
+      const tasks = [];
+
+      for (const item of items) {
+        if (item.kind !== 'file') continue;
+        const getter = item.getAsFileSystemHandle;
+        if (typeof getter !== 'function') continue;
+
+        tasks.push((async () => {
+          try {
+            const handle = await item.getAsFileSystemHandle();
+            if (!handle) return;
+
+            if (handle.kind === 'file') {
+              await addFile(handle, 'drop(handles)');
+            } else if (handle.kind === 'directory') {
+              // Include the root directory name for dropped folders
+              await addDirectory(handle, handle.name + '/', 'drop(handles)');
+            }
+          } catch (err) {
+            console.error('getAsFileSystemHandle error:', err);
+          }
+        })());
+      }
+
+      await Promise.all(tasks);
+    }
+
+    function handleDragOver(event) {
+      event.preventDefault();
+      event.stopPropagation();
+      dropzone.classList.add('dragover');
+    }
+
+    function handleDragLeave(event) {
+      event.preventDefault();
+      event.stopPropagation();
+      dropzone.classList.remove('dragover');
+    }
+
+    // Wire up events
+    pickDirBtn.addEventListener('click', pickDirectory);
+    clearBtn.addEventListener('click', clearResults);
+
+    dropzone.addEventListener('dragenter', handleDragOver);
+    dropzone.addEventListener('dragover', handleDragOver);
+    dropzone.addEventListener('dragleave', handleDragLeave);
+    dropzone.addEventListener('drop', handleDrop);
+
+    // Prevent the browser from opening files when dropped outside the dropzone
+    window.addEventListener('dragover', (e) => { e.preventDefault(); });
+    window.addEventListener('drop', (e) => { e.preventDefault(); });
+
+    renderSupport();
+  </script>
+</body>
+</html>
