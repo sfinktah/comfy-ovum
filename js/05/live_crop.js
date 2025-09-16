@@ -11,29 +11,34 @@ function drawGuides(ctx, w, h, params) {
     ctx.strokeStyle = "rgba(255,0,0,0.85)";
     ctx.lineWidth = 2;
 
-    // Negative -> crop inward; Positive -> expand outward (draw at border extents)
-    // We visualize the crop lines within the original image area.
-    const topY = top < 0 ? Math.round(Math.abs(top) * h) : 0;
-    const bottomY = bottom < 0 ? Math.round(h - Math.abs(bottom) * h) : h;
-    const leftX = left < 0 ? Math.round(Math.abs(left) * w) : 0;
-    const rightX = right < 0 ? Math.round(w - Math.abs(right) * w) : w;
+    // Only draw lines for negative (crop) values
+    ctx.beginPath();
 
     // Horizontal lines (top & bottom crop boundaries)
-    ctx.beginPath();
-    ctx.moveTo(0, topY);
-    ctx.lineTo(w, topY);
-    ctx.moveTo(0, bottomY);
-    ctx.lineTo(w, bottomY);
-    ctx.stroke();
+    if (top < 0) {
+        const topY = Math.round(Math.abs(top) * h);
+        ctx.moveTo(0, topY);
+        ctx.lineTo(w, topY);
+    }
+    if (bottom < 0) {
+        const bottomY = Math.round(h - Math.abs(bottom) * h);
+        ctx.moveTo(0, bottomY);
+        ctx.lineTo(w, bottomY);
+    }
 
     // Vertical lines (left & right crop boundaries)
-    ctx.beginPath();
-    ctx.moveTo(leftX, 0);
-    ctx.lineTo(leftX, h);
-    ctx.moveTo(rightX, 0);
-    ctx.lineTo(rightX, h);
-    ctx.stroke();
+    if (left < 0) {
+        const leftX = Math.round(Math.abs(left) * w);
+        ctx.moveTo(leftX, 0);
+        ctx.lineTo(leftX, h);
+    }
+    if (right < 0) {
+        const rightX = Math.round(w - Math.abs(right) * w);
+        ctx.moveTo(rightX, 0);
+        ctx.lineTo(rightX, h);
+    }
 
+    ctx.stroke();
     ctx.restore();
 }
 
@@ -104,6 +109,80 @@ app.registerExtension({
                 overlay.width = 1;
                 overlay.height = 1;
                 container.appendChild(overlay);
+
+                // Add drag state tracking
+                this._livecrop_drag = {
+                    isDragging: false,
+                    dragType: null, // 'top', 'bottom', 'left', 'right'
+                    startY: 0,
+                    startX: 0,
+                    startValue: 0,
+                    imageArea: null // will store the current image area for hit detection
+                };
+
+                // Add mouse event handlers for dragging
+                overlay.addEventListener('mousedown', (e) => {
+                    e.preventDefault();
+                    const rect = overlay.getBoundingClientRect();
+                    const scale = app.canvas.ds?.scale || 1;
+                    const comp = (typeof window !== "undefined" ? (window.LiveCropLeftComp || 0) : 0);
+                    const x = (e.clientX - rect.left + comp) / scale;
+                    const y = (e.clientY - rect.top) / scale;
+
+                    // Check if we clicked on a crop line
+                    const dragType = this._livecrop_hitTest(x, y);
+                    if (dragType) {
+                        this._livecrop_drag.isDragging = true;
+                        this._livecrop_drag.dragType = dragType;
+                        this._livecrop_drag.startX = x;
+                        this._livecrop_drag.startY = y;
+
+                        // Get current widget value
+                        const widget = this.widgets.find(w => w.name === `crop_${dragType}`);
+                        this._livecrop_drag.startValue = widget ? widget.value : 0;
+
+                        overlay.style.cursor = (dragType === 'top' || dragType === 'bottom') ? 'ns-resize' : 'ew-resize';
+                        document.addEventListener('mousemove', this._livecrop_onMouseMove);
+                        document.addEventListener('mouseup', this._livecrop_onMouseUp);
+                    }
+                });
+
+                overlay.addEventListener('mousemove', (e) => {
+                    if (!this._livecrop_drag.isDragging) {
+                        const rect = overlay.getBoundingClientRect();
+                        const scale = app.canvas.ds?.scale || 1;
+                        const comp = (typeof window !== "undefined" ? (window.LiveCropLeftComp || 0) : 0);
+                        const x = (e.clientX - rect.left + comp) / scale;
+                        const y = (e.clientY - rect.top) / scale;
+                        const dragType = this._livecrop_hitTest(x, y);
+                        overlay.style.cursor = dragType ?
+                            ((dragType === 'top' || dragType === 'bottom') ? 'ns-resize' : 'ew-resize') :
+                            'default';
+                    }
+                });
+
+                // Bind mouse event handlers to this node context
+                this._livecrop_onMouseMove = (e) => {
+                    if (!this._livecrop_drag.isDragging) return;
+
+                    const rect = overlay.getBoundingClientRect();
+                    const scale = app.canvas.ds?.scale || 1;
+                    const comp = (typeof window !== "undefined" ? (window.LiveCropLeftComp || 0) : 0);
+                    const x = (e.clientX - rect.left + comp) / scale;
+                    const y = (e.clientY - rect.top) / scale;
+
+                    this._livecrop_updateDrag(x, y);
+                };
+
+                this._livecrop_onMouseUp = (e) => {
+                    if (this._livecrop_drag.isDragging) {
+                        this._livecrop_drag.isDragging = false;
+                        this._livecrop_drag.dragType = null;
+                        overlay.style.cursor = 'default';
+                        document.removeEventListener('mousemove', this._livecrop_onMouseMove);
+                        document.removeEventListener('mouseup', this._livecrop_onMouseUp);
+                    }
+                };
 
                 Logger.log({
                     class: 'LiveCrop',
@@ -260,6 +339,34 @@ app.registerExtension({
                         y += dh + SPACING;
                         if (y > H) break;
                     }
+
+                    // Store image area information for hit testing (use first image)
+                    if (imgs.length > 0) {
+                        const firstEntry = imgs[0];
+                        const iw = firstEntry.w, ih = firstEntry.h;
+                        const scale = Math.min(W / iw, H / ih, 1);
+                        const dw = Math.max(1, Math.round(iw * scale));
+                        const dh = Math.max(1, Math.round(ih * scale));
+                        const dx = Math.floor((W - dw) / 2);
+                        const dy = 0;
+
+                        // Convert to element coordinates for mouse interaction
+                        const cont = this._livecrop?.container;
+                        const elementW = cont ? cont.clientWidth : W;
+                        const elementH = cont ? cont.clientHeight : H;
+                        const scaleX = elementW / W;
+                        const scaleY = elementH / H;
+
+                        // Account for left compensation offset
+                        const comp = (typeof window !== "undefined" ? (window.LiveCropLeftComp || 0) : 0);
+
+                        this._livecrop_drag.imageArea = { 
+                            dx: dx * scaleX + comp, 
+                            dy: dy * scaleY, 
+                            dw: dw * scaleX, 
+                            dh: dh * scaleY 
+                        };
+                    }
                 } catch (e) {
                     Logger.log({
                         class: 'LiveCrop',
@@ -272,6 +379,86 @@ app.registerExtension({
                         nodeId: this.id,
                         overlayExists: !!this._livecrop?.overlay
                     });
+                }
+            };
+
+            // Hit testing for crop lines
+            this._livecrop_hitTest = (x, y) => {
+                if (!this._livecrop_drag.imageArea) return null;
+
+                const { dx, dy, dw, dh } = this._livecrop_drag.imageArea;
+                const get = (name, def) => {
+                    const w = (this.widgets || []).find(w => w && w.name === name);
+                    return (typeof w?.value === 'number') ? w.value : def;
+                }
+
+                const top = get("crop_top", 0);
+                const bottom = get("crop_bottom", 0);
+                const left = get("crop_left", 0);
+                const right = get("crop_right", 0);
+
+                // Calculate line positions (only negative values create visible lines)
+                const topY = top < 0 ? dy + Math.round(Math.abs(top) * dh) : dy;
+                const bottomY = bottom < 0 ? dy + Math.round(dh - Math.abs(bottom) * dh) : dy + dh;
+                const leftX = left < 0 ? dx + Math.round(Math.abs(left) * dw) : dx;
+                const rightX = right < 0 ? dx + Math.round(dw - Math.abs(right) * dw) : dx + dw;
+
+                const tolerance = 8; // pixels
+
+                // Check horizontal lines
+                if (Math.abs(y - topY) <= tolerance && x >= dx && x <= dx + dw && top < 0) {
+                    return 'top';
+                }
+                if (Math.abs(y - bottomY) <= tolerance && x >= dx && x <= dx + dw && bottom < 0) {
+                    return 'bottom';
+                }
+
+                // Check vertical lines
+                if (Math.abs(x - leftX) <= tolerance && y >= dy && y <= dy + dh && left < 0) {
+                    return 'left';
+                }
+                if (Math.abs(x - rightX) <= tolerance && y >= dy && y <= dy + dh && right < 0) {
+                    return 'right';
+                }
+
+                return null;
+            };
+
+            // Update drag operation
+            this._livecrop_updateDrag = (x, y) => {
+                if (!this._livecrop_drag.imageArea) return;
+
+                const { dx, dy, dw, dh } = this._livecrop_drag.imageArea;
+                const { dragType, startX, startY, startValue } = this._livecrop_drag;
+
+                let newValue = startValue;
+
+                if (dragType === 'top') {
+                    const deltaY = y - startY;
+                    const relativeDelta = deltaY / dh;
+                    newValue = Math.max(-1, Math.min(0, startValue - relativeDelta));
+                } else if (dragType === 'bottom') {
+                    const deltaY = y - startY;
+                    const relativeDelta = deltaY / dh;
+                    newValue = Math.max(-1, Math.min(0, startValue + relativeDelta));
+                } else if (dragType === 'left') {
+                    const deltaX = x - startX;
+                    const relativeDelta = deltaX / dw;
+                    newValue = Math.max(-1, Math.min(0, startValue - relativeDelta));
+                } else if (dragType === 'right') {
+                    const deltaX = x - startX;
+                    const relativeDelta = deltaX / dw;
+                    newValue = Math.max(-1, Math.min(0, startValue + relativeDelta));
+                }
+
+                // Update the widget
+                const widget = this.widgets.find(w => w.name === `crop_${dragType}`);
+                if (widget && widget.value !== newValue) {
+                    widget.value = Math.round(newValue * 100) / 100; // Round to 2 decimal places
+                    if (widget.callback) {
+                        widget.callback(widget.value, null, this);
+                    }
+                    this._livecrop_redraw();
                 }
             };
 
