@@ -314,15 +314,19 @@ app.registerExtension({
                     const left = get("crop_left", 0);
                     const right = get("crop_right", 0);
 
-                    // Layout: stack vertically up to 3 images with spacing
+                    // Layout: stack vertically up to 3 images with spacing, each maintaining aspect ratio
                     const SPACING = 6;
+                    const maxDisplayWidth = Math.min(W, 512); // Cap display width
                     let y = 0;
-                    for (const entry of imgs.slice(0, 3)) {
+                    const imageAreas = []; // Store all image areas for hit testing
+
+                    for (let i = 0; i < imgs.slice(0, 3).length; i++) {
+                        const entry = imgs[i];
                         const bg = entry.img;
                         const iw = entry.w, ih = entry.h;
 
-                        // Scale to fit width; height constrained by remaining H
-                        const scale = Math.min(W / iw, H / ih, 1);
+                        // Scale each image individually to fit available width while maintaining aspect ratio
+                        const scale = Math.min(maxDisplayWidth / iw, (H - y) / ih, 1);
                         const dw = Math.max(1, Math.round(iw * scale));
                         const dh = Math.max(1, Math.round(ih * scale));
                         const dx = Math.floor((W - dw) / 2);
@@ -336,20 +340,15 @@ app.registerExtension({
                         drawGuides(ctx, dw, dh, { top, bottom, left, right });
                         ctx.restore();
 
+                        // Store this image's area for hit testing
+                        imageAreas.push({ dx, dy, dw, dh, index: i });
+
                         y += dh + SPACING;
                         if (y > H) break;
                     }
 
-                    // Store image area information for hit testing (use first image)
-                    if (imgs.length > 0) {
-                        const firstEntry = imgs[0];
-                        const iw = firstEntry.w, ih = firstEntry.h;
-                        const scale = Math.min(W / iw, H / ih, 1);
-                        const dw = Math.max(1, Math.round(iw * scale));
-                        const dh = Math.max(1, Math.round(ih * scale));
-                        const dx = Math.floor((W - dw) / 2);
-                        const dy = 0;
-
+                    // Store image areas information for hit testing (use all images)
+                    if (imageAreas.length > 0) {
                         // Convert to element coordinates for mouse interaction
                         const cont = this._livecrop?.container;
                         const elementW = cont ? cont.clientWidth : W;
@@ -357,15 +356,20 @@ app.registerExtension({
                         const scaleX = elementW / W;
                         const scaleY = elementH / H;
 
-                        // Account for left compensation offset
+                        // Account for left compensation offset with proper scaling
                         const comp = (typeof window !== "undefined" ? (window.LiveCropLeftComp || 0) : 0);
+                        const scaledComp = comp * scaleX;
 
-                        this._livecrop_drag.imageArea = { 
-                            dx: dx * scaleX + comp, 
-                            dy: dy * scaleY, 
-                            dw: dw * scaleX, 
-                            dh: dh * scaleY 
-                        };
+                        this._livecrop_drag.imageAreas = imageAreas.map(area => ({
+                            dx: area.dx * scaleX + scaledComp,
+                            dy: area.dy * scaleY,
+                            dw: area.dw * scaleX,
+                            dh: area.dh * scaleY,
+                            index: area.index
+                        }));
+
+                        // Keep first image area for backward compatibility
+                        this._livecrop_drag.imageArea = this._livecrop_drag.imageAreas[0];
                     }
                 } catch (e) {
                     Logger.log({
@@ -384,9 +388,9 @@ app.registerExtension({
 
             // Hit testing for crop lines
             this._livecrop_hitTest = (x, y) => {
-                if (!this._livecrop_drag.imageArea) return null;
+                const imageAreas = this._livecrop_drag.imageAreas || (this._livecrop_drag.imageArea ? [this._livecrop_drag.imageArea] : []);
+                if (!imageAreas.length) return null;
 
-                const { dx, dy, dw, dh } = this._livecrop_drag.imageArea;
                 const get = (name, def) => {
                     const w = (this.widgets || []).find(w => w && w.name === name);
                     return (typeof w?.value === 'number') ? w.value : def;
@@ -397,28 +401,43 @@ app.registerExtension({
                 const left = get("crop_left", 0);
                 const right = get("crop_right", 0);
 
-                // Calculate line positions (only negative values create visible lines)
-                const topY = top < 0 ? dy + Math.round(Math.abs(top) * dh) : dy;
-                const bottomY = bottom < 0 ? dy + Math.round(dh - Math.abs(bottom) * dh) : dy + dh;
-                const leftX = left < 0 ? dx + Math.round(Math.abs(left) * dw) : dx;
-                const rightX = right < 0 ? dx + Math.round(dw - Math.abs(right) * dw) : dx + dw;
-
                 const tolerance = 8; // pixels
 
-                // Check horizontal lines
-                if (Math.abs(y - topY) <= tolerance && x >= dx && x <= dx + dw && top < 0) {
-                    return 'top';
-                }
-                if (Math.abs(y - bottomY) <= tolerance && x >= dx && x <= dx + dw && bottom < 0) {
-                    return 'bottom';
-                }
+                // Check all image areas
+                for (const area of imageAreas) {
+                    const { dx, dy, dw, dh } = area;
 
-                // Check vertical lines
-                if (Math.abs(x - leftX) <= tolerance && y >= dy && y <= dy + dh && left < 0) {
-                    return 'left';
-                }
-                if (Math.abs(x - rightX) <= tolerance && y >= dy && y <= dy + dh && right < 0) {
-                    return 'right';
+                    // Skip if point is not within this image area bounds (with tolerance)
+                    if (x < dx - tolerance || x > dx + dw + tolerance || y < dy - tolerance || y > dy + dh + tolerance) {
+                        continue;
+                    }
+
+                    // Calculate line positions
+                    const topY = top < 0 ? dy + Math.round(Math.abs(top) * dh) : dy;
+                    const bottomY = bottom < 0 ? dy + Math.round(dh - Math.abs(bottom) * dh) : dy + dh;
+                    const leftX = left < 0 ? dx + Math.round(Math.abs(left) * dw) : dx;
+                    const rightX = right < 0 ? dx + Math.round(dw - Math.abs(right) * dw) : dx + dw;
+
+                    // Check horizontal lines (existing crop lines or image edges)
+                    if (Math.abs(y - topY) <= tolerance && x >= dx && x <= dx + dw) {
+                        // Store which image area was hit for drag operations
+                        this._livecrop_drag.activeImageArea = area;
+                        return 'top';
+                    }
+                    if (Math.abs(y - bottomY) <= tolerance && x >= dx && x <= dx + dw) {
+                        this._livecrop_drag.activeImageArea = area;
+                        return 'bottom';
+                    }
+
+                    // Check vertical lines (existing crop lines or image edges)
+                    if (Math.abs(x - leftX) <= tolerance && y >= dy && y <= dy + dh) {
+                        this._livecrop_drag.activeImageArea = area;
+                        return 'left';
+                    }
+                    if (Math.abs(x - rightX) <= tolerance && y >= dy && y <= dy + dh) {
+                        this._livecrop_drag.activeImageArea = area;
+                        return 'right';
+                    }
                 }
 
                 return null;
@@ -426,29 +445,57 @@ app.registerExtension({
 
             // Update drag operation
             this._livecrop_updateDrag = (x, y) => {
-                if (!this._livecrop_drag.imageArea) return;
+                const activeArea = this._livecrop_drag.activeImageArea || this._livecrop_drag.imageArea;
+                if (!activeArea) return;
 
-                const { dx, dy, dw, dh } = this._livecrop_drag.imageArea;
+                const { dx, dy, dw, dh } = activeArea;
                 const { dragType, startX, startY, startValue } = this._livecrop_drag;
+
+                const get = (name, def) => {
+                    const w = (this.widgets || []).find(w => w && w.name === name);
+                    return (typeof w?.value === 'number') ? w.value : def;
+                }
+
+                const minRemaining = 0.1; // At least 10% of image must remain
 
                 let newValue = startValue;
 
                 if (dragType === 'top') {
                     const deltaY = y - startY;
                     const relativeDelta = deltaY / dh;
-                    newValue = Math.max(-1, Math.min(0, startValue - relativeDelta));
+                    const unconstrained = startValue - relativeDelta;
+                    const bottomValue = get("crop_bottom", 0);
+                    // Ensure abs(top) + abs(bottom) <= 1 - minRemaining
+                    const maxTopCrop = (1 - minRemaining) - Math.abs(bottomValue);
+                    const maxTop = -maxTopCrop;
+                    newValue = Math.max(-1, Math.min(0, Math.max(maxTop, unconstrained)));
                 } else if (dragType === 'bottom') {
                     const deltaY = y - startY;
                     const relativeDelta = deltaY / dh;
-                    newValue = Math.max(-1, Math.min(0, startValue + relativeDelta));
+                    const unconstrained = startValue + relativeDelta;
+                    const topValue = get("crop_top", 0);
+                    // Ensure abs(top) + abs(bottom) <= 1 - minRemaining
+                    const maxBottomCrop = (1 - minRemaining) - Math.abs(topValue);
+                    const maxBottom = -maxBottomCrop;
+                    newValue = Math.max(-1, Math.min(0, Math.max(maxBottom, unconstrained)));
                 } else if (dragType === 'left') {
                     const deltaX = x - startX;
                     const relativeDelta = deltaX / dw;
-                    newValue = Math.max(-1, Math.min(0, startValue - relativeDelta));
+                    const unconstrained = startValue - relativeDelta;
+                    const rightValue = get("crop_right", 0);
+                    // Ensure abs(left) + abs(right) <= 1 - minRemaining
+                    const maxLeftCrop = (1 - minRemaining) - Math.abs(rightValue);
+                    const maxLeft = -maxLeftCrop;
+                    newValue = Math.max(-1, Math.min(0, Math.max(maxLeft, unconstrained)));
                 } else if (dragType === 'right') {
                     const deltaX = x - startX;
                     const relativeDelta = deltaX / dw;
-                    newValue = Math.max(-1, Math.min(0, startValue + relativeDelta));
+                    const unconstrained = startValue + relativeDelta;
+                    const leftValue = get("crop_left", 0);
+                    // Ensure abs(left) + abs(right) <= 1 - minRemaining
+                    const maxRightCrop = (1 - minRemaining) - Math.abs(leftValue);
+                    const maxRight = -maxRightCrop;
+                    newValue = Math.max(-1, Math.min(0, Math.max(maxRight, unconstrained)));
                 }
 
                 // Update the widget
