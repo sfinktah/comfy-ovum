@@ -1,7 +1,7 @@
 [project]
 name = "ovum"
 description = "An assorted reliquary of nodes: mismatched, stubborn, and deliberately indistinct; they do what is required; do not ask for particulars."
-version = "1.0.119"
+version = "1.0.120"
 license = {file = "LICENSE"}
 
 [project.urls]

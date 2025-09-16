@@ -122,15 +122,15 @@ def _flatten_mask_like(mask):
 class LiveCrop:
     NAME = "Live Crop"
     DESCRIPTION = (
-        "Visually crop and expand an image with interactive guides.\n\n"
-        "Use sliders (or drag the guides in the node UI) to set crop amounts.\n"
-        "Negative values crop from that side; positive values add padding on that side.\n\n"
+        "Visually crop an image with interactive guides.\n\n"
+        "Use sliders or drag the red guides in the node UI to set crop amounts.\n"
+        "Negative values crop from that side.\n\n"
         "Semantics (per side):\n"
-        "- crop_top < 0: removes |value|*height from top. crop_top > 0: pads that many pixels fraction with white.\n"
-        "- crop_bottom < 0: removes |value|*height from bottom. crop_bottom > 0: pads bottom.\n"
-        "- crop_left < 0: removes |value|*width from left. crop_left > 0: pads left.\n"
-        "- crop_right < 0: removes |value|*width from right. crop_right > 0: pads right.\n"
-        "All crop/expand parameters are in the range [-1, 1], representing a fraction of the original dimension."
+        "- crop_top < 0: removes |value|*height from top.\n"
+        "- crop_bottom < 0: removes |value|*height from bottom.\n"
+        "- crop_left < 0: removes |value|*width from left.\n"
+        "- crop_right < 0: removes |value|*width from right.\n"
+        "All crop parameters are in the range [-1, 0], representing a fraction of the original dimension."
     )
 
     CATEGORY = "ovum"
@@ -142,10 +142,10 @@ class LiveCrop:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "crop_top": ("FLOAT", {"default": 0.0, "min": -1.0, "max": 1.0, "step": 0.01, "display": "slider", "tooltip": "Negative crops, positive expands (top)."}),
-                "crop_bottom": ("FLOAT", {"default": 0.0, "min": -1.0, "max": 1.0, "step": 0.01, "display": "slider", "tooltip": "Negative crops, positive expands (bottom)."}),
-                "crop_left": ("FLOAT", {"default": 0.0, "min": -1.0, "max": 1.0, "step": 0.01, "display": "slider", "tooltip": "Negative crops, positive expands (left)."}),
-                "crop_right": ("FLOAT", {"default": 0.0, "min": -1.0, "max": 1.0, "step": 0.01, "display": "slider", "tooltip": "Negative crops, positive expands (right)."}),
+                "crop_top": ("FLOAT", {"default": 0.0, "min": -1.0, "max": 0.0, "step": 0.01, "display": "slider", "tooltip": "Negative values crop from top."}),
+                "crop_bottom": ("FLOAT", {"default": 0.0, "min": -1.0, "max": 0.0, "step": 0.01, "display": "slider", "tooltip": "Negative values crop from bottom."}),
+                "crop_left": ("FLOAT", {"default": 0.0, "min": -1.0, "max": 0.0, "step": 0.01, "display": "slider", "tooltip": "Negative values crop from left."}),
+                "crop_right": ("FLOAT", {"default": 0.0, "min": -1.0, "max": 0.0, "step": 0.01, "display": "slider", "tooltip": "Negative values crop from right."}),
             },
             "optional": {
                 "image": ("IMAGE",),
@@ -156,28 +156,14 @@ class LiveCrop:
     @staticmethod
     def _crop_expand_rotate(img: Image.Image, crop_top: float, crop_bottom: float, crop_left: float, crop_right: float, is_mask: bool = False) -> Image.Image:
         width, height = img.size
-        # Cropping when negative values
+        # Only cropping (negative values only)
         left = int(width * abs(crop_left)) if crop_left < 0 else 0
         right = width - int(width * abs(crop_right)) if crop_right < 0 else width
         top = int(height * abs(crop_top)) if crop_top < 0 else 0
         bottom = height - int(height * abs(crop_bottom)) if crop_bottom < 0 else height
         img = img.crop((left, top, right, bottom))
 
-        # Expanding when positive values (use white for image, 255 for mask)
-        if crop_top > 0:
-            pad = int(height * crop_top)
-            img = ImageOps.expand(img, border=(0, pad, 0, 0), fill=(255 if is_mask else (255, 255, 255)))
-        if crop_bottom > 0:
-            pad = int(height * crop_bottom)
-            img = ImageOps.expand(img, border=(0, 0, 0, pad), fill=(255 if is_mask else (255, 255, 255)))
-        if crop_left > 0:
-            pad = int(width * crop_left)
-            img = ImageOps.expand(img, border=(pad, 0, 0, 0), fill=(255 if is_mask else (255, 255, 255)))
-        if crop_right > 0:
-            pad = int(width * crop_right)
-            img = ImageOps.expand(img, border=(0, 0, pad, 0), fill=(255 if is_mask else (255, 255, 255)))
-
-        # No rotation applied (rotation functionality removed)
+        # No padding or rotation applied
         return img
 
     def apply(self, crop_top, crop_bottom, crop_left, crop_right, image=None, mask=None):
