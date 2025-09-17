@@ -3,7 +3,8 @@
 Some custom nodes for Comfy that I just couldn't live without.  Some have come
 from other packages that were annoyingly hard to find, some have been improved
 from other peoples' work who don't accept PR requests, some have been made
-by me, and one has been made entirely by AI.
+by me, and one has been made entirely by AI (but basically had to be rewritten
+afterwards).
 
 ## Twin Connectors: SetTwinNodes and GetTwinNodes
 
@@ -19,18 +20,19 @@ All the functionality of Kijai's Set/Get nodes, easier to use than easyUse SetNo
 - GetTwinNodes presents matching outputs, selected via lightweight “constant” widgets. You pick the names you care about; the node provides outputs of the corresponding types.
 
 What makes them useful:
-- Clean labels over raw types: when a link is attached, constants and slots can inherit human-friendly labels from the connected endpoints; titles are built from the chosen constants.
-- Provisional naming: when a Get node learns a name from a downstream connection that does not yet exist on any Set, it marks the constant with an asterisk to signal “choose a valid source later.” When the matching Set appears, the names reconcile automatically.
+- They work in subgraphs!
+- ~Clean labels over raw types: when a link is attached, constants and slots can inherit human-friendly labels from the connected endpoints; titles are built from the chosen constants.~
+- ~Provisional naming: when a Get node learns a name from a downstream connection that does not yet exist on any Set, it marks the constant with an asterisk to signal “choose a valid source later.” When the matching Set appears, the names reconcile automatically.~
 - Works in either order: you can drop a Get first and wire it to a consumer; later, when a Set of the right type appears, the system can adopt the better name and update labels across the link.
-- Sensible colorization: nodes can colorize based on the first connected, typed slot to give fast visual feedback while keeping the graph readable.
-- Serialization-safe: saved widget values and output types are respected on load; no surprise re-labelling.
-- Ergonomic pairing: when you pick one constant and the system recognizes an associated partner, it can suggest or create the companion slot automatically; if it can’t, it still creates a second empty selector so you can complete the pair manually.
-- Tunneling without surprises: existing links remain valid as long as types line up; invalid links are pruned in-place to prevent hard-to-debug mismatches.
+- Sensible colorization: nodes can colorize based on the first two connected, typed slots to give fast visual feedback while keeping the graph readable.
+- Serialization-safe: saved widget values and output types are respected on load; no surprise re-labelling. (Mostly)
+- ~Ergonomic pairing: when you pick one constant and the system recognizes an associated partner, it can suggest or create the companion slot automatically; if it can’t, it still creates a second empty selector so you can complete the pair manually.~
+- Tunneling without surprises: instant graphic feedback warns of setters with no getters.
 
 How to use:
 1. Drop a SetTwinNodes near your sources and connect any values you want to “publish.” Give each constant a clear name (e.g., width, height, start_image). The node mirrors types to its outputs and propagates names to matching Gets.
 2. Drop a GetTwinNodes near your consumers and pick the same constant names to “subscribe.” If you connect the Get to a consumer before a matching Set exists, it will note your intent and reconcile once a suitable Set appears.
-3. Rename safely: titles and labels follow your constants; if a label equals its raw type (a “lame name”), later Set connections can adopt a better name from a compatible Get to keep the graph readable.
+3. Rename safely: titles and labels follow your constants (sometimes); if a label equals its raw type (a “lame name”), later Set connections can adopt a better name from a compatible Get to keep the graph readable.
 4. Toggle “Show connections” from the node menu to visualize virtual links between Sets and Gets without adding extra wires.
 
 These nodes are meant to keep large graphs navigable while preserving intent through names, not just types. They are deliberately forgiving when you work top-down or bottom-up, and they do their best to stay out of your way once you’ve chosen the labels that make sense in your workflow.
@@ -129,6 +131,12 @@ Use cases:
 
 ## Timer
 
+How long does the workflow spend in each node?
+
+Somewhat rough around the edges with a number of confusing buttons and inputs (thankfully you can ignore them all), but a useful tool for timing and debugging.
+
+![Timer: screenshot](resources/timer.png)
+
 ## Live Crop (interactive)
 
 Visually crop, expand, and rotate an image with interactive guides rendered directly in the node.
@@ -136,17 +144,13 @@ Visually crop, expand, and rotate an image with interactive guides rendered dire
 - Inputs:
   - crop_top, crop_bottom, crop_left, crop_right (FLOAT [-1..1]):
     - Negative: crops that fraction of the original dimension from that side (e.g., -0.1 removes 10% from that edge).
-    - Positive: expands/pads that fraction with white on that side (e.g., +0.1 adds 10% of the original dimension).
-  - rotation (FLOAT [-180..180]): rotation in degrees; applied after crop/expand. Clockwise positive in UI.
   - image (IMAGE, optional), mask (MASK, optional): both are processed with the same operations; masks use white=255 for padding.
 - Outputs: IMAGE, MASK
-- UI: The node shows a preview of the incoming image with red lines indicating where the crop will occur. Adjust the sliders to see the guides update. (Dragging the guides is planned.)
+- UI: The node shows a preview of the incoming image(s) with red lines indicating where the crop will occur. Adjust the sliders or drag the guides (think: Photoshop rulers) to update.
 
 Notes:
 - When no image is connected, the node returns None; when connected, the preview is downscaled for responsiveness.
-- Rotation uses PIL’s rotate with expand and a white fill (255 for masks).
-
-How long does the workflow spend in each node?
+- Multiple images/batches supported, allowing you crop as you go: adjust the cropping for the second image, which will be the first image by the time the next workflow executes.
 
 ## Environment Bridge: Set Environment Variable and Get Environment Variable
 
@@ -275,7 +279,7 @@ These nodes are complementary to the excellent collection at https://github.com/
   - Output:
     - STRING: Joined string.
 
-- XRange (alpha, possible issues with stop being inclusive)
+- XRange
   - What it does: Python-like xrange/range iterator without generators. Outputs current value, full list, and a boolean flag for exhausted/looped.
   - Inputs:
     - stop (INT): End (exclusive). Required.
@@ -290,4 +294,30 @@ These nodes are complementary to the excellent collection at https://github.com/
     - BOOLEAN: exhausted_or_looped — true when the range is exhausted (with repeat disabled) or when it loops (with repeat enabled).
   - Notes:
     - Negative steps are supported exactly like Python range. If the computed range is empty, the list is empty and the flag is true; current value returns 0.
+
+## Open Output via Shell (secure)
+
+Safely open your rendered media with the system’s default app—no fragile shell strings, no workflow‑stopping errors.
+
+Why you’ll like it:
+- Validates the path exists and is a regular file before trying to open it.
+- Accepts only image/video types (via MIME detection) to avoid launching arbitrary files.
+- Uses platform‑appropriate launchers:
+  - Windows: start " <file> (handles spaces and the window‑title quirk).
+  - macOS: open <file>
+  - Linux: xdg-open <file>
+- Secure by design: runs without a shell so spaces/quotes can’t break or inject commands.
+- Non‑fatal: any failure returns an “[ERROR] …” string; your workflow keeps going.
+
+Inputs:
+- input (any, optional passthrough): helps enforce execution order; doesn’t alter your data.
+- filename (STRING): full path to the image or video you want to open.
+
+Output:
+- STRING: a success message or an “[ERROR] …” detail you can log, display, or ignore.
+
+Tips:
+- Wire filename from your saver node to auto‑open the latest result.
+- Works well with format/concat nodes to build paths dynamically.
+- On headless systems, the open command may be unavailable; you’ll get a clear error message instead of a crash.
 

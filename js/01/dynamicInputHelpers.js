@@ -49,7 +49,7 @@ export function ensureDynamicInputsImpl(node, isConnecting) {
             const argNumber = getInputArgNumber(input);
             if (argNumber !== logicalIndex) {
                 log({class: "formatter", method: "ensureDynamicInputsImpl", severity: "warn", tag: "input_mismatch"},
-                    `input index mismatch, renaming input #${index} from ${input.name} to arg${logicalIndex}`);
+                    `node #${node.id} input index mismatch, renaming input #${index} from ${input.name} to arg${logicalIndex}`);
                 if (input.label && (input.label.startsWith(input.name) || input.label.startsWith("arg"))) {
                     // can we just set this to empty or null or something?
                     // Yes, we can set it to undefined (null probably works, but undefined is what it actually is)
@@ -103,6 +103,6 @@ export function ensureDynamicInputsImpl(node, isConnecting) {
         }
     } catch (err) {
         log({class: "formatter", method: "ensureDynamicInputsImpl", severity: "warn", tag: "input_mismatch"},
-            `ensureDynamicInputsFailed: ${err.message}`, err.stack);
+            `node #${node.id} ensureDynamicInputsFailed: ${err.message}`, err.stack);
     }
 }

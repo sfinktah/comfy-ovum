@@ -19,7 +19,7 @@ class Knob:
     @classmethod
     def INPUT_TYPES(cls) -> Dict[str, Dict[str, Tuple[str, Dict[str, Any]]]]:
         return {
-            "required": {
+            "hidden": {
                 "value": ("FLOAT", {"default": 0.5}),
             }
         }

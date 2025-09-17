@@ -35,6 +35,7 @@ import {
 } from "../01/twinnodeHelpers.js";
 import {TwinNodes} from "../common/twinNodes.js";
 import {log} from "../common/logger.js";
+import {chainCallback} from "../01/utility.js";
 
 // mostly written by GPT-5
 // based on KJ's SetGet: https://github.com/kj-comfy/ComfyUI-extensions which was
@@ -73,8 +74,11 @@ app.registerExtension({
 
                 const node = this;
 
+
                 TwinNodes.prototype.onPropertyChanged = function(name, value, previousValue) {
                     if (name === "numberOfWidgets") {
+                        // log({ class: "GetTwinNodes", method: "onPropertyChanged", severity: "trace", tag: "function_entered" }, `onPropertyChanged ${name} = ${value}`);
+                        console.log(`onPropertyChanged ${name} = ${value}`);
                         this.numberOfWidgets = value;
                         this.numberOfOutputSlots = value;
                         if (!Array.isArray(this.properties.previousNames) || this.properties.previousNames.length < this.numberOfWidgets) {
@@ -88,13 +92,24 @@ app.registerExtension({
                 }
 
                 this.ensureGetterWidgetCount(this.numberOfWidgets);
+                ensureSlotCounts(this);
 
                 // Ensure the number of outputs matches count
-                ensureSlotCounts(this);
 
                 // Determine colors using all connected input types in order
 
                 // bit of a nasty hack
+                // this.updateTitle();
+
+
+                // This node is purely frontend and does not impact the resulting prompt so should not be serialized
+                // this.isVirtualNode = true;
+            }
+
+            /** @override */
+            /** @param {MissingNodeType[]} missingNodeTypes */
+            async afterConfigureGraph(missingNodeTypes) {
+                const node = this;
                 setTimeout(() => {
                     node.widgets.forEach((widgetValue, widgetIndex) => {
                         app.api.dispatchCustomEvent('getnode_rename', {
@@ -104,16 +119,6 @@ app.registerExtension({
                         });
                     })
                 }, 500);
-                this.updateTitle();
-
-
-                // This node is purely frontend and does not impact the resulting prompt so should not be serialized
-                this.isVirtualNode = true;
-            }
-
-            /** @override */
-            /** @param {MissingNodeType[]} missingNodeTypes */
-            async afterConfigureGraph(missingNodeTypes) {
             }
 
             // Return combined constant names from SetTwinNodes and Kijai's SetNode (prefixed)
@@ -174,7 +179,16 @@ app.registerExtension({
              * @returns {void}
              */
             onConfigure(_data) {
-                log({ class: "GetTwinNodes", method: "onConfigure", severity: "trace", tag: "function_entered" }, "[GetTwinNodes] onConfigure");
+                log({ class: "GetTwinNodes", method: "onConfigure", severity: "trace", tag: "function_entered" }, _data);
+                const widgetValues = _data?.widgets_values || [];
+                if (widgetValues.length > this.numberOfWidgets) {
+                    log({
+                        class: "GetTwinNodes",
+                        method: "onConfigure",
+                        severity: "warn",
+                        tag: "properties"
+                    }, `onConfigure: widgetValues.length (${widgetValues.length}) > numberOfWidgets (${this.numberOfWidgets}) (properties.numberOfWidgets = ${this.properties?.numberOfWidgets})`);
+                }
                 this.__restoring = true;
                 // Clear restoration flag shortly after configuration to allow normal behavior thereafter
                 setTimeout(() => { this.__restoring = false; }, 1000);
@@ -218,6 +232,16 @@ app.registerExtension({
             ) {
                 // Respect serialized data on restore: skip auto-derive during deserialization
                 log({ class: "GetTwinNodes", method: "onConnectionsChange", severity: "trace", tag: "function_entered" }, "[GetTwinNodes] onConnectionsChange");
+                const numberOfWidgets = this.properties?.numberOfWidgets;
+                if (numberOfWidgets === undefined) {
+                    log({
+                        class: "GetTwinNodes",
+                        method: "onConnectionsChange",
+                        severity: "warn",
+                        tag: "properties"
+                    }, "No 'numberOfWidgets' property found in node properties and beginning of function. Aborting rather than using a default value of 2.");
+                    return;
+                }
                 // if (this.__restoring) { log({ class: "GetTwinNodes", method: "onConnectionsChange", severity: "debug", tag: "restore_skip" }, "[GetTwinNodes] aborted due to __restoring state"); return; }
 
 
@@ -269,8 +293,16 @@ app.registerExtension({
                     const matched = findSetter(this);
                     if (matched) {
                         const needed = matched.widgets?.length || 0;
-                        const min = this.properties?.numberOfWidgets || 2;
-                        this.ensureGetterWidgetCount(Math.max(min, needed));
+                        if (numberOfWidgets === undefined) {
+                            log({
+                                class: "GetTwinNodes",
+                                method: "onConnectionsChange",
+                                severity: "warn",
+                                tag: "properties"
+                            }, "No 'numberOfWidgets' property found in node properties. Aborting rather than using a default value of 2.");
+                            return;
+                        }
+                        this.ensureGetterWidgetCount(Math.max(numberOfWidgets, needed));
                         for (let i = 0; i < needed; i++) {
                             if (!this.widgets?.[i]?.value && matched.widgets?.[i]?.value) {
                                 setWidgetValue(this, i, matched.widgets[i].value);
@@ -351,6 +383,16 @@ app.registerExtension({
             complicatedRenamingStuff() {
                 // Respect serialized data on restore: skip auto-derive during deserialization
                 log({ class: "GetTwinNodes", method: "complicatedRenamingStuff", severity: "trace", tag: "function_entered" }, "[GetTwinNodes] onRename");
+                const numberOfWidgets = this.properties?.numberOfWidgets;
+                if (numberOfWidgets === undefined) {
+                    log({
+                        class: "GetTwinNodes",
+                        method: "complicatedRenamingStuff",
+                        severity: "warn",
+                        tag: "properties"
+                    }, "No 'numberOfWidgets' property found in node properties and beginning of function. Aborting rather than using a default value of 2.");
+                    return;
+                }
                 // if (this.__restoring) { log({ class: "GetTwinNodes", method: "complicatedRenamingStuff", severity: "debug", tag: "restore_skip" }, "[GetTwinNodes] aborted due to __restoring state"); return; }
 
                 // Support "(unset)" option: clear widget value and possibly remove the first extra unset widget and its output
@@ -427,8 +469,17 @@ app.registerExtension({
                     });
 
                     // Ensure enough widgets and outputs
-                    const wNeeded = setter.node.widgets?.length || 0;
-                    this.ensureGetterWidgetCount(wNeeded || 2);
+                    const wNeeded = setter.node.widgets?.length;
+                    if (wNeeded === undefined) {
+                        log({
+                            class: "GetTwinNodes",
+                            method: "complicatedRenamingStuff",
+                            severity: "warn",
+                            tag: "properties"
+                        }, "No 'setter.node.widgets?.length'. Aborting rather than using a default value of 2.");
+                        return;
+                    }
+                    this.ensureGetterWidgetCount(wNeeded);
                     ensureSlotCounts(this);
 
                     // Autofill any empty selections from the matched setter (position-agnostic)
@@ -449,16 +500,14 @@ app.registerExtension({
                         }
                         // If only one constant is selected, ensure at least numberOfWidgets widgets exist
                         const selectedCount = Array.from(selectedVals).length;
-                        const min = this.properties?.numberOfWidgets || 2;
-                        if (selectedCount === 1 && (this.widgets?.length || 0) < min) {
-                            this.ensureGetterWidgetCount(min);
+                        if (selectedCount === 1 && (this.widgets?.length || 0) < numberOfWidgets) {
+                            this.ensureGetterWidgetCount(numberOfWidgets);
                         }
                     } else {
                         // If didUnset but we still have only one selected and have fewer than min widgets, ensure additional empty widgets
                         const valList = (this.widgets || []).map(w => safeStringTrim(w?.value)).filter(Boolean);
-                        const min = this.properties?.numberOfWidgets || 2;
-                        if (valList.length === 1 && (this.widgets?.length || 0) < min) {
-                            this.ensureGetterWidgetCount(min);
+                        if (valList.length === 1 && (this.widgets?.length || 0) < numberOfWidgets) {
+                            this.ensureGetterWidgetCount(numberOfWidgets);
                         }
                     }
 
@@ -492,9 +541,8 @@ app.registerExtension({
                     const selectedVals = (this.widgets || [])
                         .map(w => safeStringTrim(w?.value))
                         .filter(Boolean);
-                    const min = this.properties?.numberOfWidgets || 2;
-                    if (selectedVals.length === 1 && (this.widgets?.length || 0) < min) {
-                        this.ensureGetterWidgetCount(min); // adds empty widgets up to min
+                    if (selectedVals.length === 1 && (this.widgets?.length || 0) < numberOfWidgets) {
+                        this.ensureGetterWidgetCount(numberOfWidgets); // adds empty widgets up to min
                     }
 
                     ensureSlotCounts(this);
@@ -693,6 +741,20 @@ app.registerExtension({
                         callback: () => {
                             node.addAnotherWidget();
                         },
+                    },
+                    {
+                        content: "Restore constants from prevNames",
+                        callback: () => {
+                            const count = Math.min(node.properties.numberOfWidgets, node.properties.previousNames.length);
+                            for (let i = 0; i < count; i++) {
+                                if (!node.widgets[i].value && node.properties.previousNames[i]) {
+                                    setWidgetValue(node, i, node.properties.previousNames[i]);
+                                }
+                            }
+                            this.updateColors();
+                            this.updateTitle();
+                            this.serialize();
+                        }
                     },
                     {
                         content: "Go to setter",

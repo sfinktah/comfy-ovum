@@ -42,6 +42,76 @@ function drawGuides(ctx, w, h, params) {
     ctx.restore();
 }
 
+function drawImageInfo(ctx, w, h, params, originalW, originalH, divisor, gcd) {
+    const { top, bottom, left, right } = params;
+
+    // Calculate post-crop dimensions using original image size
+    const cropTop = top < 0 ? Math.abs(top) : 0;
+    const cropBottom = bottom < 0 ? Math.abs(bottom) : 0;
+    const cropLeft = left < 0 ? Math.abs(left) : 0;
+    const cropRight = right < 0 ? Math.abs(right) : 0;
+
+    // Calculate crop offsets in pixels based on original image size
+    const cropOffsetX = Math.round(originalW * cropLeft);
+    const cropOffsetY = Math.round(originalH * cropTop);
+
+    // Calculate cropped dimensions in original image space
+    const croppedW = originalW * (1 - cropLeft - cropRight);
+    const croppedH = originalH * (1 - cropTop - cropBottom);
+
+    // Calculate final cropped dimensions
+    const finalCroppedW = Math.round(croppedW);
+    const finalCroppedH = Math.round(croppedH);
+
+    // Calculate width-height ratio as float with 4 decimal precision
+    const aspectRatioFloat = (croppedW / croppedH).toFixed(4);
+
+    // Divide by divisor and round to get integer values for aspect ratio calculation
+    const aspectW = Math.round(croppedW / divisor);
+    const aspectH = Math.round(croppedH / divisor);
+
+    // Calculate GCD to reduce to lowest integers
+    const gcdValue = gcd(aspectW, aspectH);
+    const ratioW = Math.max(1, aspectW / gcdValue);
+    const ratioH = Math.max(1, aspectH / gcdValue);
+
+    const aspectRatioText = `${ratioW}:${ratioH}`;
+
+    ctx.save();
+    ctx.font = "12px Arial";
+
+    // Helper function to draw text with outline
+    const drawTextWithOutline = (text, x, y, align = "left", baseline = "top") => {
+        ctx.textAlign = align;
+        ctx.textBaseline = baseline;
+
+        // Draw black outline
+        ctx.strokeStyle = "rgba(0,0,0,0.5)";
+        ctx.lineWidth = 3;
+        ctx.strokeText(text, x, y);
+
+        // Draw white text
+        ctx.fillStyle = "white";
+        ctx.fillText(text, x, y);
+    };
+
+    // Top left: Crop offset (in original image pixels)
+    const offsetText = `${cropOffsetX}, ${cropOffsetY}`;
+    drawTextWithOutline(offsetText, 8, 8, "left", "top");
+
+    // Top right: Cropped size (in original image pixels)
+    const sizeText = `${finalCroppedW}×${finalCroppedH}`;
+    drawTextWithOutline(sizeText, w - 8, 8, "right", "top");
+
+    // Bottom right: Aspect ratio as integer ratio (based on original image)
+    drawTextWithOutline(aspectRatioText, w - 8, h - 8, "right", "bottom");
+
+    // Bottom left: Width-height ratio as float (based on original image)
+    drawTextWithOutline(aspectRatioFloat, 8, h - 8, "left", "bottom");
+
+    ctx.restore();
+}
+
 app.registerExtension({
     name: "ovum.live-crop",
     async beforeRegisterNodeDef(nodeType, nodeData) {
@@ -59,6 +129,18 @@ app.registerExtension({
         // noinspection JSUnusedLocalSymbols
         /** @type {ComfyNode} */
         const node = nodeType;
+
+        // Helper function to calculate greatest common divisor for aspect ratio reduction
+        const gcd = (a, b) => {
+            a = Math.abs(Math.round(a));
+            b = Math.abs(Math.round(b));
+            while (b !== 0) {
+                const temp = b;
+                b = a % b;
+                a = temp;
+            }
+            return a || 1;
+        };
 
         chainCallback(nodeType.prototype, "onNodeCreated", function () {
             Logger.log({
@@ -261,6 +343,14 @@ app.registerExtension({
                 this.setSize([512, 512]);
                 this.resizable = true;
 
+                // Add aspect ratio divisor widget
+                if (!this.widgets.find(w => w.name === "divisible_by")) {
+                    const divisorWidget = this.addWidget("number", "divisible_by", 32, function(v) {
+                        if (this.redraw) this.redraw();
+                    }, { min: 1, max: 512, step: 10, precision: 0 });
+                    divisorWidget.value = 32;
+                }
+
                 Logger.log({
                     class: 'LiveCrop',
                     method: 'onNodeCreated',
@@ -340,6 +430,7 @@ app.registerExtension({
                     const bottom = get("crop_bottom", 0);
                     const left = get("crop_left", 0);
                     const right = get("crop_right", 0);
+                    const aspectRatioDivisor = get("divisible_by", 32);
 
                     // Layout: stack vertically up to 3 images with spacing, each maintaining aspect ratio
                     const SPACING = 6;
@@ -365,6 +456,7 @@ app.registerExtension({
                         ctx.save();
                         ctx.translate(dx, dy);
                         drawGuides(ctx, dw, dh, { top, bottom, left, right });
+                        drawImageInfo(ctx, dw, dh, { top, bottom, left, right }, iw, ih, aspectRatioDivisor, gcd);
                         ctx.restore();
 
                         // Store this image's area for hit testing
@@ -652,7 +744,7 @@ app.registerExtension({
                 };
             }
 
-            const widgetsToHook = ["crop_top", "crop_bottom", "crop_left", "crop_right"];
+            const widgetsToHook = ["crop_top", "crop_bottom", "crop_left", "crop_right", "divisible_by"];
             Logger.log({ 
                 class: 'LiveCrop', 
                 method: 'onNodeCreated', 
