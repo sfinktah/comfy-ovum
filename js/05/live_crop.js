@@ -153,7 +153,8 @@ app.registerExtension({
             // Expose LEFT compensation on window for console tweaking and cross-scope access.
             // You can modify it in the browser console, e.g. window.LiveCropLeftComp = 12;
             if (typeof window !== "undefined") {
-                window.LiveCropLeftComp = typeof window.LiveCropLeftComp === "number" ? window.LiveCropLeftComp : 20;
+                window.LiveCropLeftComp = typeof window.LiveCropLeftComp === "number" ? window.LiveCropLeftComp : 0;
+                window.LiveCropDragComp = typeof window.LiveCropDragComp === "number" ? window.LiveCropDragComp : 0;
             }
 
             try {
@@ -207,7 +208,7 @@ app.registerExtension({
                     e.preventDefault();
                     const rect = overlay.getBoundingClientRect();
                     const scale = app.canvas.ds?.scale || 1;
-                    const comp = (typeof window !== "undefined" ? (window.LiveCropLeftComp || 0) : 0);
+                    const comp = (typeof window !== "undefined" ? (window.LifeCropDragComp || 0) : 0);
                     const x = (e.clientX - rect.left + comp) / scale;
                     const y = (e.clientY - rect.top) / scale;
 
@@ -255,7 +256,7 @@ app.registerExtension({
                     if (!this._livecrop_drag.isDragging) {
                         const rect = overlay.getBoundingClientRect();
                         const scale = app.canvas.ds?.scale || 1;
-                        const comp = (typeof window !== "undefined" ? (window.LiveCropLeftComp || 0) : 0);
+                        const comp = (typeof window !== "undefined" ? (window.LifeCropDragComp || 0) : 0);
                         const x = (e.clientX - rect.left + comp) / scale;
                         const y = (e.clientY - rect.top) / scale;
                         const dragType = this._livecrop_hitTest(x, y);
@@ -276,7 +277,7 @@ app.registerExtension({
 
                     const rect = overlay.getBoundingClientRect();
                     const scale = app.canvas.ds?.scale || 1;
-                    const comp = (typeof window !== "undefined" ? (window.LiveCropLeftComp || 0) : 0);
+                    const comp = (typeof window !== "undefined" ? (window.LiveCropDragComp || 0) : 0);
                     const x = (e.clientX - rect.left + comp) / scale;
                     const y = (e.clientY - rect.top) / scale;
 
@@ -456,7 +457,9 @@ app.registerExtension({
                         ctx.save();
                         ctx.translate(dx, dy);
                         drawGuides(ctx, dw, dh, { top, bottom, left, right });
-                        drawImageInfo(ctx, dw, dh, { top, bottom, left, right }, iw, ih, aspectRatioDivisor, gcd);
+                        const originalW = this._livecrop.originalWidth || iw;
+                        const originalH = this._livecrop.originalHeight || ih;
+                        drawImageInfo(ctx, dw, dh, { top, bottom, left, right }, originalW, originalH, aspectRatioDivisor, gcd);
                         ctx.restore();
 
                         // Store this image's area for hit testing
@@ -841,6 +844,13 @@ app.registerExtension({
                         this._livecrop.img = first.img;
                         this._livecrop.imgW = first.w;
                         this._livecrop.imgH = first.h;
+                    }
+
+                    // Store original image dimensions from metadata if available
+                    const originalDimensions = message?.original_dimensions;
+                    if (originalDimensions) {
+                        this._livecrop.originalWidth = originalDimensions.width;
+                        this._livecrop.originalHeight = originalDimensions.height;
                     }
 
                     // Compute node size to fit stacked previews (max width 512)

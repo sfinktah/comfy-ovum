@@ -203,7 +203,12 @@ class LiveCrop:
 
             if previews:
                 b64s = [_make_preview_base64(p) for p in previews[:3]]
-                ui = {"live_crop": b64s}
+                # Add original image dimensions
+                width, height = previews[0].size if previews else (None, None)
+                ui = {
+                    "live_crop": b64s,
+                    "original_dimensions": {"width": width, "height": height}
+                }
         except Exception:
             pass
 
