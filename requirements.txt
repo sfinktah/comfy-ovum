@@ -1,2 +1,4 @@
+pillow
+numpy
 markdown-it-py
 aiohttp
