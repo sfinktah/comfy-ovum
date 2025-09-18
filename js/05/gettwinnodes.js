@@ -75,7 +75,7 @@ app.registerExtension({
                 const node = this;
 
 
-                TwinNodes.prototype.onPropertyChanged = function(name, value, previousValue) {
+                GetTwinNodes.prototype.onPropertyChanged = function(name, value, previousValue) {
                     if (name === "numberOfWidgets") {
                         // log({ class: "GetTwinNodes", method: "onPropertyChanged", severity: "trace", tag: "function_entered" }, `onPropertyChanged ${name} = ${value}`);
                         console.log(`onPropertyChanged ${name} = ${value}`);
