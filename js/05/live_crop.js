@@ -193,6 +193,64 @@ app.registerExtension({
                 overlay.height = 1;
                 container.appendChild(overlay);
 
+                // Mute/Bypass: update container classes on initial render and on changes
+                this._updateMuteBypassClasses = () => {
+                    try {
+                        const mode = Number(this.mode ?? 0);
+                        const isMuted = mode === 2;
+                        const isBypassed = mode === 4;
+                        container.classList.toggle("muted", isMuted);
+                        container.classList.toggle("bypassed", isBypassed);
+                    } catch (_) {}
+                };
+                // Initial sync
+                this._updateMuteBypassClasses?.();
+
+                const node = this;
+
+                // Hook into common toggles that affect mute/bypass
+                try {
+                    chainCallback(nodeType.prototype, "changeMode", function (mode) {
+                        try {
+                            Logger.log({
+                                class: 'LiveCrop',
+                                method: 'changeMode',
+                                severity: 'debug',
+                                tag: 'mode_change'
+                            }, 'changeMode hook called', { nodeId: this.id, newMode: mode });
+                            node._updateMuteBypassClasses?.();
+                        } catch (_) {}
+                    });
+                    chainCallback(nodeType.prototype, "onModeChange", function (mode) {
+                        try {
+                            Logger.log({
+                                class: 'LiveCrop',
+                                method: 'onModeChange',
+                                severity: 'debug',
+                                tag: 'mode_change'
+                            }, 'onModeChange hook called', { nodeId: node.id, newMode: mode });
+                            node._updateMuteBypassClasses?.();
+                        } catch (_) {}
+                    });
+                    chainCallback(nodeType.prototype, "onPropertyChanged", function (name, value, previousValue) {
+                        if (name === "mode") {
+                            try {
+                                Logger.log({
+                                    class: 'LiveCrop',
+                                    method: 'onPropertyChanged',
+                                    severity: 'debug',
+                                    tag: 'mode_change'
+                                }, 'onPropertyChanged hook for mode', {
+                                    nodeId: node.id,
+                                    value: value,
+                                    previous: previousValue
+                                });
+                                node._updateMuteBypassClasses?.();
+                            } catch (_) {}
+                        }
+                    });
+                } catch (_) {}
+
                 // Add drag state tracking
                 this._livecrop_drag = {
                     isDragging: false,
@@ -384,6 +442,9 @@ app.registerExtension({
                 });
 
                 try {
+                    // Keep container CSS classes in sync with node state
+                    try { this._updateMuteBypassClasses?.(); } catch (_) {}
+
                     const overlayEl = this._livecrop?.overlay;
                     if (!overlayEl) {
                         Logger.log({ class: 'LiveCrop', method: 'redraw', severity: 'error', tag: 'canvas_error' }, 'Overlay canvas not available', { overlayExists: !!this._livecrop?.overlay });
@@ -716,8 +777,8 @@ app.registerExtension({
                     hasExistingCallback: !!w.callback
                 });
 
-                const cb = w.callback;
-                w.callback = function (val, canvas, node, pos, e) {
+                const hadCb = !!w.callback;
+                chainCallback(w, "callback", function (val, canvas, node, pos, e) {
                     Logger.log({ 
                         class: 'LiveCrop', 
                         method: 'widgetCallback', 
@@ -726,7 +787,7 @@ app.registerExtension({
                     }, `Widget changed: ${n}`, { 
                         widgetName: n,
                         newValue: val,
-                        hasOriginalCallback: !!cb
+                        hasOriginalCallback: hadCb
                     });
 
                     try { 
@@ -743,8 +804,7 @@ app.registerExtension({
                             stack: e.stack
                         });
                     }
-                    return cb ? cb.apply(w, arguments) : undefined;
-                };
+                });
             }
 
             const widgetsToHook = ["crop_top", "crop_bottom", "crop_left", "crop_right", "divisible_by"];

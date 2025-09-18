@@ -167,43 +167,122 @@ class LiveCrop:
         return img
 
     def apply(self, crop_top, crop_bottom, crop_left, crop_right, image=None, mask=None):
-        out_images = []
-        out_masks = []
         previews = []
 
-        # Process images from any accepted form (single, batch, list, or list of batches)
-        if image is not None:
-            count = 0
-            for _is_mask, img_t in _flatten_image_like(image):
+        def add_preview_from_tensor(img_t):
+            if len(previews) >= 3:
+                return
+            try:
                 pil = _tensor_image_to_pil(img_t)
-                if count < 3:
-                    previews.append(pil.copy())
+                previews.append(pil.copy())
+            except Exception:
+                pass
+
+        def process_image_tensor(t: torch.Tensor):
+            # Single image (H, W, C)
+            if t.dim() == 3:
+                add_preview_from_tensor(t)
+                pil = _tensor_image_to_pil(t)
                 pil2 = self._crop_expand_rotate(pil, crop_top, crop_bottom, crop_left, crop_right, is_mask=False)
-                out_images.append(_pil_to_tensor_image(pil2))
-                count += 1
+                return _pil_to_tensor_image(pil2)
+            # Batch (N, H, W, C)
+            if t.dim() == 4:
+                parts = []
+                for i in range(t.shape[0]):
+                    add_preview_from_tensor(t[i])
+                    pil = _tensor_image_to_pil(t[i])
+                    pil2 = self._crop_expand_rotate(pil, crop_top, crop_bottom, crop_left, crop_right, is_mask=False)
+                    parts.append(_pil_to_tensor_image(pil2))
+                return torch.stack(parts, dim=0) if parts else t
+            raise ValueError("Unsupported IMAGE tensor dims (expected 3D or 4D).")
 
-        # Process masks likewise
-        if mask is not None:
-            for _is_mask, m_t in _flatten_mask_like(mask):
-                mpil = _tensor_mask_to_pil(m_t)
+        def process_image_like(x):
+            if x is None:
+                return None
+            if isinstance(x, torch.Tensor):
+                return process_image_tensor(x)
+            if isinstance(x, (list, tuple)):
+                # Preserve container type and nesting
+                out_seq = [process_image_like(e) for e in x]
+                return type(x)(out_seq)
+            raise ValueError("Unsupported IMAGE type; expected torch.Tensor or list/tuple.")
+
+        def process_mask_tensor(t: torch.Tensor):
+            # 2D mask (H, W)
+            if t.dim() == 2:
+                mpil = _tensor_mask_to_pil(t)
                 mpil2 = self._crop_expand_rotate(mpil, crop_top, crop_bottom, crop_left, crop_right, is_mask=True)
-                out_masks.append(_pil_to_tensor_mask(mpil2))
+                return _pil_to_tensor_mask(mpil2)
+            # 3D cases
+            if t.dim() == 3:
+                # (H, W, 1)
+                if t.shape[-1] == 1:
+                    mpil = _tensor_mask_to_pil(t)
+                    mpil2 = self._crop_expand_rotate(mpil, crop_top, crop_bottom, crop_left, crop_right, is_mask=True)
+                    out2d = _pil_to_tensor_mask(mpil2)
+                    return out2d.unsqueeze(-1)
+                # (1, H, W)
+                if t.shape[0] == 1:
+                    mpil = _tensor_mask_to_pil(t)
+                    mpil2 = self._crop_expand_rotate(mpil, crop_top, crop_bottom, crop_left, crop_right, is_mask=True)
+                    out2d = _pil_to_tensor_mask(mpil2)
+                    return out2d.unsqueeze(0)
+                # (N, H, W) batch
+                parts = []
+                for i in range(t.shape[0]):
+                    mpil = _tensor_mask_to_pil(t[i])
+                    mpil2 = self._crop_expand_rotate(mpil, crop_top, crop_bottom, crop_left, crop_right, is_mask=True)
+                    parts.append(_pil_to_tensor_mask(mpil2))
+                return torch.stack(parts, dim=0) if parts else t
+            # 4D masks: (N, H, W, C), preserve C
+            if t.dim() == 4:
+                last_c = t.shape[-1]
+                parts = []
+                for i in range(t.shape[0]):
+                    mpil = _tensor_mask_to_pil(t[i])
+                    mpil2 = self._crop_expand_rotate(mpil, crop_top, crop_bottom, crop_left, crop_right, is_mask=True)
+                    m2d = _pil_to_tensor_mask(mpil2)  # (H, W)
+                    if last_c == 1:
+                        m3d = m2d.unsqueeze(-1)  # (H, W, 1)
+                    else:
+                        # replicate across channels to preserve original dimensionality
+                        m3d = m2d.unsqueeze(-1).repeat(1, 1, last_c)  # (H, W, C)
+                    parts.append(m3d)
+                return torch.stack(parts, dim=0) if parts else t
+            raise ValueError("Unsupported MASK tensor dims.")
 
-        image_out = torch.stack(out_images, dim=0) if out_images else None
-        mask_out = torch.stack(out_masks, dim=0) if out_masks else None
+        def process_mask_like(x):
+            if x is None:
+                return None
+            if isinstance(x, torch.Tensor):
+                return process_mask_tensor(x)
+            if isinstance(x, (list, tuple)):
+                out_seq = [process_mask_like(e) for e in x]
+                return type(x)(out_seq)
+            raise ValueError("Unsupported MASK type; expected torch.Tensor or list/tuple.")
+
+        image_out = process_image_like(image) if image is not None else None
+        mask_out = process_mask_like(mask) if mask is not None else None
 
         ui = None
         try:
-            # Prefer previews we built; if none and we had image tensor(s), fallback to first item
+            # If we didn't collect previews above, find the first tensor and preview it
             if not previews and image is not None:
-                # Try to extract first image for preview
-                for _is_mask, img_t in _flatten_image_like(image):
-                    previews = [_tensor_image_to_pil(img_t)]
-                    break
+                def find_first_tensor(x):
+                    if isinstance(x, torch.Tensor):
+                        return x
+                    if isinstance(x, (list, tuple)):
+                        for e in x:
+                            r = find_first_tensor(e)
+                            if r is not None:
+                                return r
+                    return None
+                t0 = find_first_tensor(image)
+                if t0 is not None:
+                    previews = [_tensor_image_to_pil(t0)]
 
             if previews:
                 b64s = [_make_preview_base64(p) for p in previews[:3]]
-                # Add original image dimensions
                 width, height = previews[0].size if previews else (None, None)
                 ui = {
                     "live_crop": b64s,

@@ -1,9 +1,9 @@
 [project]
 name = "ovum"
 description = "An assorted reliquary of nodes: mismatched, stubborn, and deliberately indistinct; they do what is required; do not ask for particulars."
-version = "1.0.126"
+version = "1.0.127"
 license = {file = "LICENSE"}
-dependencies = ["markdown-it-py", "aiohttp"]
+dependencies = ["markdown-it-py", "aiohttp", "numpy", "pillow"]
 
 [project.urls]
 Repository = "https://github.com/sfinktah/comfy-ovum"
