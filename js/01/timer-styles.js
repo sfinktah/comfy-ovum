@@ -53,7 +53,7 @@ export const timerStyles = `
     color: #e0e0e0;
 }
 
-.cg-timer-widget-wrapper.muted {
+.cg-timer-widget-wrapper.muted, div.dom-widget > .muted, div.dom-widget > .bypassed {
     opacity: 0.3;
 }
 
