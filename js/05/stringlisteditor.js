@@ -6,10 +6,10 @@ import { app } from "../../../scripts/app.js";
 import { chainCallback } from "../01/utility.js";
 
 app.registerExtension({
-    name: "StringListEditorNode",
+    name: "StringListEditor",
 
     async beforeRegisterNodeDef(nodeType, nodeData, appInstance) {
-        if (!nodeData || nodeData.name !== "StringListEditorNode") return;
+        if (!nodeData || nodeData.name !== "StringListEditor") return;
 
         // When a node instance is created, add the UI helpers: Add button and drop handling
         chainCallback(nodeType.prototype, "onNodeCreated", function () {

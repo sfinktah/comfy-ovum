@@ -1,9 +1,30 @@
+/** @typedef {import('@comfyorg/comfyui-frontend-types').ComfyApp} ComfyApp */
+/** @typedef {import("@comfyorg/comfyui-frontend-types").ComfyNode} ComfyNode */
+/** @typedef {import("../../typings/ComfyNode").ComfyNode} ComfyNode */
+
+import { app } from "../../../scripts/app.js";
+import { api } from "../../../scripts/api.js";
+
+let wildcards_list = [];
+async function load_wildcards() {
+	let res = await api.fetchApi('/impact/wildcards/list');
+	let data = await res.json();
+	wildcards_list = data.data;
+}
+
+load_wildcards();
+
+export function get_wildcards_list() {
+	return wildcards_list;
+}
+
 // Frontend extension for ExtensiblePromptProcessor
 // Mirrors the behavior used for ImpactWildcardProcessor/ImpactWildcardEncode
+/** @type {ComfyApp} */
 app.registerExtension({
 	name: "Comfy.ExtensiblePrompt",
-	nodeCreated(node, app) {
-		if (node.comfyClass == "ExtensiblePromptProcessor") {
+	nodeCreated(/** LGraphNode */ node, app) {
+		if (node.comfyClass === "ExtensiblePromptProcessor") {
 			node._wvalue = "Select the Wildcard to add to the text";
 
 			let tbox_id = 0;
@@ -14,7 +35,7 @@ app.registerExtension({
 			if (node.widgets && node.widgets[combo_id + 1]) {
 				node.widgets[combo_id + 1].callback = (value, canvas, node, pos, e) => {
 					if (node) {
-						if (node.widgets[tbox_id].value != "") node.widgets[tbox_id].value += ", ";
+						if (node.widgets[tbox_id].value !== "") node.widgets[tbox_id].value += ", ";
 						node.widgets[tbox_id].value += node._wildcard_value;
 						if (node.widgets_values) {
 							node.widgets_values[tbox_id] = node.widgets[tbox_id].value;
@@ -47,9 +68,9 @@ app.registerExtension({
 
 			// Placeholders and mode UI
 			if (node.widgets && node.widgets[0] && node.widgets[1]) {
-				node.widgets[0].inputEl.placeholder = "Wildcard Prompt (User input)";
-				node.widgets[1].inputEl.placeholder = "Populated Prompt (Will be generated automatically)";
-				node.widgets[1].inputEl.disabled = true;
+				node.widgets[0].element.placeholder = "Wildcard Prompt (User input)";
+				node.widgets[1].element.placeholder = "Populated Prompt (Will be generated automatically)";
+				node.widgets[1].element.disabled = true;
 			}
 
 			const populated_text_widget = node.widgets?.find((w) => w.name == "populated_text");
@@ -59,14 +80,14 @@ app.registerExtension({
 			if (mode_widget && populated_text_widget) {
 				Object.defineProperty(mode_widget, "value", {
 					set: (value) => {
-						if (value == true) node._mode_value = "populate";
-						else if (value == false) node._mode_value = "fixed";
+						if (value === true) node._mode_value = "populate";
+						else if (value === false) node._mode_value = "fixed";
 						else node._mode_value = value; // combo value
 
 						populated_text_widget.inputEl.disabled = node._mode_value == "populate";
 					},
 					get: () => {
-						if (node._mode_value != undefined) return node._mode_value;
+						if (node._mode_value !== undefined) return node._mode_value;
 						else return "populate";
 					},
 				});

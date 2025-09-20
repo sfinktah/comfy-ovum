@@ -1,5 +1,4 @@
-import impact.wildcards
-
+from .modules.impact import wildcards
 
 class ExtensiblePromptProcessor:
     @classmethod
@@ -57,7 +56,7 @@ class ExtensiblePromptProcessor:
 
     @staticmethod
     def process(**kwargs):
-        return impact.wildcards.process(**kwargs)
+        return wildcards.process(**kwargs)
 
     def doit(self, *args, **kwargs):
         populated_text = ExtensiblePromptProcessor.process(
