@@ -1,4 +1,4 @@
-from .modules.impact import wildcards
+from modules.impact import wildcards
 
 class ExtensiblePromptProcessor:
     @classmethod
