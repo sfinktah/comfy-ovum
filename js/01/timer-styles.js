@@ -247,6 +247,17 @@ export const timerStyles = `
 .cg-status-middle {
     flex: 1;
 }
+
+/* For OvumRe regex patterns */
+textarea.comfy-multiline-input[placeholder=pattern] {
+    font-family: 'Ubuntu Mono', 'Roboto Mono', 'Liberation Mono', 'DejaVu Sans Mono', 'Source Code Pro', 'Inconsolata', 'Consolas', 'Courier New', 'Menlo', 'Monaco', monospace !important;
+    border: 1px solid #666;
+    color: #eee;
+    padding: 4px 8px;
+    border-radius: 14px;
+    overflow: auto;
+    white-space: pre;
+}
 `;
 
 /**

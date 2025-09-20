@@ -20,6 +20,7 @@ import {app} from "../../../scripts/app.js";
 import {GraphHelpers} from "../common/graphHelpersForTwinNodes.js";
 import {analyzeNamesForAbbrev, computeTwinNodeTitle, extractWidgetNames, safeStringTrim} from "../01/stringHelper.js";
 import {ensureSlotCounts, findGetters, validateWidgetName, wrapWidgetValueSetter, setWidgetValue} from "../01/twinnodeHelpers.js";
+import { chainCallback } from "../01/utility.js";
 import {TwinNodes} from "../common/twinNodes.js";
 import {drawTextWithBg, getWidgetBounds} from "../01/canvasHelpers.js";
 import {log} from "../common/logger.js";
@@ -108,12 +109,17 @@ class SetTwinNodes extends TwinNodes {
                     node.properties.previousNames[idx] = value;
                 }
             }
+
+            chainCallback(this, 'collapse', function collapse(force) {
+                log({ class: "SetTwinNodes", method: "onMinimize", severity: "trace", tag: "function_entered" }, `force ${force}, flags.collapsed: ${node.flags?.collapsed}`);
+                node.updateTitle(node.flags?.collapsed);
+            });
         }
         ensureSlotCounts(this);
         // Initialize previousNames snapshot to current widget values
         this.properties.previousNames = (this.widgets || []).map(w => safeStringTrim(w?.value));
-        node.updateTitle();
-        node.updateColors();
+        // node.updateTitle();
+        // node.updateColors();
 
 
         app.api.addEventListener("getnode_rename", e => {
@@ -123,38 +129,32 @@ class SetTwinNodes extends TwinNodes {
             node.checkConnections();
         });
 
-        node.checkConnections();
+        setTimeout(() => {
+            node.checkConnections();
+        }, 5000);
     }
 
     /**
      * Helper to compute and set the combined title from connected widgets' values,
      * and update node color from the first connected typed link
      */
-    updateTitle() {
-        log({ class: "SetTwinNodes", method: "updateTitle", severity: "trace", tag: "function_entered" }, "updateTitle");
-        const names = extractWidgetNames(this);
-        this.title = computeTwinNodeTitle(names, "set", disablePrefix);
-
+    updateTitle(collapsed = false) {
+        log({ class: "SetTwinNodes", method: "updateTitle", severity: "trace", tag: "function_entered" }, `collapsed: ${collapsed}`);
         // can find the event for collapsing a node, so we'll just apply the title shortening all the time
-        if (this.title.length > 20) {
-            this.title = this.title.substring(0, 19) + "…";
+        if (collapsed) {
+            this.fullTitle = this.title;
+            if (this.title.length > 20) {
+                this.title = this.title.substring(0, 19) + "…";
+            }
         }
-        if (this.flags?.collapsed) {}
         else {
-            // After updating the title, apply shortened labels to outputs when appropriate
+            const names = extractWidgetNames(this);
+            this.title = computeTwinNodeTitle(names, "set", disablePrefix);
+
             this.applyAbbreviatedOutputLabels();
         }
     }
 
-    /** @param {boolean} force */
-    collapse(force) {
-        log({ class: "SetTwinNodes", method: "onMinimize", severity: "trace", tag: "function_entered" }, "onMinimize");
-        this.updateTitle();
-    }
-    onMaximize() {
-        log({ class: "SetTwinNodes", method: "onMaximize", severity: "trace", tag: "function_entered" }, "onMaximize");
-        this.updateTitle();
-    }
 
 
     /**
@@ -285,6 +285,8 @@ class SetTwinNodes extends TwinNodes {
         if (type === LiteGraph.INPUT && !isConnected) {
             this.resetInput(index);
             this.resetOutput(index);
+            this.updateTitle();
+            this.updateColors();
         }
 
 
@@ -332,8 +334,8 @@ class SetTwinNodes extends TwinNodes {
             }
         }
 
-        this.updateTitle();
-        this.updateColors();
+        // this.updateTitle();
+        // this.updateColors();
 
     }
 

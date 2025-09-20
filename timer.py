@@ -25,6 +25,7 @@ class Timer:
     RETURN_TYPES = ()
     RETURN_NAMES = ()
     FUNCTION = "func"
+    NAME = "🥚 Timer"
     OUTPUT_NODE = True
     def func(self, queued_run_notes, image=None, *args, **kwargs):
         # Accept arbitrary dynamic inputs like input2, input3, etc.

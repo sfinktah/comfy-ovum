@@ -122,3 +122,6 @@ async def ovum_web(request: web.Request):
         return _directory_listing(base_url, WEB_DIR, Path('.'))
 
     return web.Response(status=404, text="Not Found")
+
+
+# No additional API endpoints needed - using .ui mechanism now

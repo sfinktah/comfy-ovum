@@ -143,3 +143,5 @@ class XRangeNode(NewPointer):
     @staticmethod
     def xrange_node(stop=None, start=None, step=None, repeat=False, cursor=0, advance=True, reset=False):
         return XRangeNode.xrange_compute(start=start, stop=stop, step=step, repeat=repeat, cursor=cursor, advance=advance, reset=reset)
+
+CLAZZES = [XRangeNode]

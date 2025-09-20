@@ -210,6 +210,25 @@ Tips and caveats:
 
 In short, “Set Environment Variable” and “Get Environment Variable” act like SetNode/GetNode with super powers: they can tunnel values across the graph, coordinate multiple consumers, and enable inter‑ and intra‑workflow value transfer—while staying simple, explicit, and robust.
 
+## Halt Toggle Node
+
+The **Halt Toggle** node is a versatile control node designed to bring simplified workflow execution halts to your projects.
+
+### Key Features:
+- **Flexible Halting:** Easily pause workflow execution when the `stop_now` condition is met.
+- **Auto-Reset Capability:** The node can automatically reset itself after halting, allowing seamless continuation of the workflow in subsequent runs without manual intervention.
+- **Delay Support:** Introduce a configurable delay (in milliseconds) before halting the workflow.
+- **Passthrough Convenience:** The node forwards inputs, keeping graph wiring intuitive and maintaining data flow consistency when used as part of a larger workflow.
+- **Detailed Feedback:** Provides outputs to indicate whether a stop was applied and if an auto-reset was triggered.
+
+### How It Works:
+When the `stop_now` input is set to true, the **Halt Toggle** node halts the workflow execution. However, if the **reset_after_stop** option is enabled, the halt will auto-disable for the next run, ensuring the workflow proceeds smoothly without requiring manual toggle adjustments.
+
+### Use Case Example:
+If you have a workflow that requires pausing at specific stages or debugging steps, the Halt Toggle node provides an elegant solution to stop execution conditionally and resume it dynamically in subsequent runs.
+
+Enhance your workflow control with the Halt Toggle node, empowering you to build more robust and interactive systems effortlessly.
+
 ## Pystructure Data Nodes (complementary to ComfyUI-LogicUtils)
 
 These nodes are complementary to the excellent collection at https://github.com/aria1th/ComfyUI-LogicUtils. They focus on list manipulation and small data utilities that pair well with logic/structure nodes from that set.

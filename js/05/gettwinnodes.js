@@ -78,13 +78,14 @@ app.registerExtension({
                 GetTwinNodes.prototype.onPropertyChanged = function(name, value, previousValue) {
                     if (name === "numberOfWidgets") {
                         // log({ class: "GetTwinNodes", method: "onPropertyChanged", severity: "trace", tag: "function_entered" }, `onPropertyChanged ${name} = ${value}`);
-                        console.log(`onPropertyChanged ${name} = ${value}`);
+                        // console.log(`onPropertyChanged ${name} = ${value}`, this, node);
                         this.numberOfWidgets = value;
                         this.numberOfOutputSlots = value;
                         if (!Array.isArray(this.properties.previousNames) || this.properties.previousNames.length < this.numberOfWidgets) {
                             this.properties.previousNames = Array(this.numberOfWidgets).fill("");
                         }
-                        node.ensureGetterWidgetCount(value);
+                        // noinspection JSPotentiallyInvalidUsageOfClassThis
+                        this.ensureGetterWidgetCount(value);
                         ensureSlotCounts(this);
                         // ensureSlotCounts(node);
                         // node.updateTitle();
@@ -153,7 +154,6 @@ app.registerExtension({
 
             // Ensure there are at least N combo widgets for constants, each with a values provider
             ensureGetterWidgetCount(count) {
-                const node = this;
                 ensureWidgetCount(this, count, "combo", "Constant", (idx, value, canvas, node, pos, e) => {
                     node.properties.previousNames[idx] = value;
                     this.onRename(idx);

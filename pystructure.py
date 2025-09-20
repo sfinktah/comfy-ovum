@@ -1,9 +1,9 @@
 # Stolen from/extends functionality of https://github.com/aria1th/ComfyUI-LogicUtils/blob/main/pystructure.py
-from common_types import NewPointer, AnyType, anyType, _parse_optional_int
-from xrange_node import XRangeNode
+from common_types import NewPointer, ANYTYPE, _parse_optional_int
+from nodes import NODE_CLASS_MAPPINGS as ALL_NODE_CLASS_MAPPINGS
 
 
-class ListSliceNode(NewPointer):
+class ListSlice(NewPointer):
     DESCRIPTION = """
     Extract a slice of a list (JavaScript Array.prototype.slice semantics).
 
@@ -23,7 +23,9 @@ class ListSliceNode(NewPointer):
     - Leaving start or end blank in the widget uses the default described above.
     """
     FUNCTION = "list_slice"
-    RETURN_TYPES = ("LIST",)
+    RETURN_TYPES = (ANYTYPE,)
+    INPUT_IS_LIST = (True, False, False,)
+    OUTPUT_IS_LIST = (True,)
     CATEGORY = "Data"
     custom_name = "Pyobjects/List Slice"
 
@@ -67,14 +69,14 @@ class ListSliceNode(NewPointer):
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "py_list": ("LIST",),
+                "py_list": (ANYTYPE,),
                 "start": ("STRING", {"default": None, "tooltip": "Optional start index as integer string. Blank/whitespace -> 0. Negative -> n+start (clamped)."}),
                 "end": ("STRING", {"default": None, "tooltip": "Optional end index (exclusive) as integer string. Blank/whitespace -> n. Negative -> n+end (clamped)."}),
             }
         }
 
 
-class ListSpliceNode(NewPointer):
+class ListSplice(NewPointer):
     DESCRIPTION = """ 
     Splice a list in place (JavaScript Array.prototype.splice semantics).
 
@@ -100,7 +102,9 @@ class ListSpliceNode(NewPointer):
     - Matches JavaScript splice behavior including negative indices and optional parameters.
     """
     FUNCTION = "list_splice"
-    RETURN_TYPES = ("LIST", "LIST")  # (modified_list, removed_elements)
+    RETURN_TYPES = (ANYTYPE, ANYTYPE)  # (modified_list, removed_elements)
+    INPUT_IS_LIST = True
+    OUTPUT_IS_LIST = (True, True)
     CATEGORY = "Data"
     custom_name = "Pyobjects/List Splice"
 
@@ -153,20 +157,21 @@ class ListSpliceNode(NewPointer):
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "py_list": ("LIST",),
+                "py_list": (ANYTYPE,),
                 "start": ("STRING", {"default": None, "tooltip": "Optional start index as integer string. Blank/whitespace -> 0. Negative -> n+start (clamped)."}),
                 "delete_count": ("STRING", {"default": None, "tooltip": "Optional number of elements to delete as integer string. Blank/whitespace -> delete to end. Negative -> 0. Clamped to [0, n-start]."}),
-                "insert_list": ("LIST", {"default": None, "tooltip": "Optional list of items to insert at start. Blank -> insert nothing."}),
+                "insert_list": (ANYTYPE, {"default": None, "tooltip": "Optional list of items to insert at start. Blank -> insert nothing."}),
             }
         }
 
 
-class RepeatItemNode(NewPointer):
+class RepeatItem(NewPointer):
     DESCRIPTION = """
     Create a list containing the given item repeated 'count' times.
     """
     FUNCTION = "repeat_item"
-    RETURN_TYPES = ("LIST",)
+    RETURN_TYPES = (ANYTYPE,)
+    OUTPUT_IS_LIST = (True,)
     CATEGORY = "Data"
     custom_name = "Pyobjects/Repeat Item"
 
@@ -184,18 +189,20 @@ class RepeatItemNode(NewPointer):
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "item": (anyType,),
+                "item": (ANYTYPE,),
                 "count": ("INT", {"default": 1, "min": 0, "max": 1024, "step": 1}),
             }
         }
 
 
-class ReverseListNode(NewPointer):
+class ReverseList(NewPointer):
     DESCRIPTION = """
     Return a new list with the elements of the input list in reverse order.
     """
     FUNCTION = "list_reverse"
-    RETURN_TYPES = ("LIST",)
+    RETURN_TYPES = (ANYTYPE,)
+    INPUT_IS_LIST = True
+    OUTPUT_IS_LIST = (True,)
     CATEGORY = "Data"
     custom_name = "Pyobjects/Reverse List"
 
@@ -209,20 +216,23 @@ class ReverseListNode(NewPointer):
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "py_list": ("LIST",),
+                "py_list": (ANYTYPE,),
             }
         }
 
 
-class ConcatListsNode(NewPointer):
+class ConcatLists(NewPointer):
     DESCRIPTION = """
-    Concatenate arrays (JavaScript Array.prototype.concat semantics).
+    Concatenate arrays (lists) (JavaScript Array.prototype.concat semantics).
     - If list_b is empty/unspecified, returns a shallow copy of list_a.
     - If list_a is empty/unspecified, returns a shallow copy of list_b.
     Notes: Non-mutating; inputs are not modified. Only concatenates two lists; to chain more, connect multiple nodes.
     """
     FUNCTION = "list_concat"
-    RETURN_TYPES = ("LIST",)
+    RETURN_TYPES = (ANYTYPE,)
+    RETURN_NAMES = ("list",)
+    INPUT_IS_LIST = True
+    OUTPUT_IS_LIST = (True,)
     CATEGORY = "Data"
     custom_name = "Pyobjects/List Concat"
 
@@ -236,13 +246,13 @@ class ConcatListsNode(NewPointer):
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "list_a": ("LIST",),
-                "list_b": ("LIST", {"default": None, "tooltip": "Optional second list to concatenate. Blank -> treated as empty list."}),
+                "list_a": (ANYTYPE,),
+                "list_b": (ANYTYPE, {"default": None, "tooltip": "Optional second list to concatenate. Blank -> treated as empty list."}),
             }
         }
 
 
-class IndexOfNode(NewPointer):
+class IndexOf(NewPointer):
     DESCRIPTION = """
     JavaScript Array.prototype.indexOf-like search.
     - start (optional): Blank -> 0. Negative -> n+start clamped to [0,n].
@@ -250,6 +260,7 @@ class IndexOfNode(NewPointer):
     - Returns -1 when not found.
     """
     FUNCTION = "list_index_of"
+    INPUT_IS_LIST = True
     RETURN_TYPES = ("INT",)
     CATEGORY = "Data"
     custom_name = "Pyobjects/List IndexOf"
@@ -277,20 +288,21 @@ class IndexOfNode(NewPointer):
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "py_list": ("LIST",),
-                "search_element": (anyType,),
+                "py_list": (ANYTYPE,),
+                "search_element": (ANYTYPE,),
                 "start": ("STRING", {"default": None, "tooltip": "Optional fromIndex as integer string. Blank/whitespace -> 0. Negative -> n+start clamped."}),
             }
         }
 
 
-class JoinListNode(NewPointer):
+class JoinList(NewPointer):
     DESCRIPTION = """
     Join elements into a string (JavaScript Array.prototype.join semantics).
     - separator (optional): Blank/unspecified -> "," (comma) per JS default. Use empty string for no separator.
     - Non-string elements are converted to strings.
     """
     FUNCTION = "list_join"
+    INPUT_IS_LIST = True
     RETURN_TYPES = ("STRING",)
     CATEGORY = "Data"
     custom_name = "Pyobjects/List Join"
@@ -306,18 +318,20 @@ class JoinListNode(NewPointer):
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "py_list": ("LIST",),
+                "py_list": (ANYTYPE,),
                 "separator": ("STRING", {"default": None, "tooltip": "Optional separator. Blank/unspecified -> comma. Use empty string for no separator."}),
             }
         }
 
 
-class UniqueListNode(NewPointer):
+class UniqueList(NewPointer):
     DESCRIPTION = """
     Return a new list with duplicate values removed, preserving the first occurrence order.
     """
     FUNCTION = "list_unique"
-    RETURN_TYPES = ("LIST",)
+    RETURN_TYPES = (ANYTYPE,)
+    INPUT_IS_LIST = True
+    OUTPUT_IS_LIST = (True,)
     CATEGORY = "Data"
     custom_name = "Pyobjects/Unique List"
 
@@ -343,12 +357,12 @@ class UniqueListNode(NewPointer):
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "py_list": ("LIST",),
+                "py_list": (ANYTYPE,),
             }
         }
 
 
-class StringListEditorNode(NewPointer):
+class StringListEditor(NewPointer):
     DESCRIPTION = """
     Create and edit a list of strings with UI support for adding items and drag & drop of files.
     UI behavior (frontend):
@@ -360,7 +374,8 @@ class StringListEditorNode(NewPointer):
     - Returns a new list (non-mutating).
     """
     FUNCTION = "string_list_editor"
-    RETURN_TYPES = ("LIST",)
+    RETURN_TYPES = (ANYTYPE,)
+    OUTPUT_IS_LIST = (True,)
     CATEGORY = "Data"
     custom_name = "Pyobjects/String List Editor"
 
@@ -387,5 +402,281 @@ class StringListEditorNode(NewPointer):
             }
         }
 
+class FromListTypeNode(NewPointer):
+    """
+    Takes a Python list and converts it to other types (tuple, set, dict, etc.).
+    This is the inverse of ToListTypeNode.
+    """
+    FUNCTION = "from_list_type"
+    RETURN_TYPES = (ANYTYPE,)
+    CATEGORY = "Data"
+    custom_name="Pyobjects/Cast from LIST"
 
-CLAZZES = [ListSliceNode, ListSpliceNode, RepeatItemNode, ReverseListNode, ConcatListsNode, IndexOfNode, JoinListNode, UniqueListNode, StringListEditorNode, XRangeNode]
+    @staticmethod
+    def from_list_type(py_list, target_type="tuple"):
+        if not isinstance(py_list, list):
+            raise ValueError("Input must be a Python list")
+
+        if target_type == "tuple":
+            return (tuple(py_list),)
+        elif target_type == "list":
+            return (py_list,)
+        elif target_type == "set":
+            return (set(py_list),)
+        elif target_type == "dict":
+            # Convert list to dict using indices as keys
+            return ({i: val for i, val in enumerate(py_list)},)
+        elif target_type == "dict_pairs":
+            # Convert list of pairs to dict (assumes list contains [key, value] pairs)
+            try:
+                result_dict = {}
+                for pair in py_list:
+                    if not isinstance(pair, (list, tuple)) or len(pair) != 2:
+                        raise ValueError("Each item must be a pair (list/tuple with 2 elements)")
+                    key, value = pair
+                    result_dict[key] = value
+                return (result_dict,)
+            except (ValueError, TypeError) as e:
+                raise ValueError(f"Cannot convert to dict from pairs: {str(e)}")
+        else:
+            raise ValueError(f"Unsupported target_type: {target_type}")
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "py_list": ("LIST",),
+                "target_type": (["list", "set", "dict", "dict_pairs", "tuple"], {"default": "list"}),
+            }
+        }
+
+class ReinterpretCast(NewPointer):
+    """
+    Blindly cast anything to anything
+    """
+    FUNCTION = "reinterpret_cast"
+    RETURN_TYPES = (ANYTYPE,)
+    CATEGORY = "Data"
+    custom_name="Blind Cast"
+
+    @staticmethod
+    def reinterpret_cast(anything):
+        return (anything,)
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "anything": (ANYTYPE,),
+            }
+        }
+
+class ReinterpretAsListCast(NewPointer):
+    """
+    Blindly cast anything to anything
+    """
+    FUNCTION = "reinterpret_cast"
+    RETURN_TYPES = (ANYTYPE,)
+    OUTPUT_IS_LIST = (True,)
+    INPUT_IS_LIST = True
+    CATEGORY = "Data"
+    custom_name="Blind Cast"
+
+    @staticmethod
+    def reinterpret_cast(anything):
+        return (anything,)
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "anything": (ANYTYPE,),
+            }
+        }
+
+
+class CastListToAny(NewPointer):
+    DESCRIPTION = """
+    Cast a LIST to anytype (*) so it can connect to any input.
+    Non-mutating pass-through of the given list.
+    """
+    FUNCTION = "list_to_any"
+    RETURN_TYPES = (ANYTYPE,)
+    OUTPUT_IS_LIST = (True,)
+    CATEGORY = "Data"
+    custom_name = "Cast Pyobjects/List to Any"
+
+    @staticmethod
+    def list_to_any(py_list):
+        return (list(py_list),)
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "py_list": ("LIST",),
+            }
+        }
+
+
+class CastAnyToList(NewPointer):
+    DESCRIPTION = """
+    Cast anytype (*) to LIST. Validates that the input is a Python list and passes it through.
+    """
+    FUNCTION = "any_to_list"
+    RETURN_TYPES = ("LIST",)
+    INPUT_IS_LIST = True
+    CATEGORY = "Data"
+    custom_name = "Cast Any to Pyobjects/List"
+
+    @staticmethod
+    def any_to_list(py_list):
+        if isinstance(py_list, list):
+            return (py_list,)
+        elif isinstance(py_list, str):
+            return ([py_list],)
+        return (list(py_list),)
+        # raise ValueError("Input must be a Python list, received: {} ({})".format(str(value), type(value)))
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "py_list": (ANYTYPE,),
+            }
+        }
+
+class ListExtend(NewPointer):
+    """
+    Extends list A by appending elements from list B. Returns result, doesn't modify A.
+    """
+    FUNCTION = "list_extend"
+    DESCRIPTION = """
+    Extends list A by appending elements from list B. Returns result, doesn't modify A.
+    """
+    INPUT_IS_LIST = True
+    OUTPUT_IS_LIST = (True,)
+    RETURN_TYPES = (ANYTYPE,)
+    RETURN_NAMES = ("list",)
+    CATEGORY = "Data"
+    custom_name="List Extend"
+
+    @staticmethod
+    def list_extend(list_a, list_b):
+        if not isinstance(list_a, list) and not isinstance(list_b, list):
+            raise ValueError("list_a and list_b must be Python lists, received: type {} and type {}".format(type(list_a), type(list_b)))
+        if not isinstance(list_a, list):
+            raise ValueError("list_b must be a Python list, received: type {}".format(type(list_a)))
+        if not isinstance(list_b, list):
+            raise ValueError("list_b must be a Python list, received: type {}".format(type(list_b)))
+        result = list_a[:]
+        result.extend(list_b)
+        return (result,)
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "list_a": (ANYTYPE,),
+                "list_b": (ANYTYPE,),
+            }
+        }
+
+
+class GetByIndex(NewPointer):
+    """
+    Return an element from a list by index as anytype.
+    """
+    FUNCTION = "list_get"
+    DESCRIPTION = """
+    Return an element of any type, from a list of anything, identified by index.
+    """
+    INPUT_IS_LIST = True
+    RETURN_TYPES = (ANYTYPE,)
+    CATEGORY = "Data"
+    custom_name="Get by Index"
+
+    # noinspection PyShadowingBuiltins
+    @staticmethod
+    def list_get(list, index):
+        index = index[0]
+        if index < 0 or index >= len(list):
+            raise IndexError(f"Index out of range: {index} (length {len(list)})")
+        return (list[index],)
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "list": (ANYTYPE,),
+                "index": ("INT", {"default": 0}),
+            }
+        }
+
+# Copied from easyuse to better understand how the crazed INPUT_IS_LIST/OUTPUT_IS_LIST system works (or doesn't)
+class OvumLength:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "any": (ANYTYPE, {}),
+            },
+            "hidden":{
+                "prompt": "PROMPT",
+                "my_unique_id": "UNIQUE_ID"
+            }
+        }
+
+    RETURN_TYPES = ("INT",)
+    RETURN_NAMES = ("length",)
+
+    INPUT_IS_LIST = True
+
+    FUNCTION = "getLength"
+    CATEGORY = "EasyUse/Logic"
+
+    # noinspection PyShadowingBuiltins
+    @staticmethod
+    def getLength(any, prompt=None, my_unique_id=None):
+        prompt = prompt[0]
+        my_unique_id = my_unique_id[0]
+        my_unique_id = my_unique_id.split('.')[len(my_unique_id.split('.')) - 1] if "." in my_unique_id else my_unique_id
+        id, slot = prompt[my_unique_id]['inputs']['any']
+        class_type = prompt[id]['class_type']
+        node_class = ALL_NODE_CLASS_MAPPINGS[class_type]
+        output_is_list = node_class.OUTPUT_IS_LIST[slot] if hasattr(node_class, 'OUTPUT_IS_LIST') else False
+
+        if output_is_list or len(any) > 1:
+            # If output_is_list is True OR if the input list has more than 1 item,
+            # return the length of the input list
+            return (len(any),)
+        else:
+            # Otherwise, return the length of the first (and only) item in the list
+            return (len(any[0]),)
+
+
+# TODO: add the dynamic input javascript
+class MakeFlatImageList:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {"optional": {"image1": ("IMAGE",), }}
+
+    DESCRIPTION = """
+    Create a list of images, lists of lists of images, batches, whatever.
+    """
+    RETURN_TYPES = ("IMAGE",)
+    OUTPUT_IS_LIST = (True,)
+    FUNCTION = "doit"
+
+    CATEGORY = "ImpactPack/Util"
+
+    def doit(self, **kwargs):
+        images = []
+
+        for k, v in kwargs.items():
+            images.append(v)
+
+        return (images, )
+
+
+CLAZZES = [ListSlice, ListSplice, RepeatItem, ReverseList, ConcatLists, IndexOf, JoinList, UniqueList, StringListEditor, CastListToAny, CastAnyToList, FromListTypeNode, ReinterpretCast, ReinterpretAsListCast, GetByIndex, ListExtend]

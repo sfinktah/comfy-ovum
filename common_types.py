@@ -15,7 +15,7 @@ class AnyType(str):
         return False
 
 
-anyType = AnyType("*")
+ANYTYPE = AnyType("*")
 
 
 def _parse_optional_int(value, field_name: str):
@@ -25,9 +25,13 @@ def _parse_optional_int(value, field_name: str):
     """
     if value is None:
         return None
+    if isinstance(value, list):
+        if len(value) != 1:
+            raise ValueError(f"{field_name} must be a single integer, got list of length {len(value)}.")
+        value = value[0]
     # Explicitly reject booleans (bool is subclass of int)
     if isinstance(value, bool):
-        raise ValueError(f"{field_name} must be an integer (blank for unset).")
+        raise ValueError(f"{field_name} must be an integer (blank for unset), got type {type(value)}.")
     if isinstance(value, int):
         return value
     if isinstance(value, str):
@@ -36,6 +40,6 @@ def _parse_optional_int(value, field_name: str):
             return None
         if re.fullmatch(r"[+-]?\d+", s):
             return int(s)
-        raise ValueError(f"{field_name} must be an integer (blank for unset).")
+        raise ValueError(f"{field_name} must be an integer (blank for unset), got '{value}'.")
     # Reject floats and other types
-    raise ValueError(f"{field_name} must be an integer (blank for unset).")
+    raise ValueError(f"{field_name} must be an integer (blank for unset), got type {type(value)}.")
