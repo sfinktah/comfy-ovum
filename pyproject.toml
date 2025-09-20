@@ -1,7 +1,7 @@
 [project]
 name = "ovum"
 description = "An assorted reliquary of nodes: mismatched, stubborn, and deliberately indistinct; they do what is required; do not ask for particulars."
-version = "1.0.133"
+version = "1.0.134"
 license = {file = "LICENSE"}
 dependencies = ["markdown-it-py", "aiohttp", "numpy", "pillow"]
 

@@ -1,6 +1,6 @@
-import { app } from "../../scripts/app.js";
-import { api } from "../../scripts/api.js";
-import {chainCallback} from "./01/utility.js";
+import { app } from "../../../scripts/app.js";
+import { api } from "../../../scripts/api.js";
+import {chainCallback} from "../01/utility.js";
 
 // Register the extension
 app.registerExtension({
