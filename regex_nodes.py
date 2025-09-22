@@ -38,6 +38,14 @@ class OvumReFlags:
     RETURN_TYPES = (RE_FLAGS_T,)
     RETURN_NAMES = ("flags",)
     DESCRIPTION = """
+    Configure flags for regular expression compilation.
+
+    These flags modify how the regular expression engine 
+    interprets patterns. Common flags include IGNORECASE, 
+    MULTILINE, DOTALL, VERBOSE, ASCII, LOCALE, UNICODE, and 
+    DEBUG.
+    """
+    DESCRIPTION_HTML = """
     Configure flags for regular expression compilation. These flags modify how the regular expression engine interprets patterns.
     Common flags include IGNORECASE, MULTILINE, DOTALL, VERBOSE, ASCII, LOCALE, UNICODE, and DEBUG.
     <a href="https://docs.python.org/3.11/library/re.html#flags">re flags @ docs.python.org</a>
@@ -104,6 +112,16 @@ class OvumReSearch(OvumRegexStringBase):
     OUTPUT_IS_LIST = (True,)
     FUNCTION = "run"
     DESCRIPTION = """
+    re.search(pattern, string, flags=0)
+
+    Scan through string[s] looking for the first location 
+    where the regular expression pattern produces a match, 
+    and return a corresponding RE_MATCH_T. Return None if no 
+    position in the string matches the pattern; note that 
+    this is different from finding a zero-length match at 
+    some point in the string.
+    """
+    DESCRIPTION_HTML = """
     <code>re.<b>search</b>(<i>pattern, string, flags=0</i>)</code>
     Scan through <i>string<b>[s]</b></i> looking for the first location 
     where the regular expression pattern produces a match, and return a 
@@ -140,6 +158,15 @@ class OvumReMatch(OvumRegexStringBase):
     OUTPUT_IS_LIST = (True,)
     FUNCTION = "run"
     DESCRIPTION = """
+    re.match(pattern, string, flags=0)
+
+    If zero or more characters at the beginning of string[s] 
+    match the regular expression pattern, return a 
+    corresponding RE_MATCH_T. Return None if the string does 
+    not match the pattern; note that this is different from 
+    a zero-length match.
+    """
+    DESCRIPTION_HTML = """
     <code>re.<b>match</b>(<i>pattern, string, flags=0</i>)</code>
     If zero or more characters at the beginning of <i>string<b>[s]</b></i> match the regular 
     expression pattern, return a corresponding <code>RE_MATCH_T</code>. Return <code>None</code> 
@@ -174,6 +201,14 @@ class OvumReFullMatch(OvumRegexStringBase):
     OUTPUT_IS_LIST = (True,)
     FUNCTION = "run"
     DESCRIPTION = """
+    re.fullmatch(pattern, string, flags=0)
+
+    If the whole string[s] matches the regular expression 
+    pattern, return a corresponding RE_MATCH_T. Return None 
+    if the string does not match the pattern; this is 
+    different from a zero-length match.
+    """
+    DESCRIPTION_HTML = """
     <code>re.<b>fullmatch</b>(<i>pattern, string, flags=0</i>)</code>
     If the whole <i>string<b>[s]</b></i> matches the regular expression pattern, return a 
     corresponding <code>RE_MATCH_T</code>. Return <code>None</code> if the string does not match 
@@ -199,6 +234,15 @@ class OvumReSplit(OvumRegexStringBase):
     OUTPUT_IS_LIST = (True,)
     FUNCTION = "run"
     DESCRIPTION = """
+    re.split(pattern, string, maxsplit=0, flags=0)
+
+    Split string[s] by the occurrences of pattern. If 
+    capturing parentheses are used in pattern, then the text 
+    of all groups in the pattern are also returned as part 
+    of the resulting list. If maxsplit is nonzero, at most 
+    maxsplit splits occur.
+    """
+    DESCRIPTION_HTML = """
     <code>re.<b>split</b>(<i>pattern, string, maxsplit=0, flags=0</i>)</code>
     Split <i>string<b>[s]</b></i> by the occurrences of pattern. If capturing parentheses are used 
     in pattern, then the text of all groups in the pattern are also returned as part of the 
@@ -229,6 +273,15 @@ class OvumReFindAll(OvumRegexStringBase):
     OUTPUT_IS_LIST = (True,)
     FUNCTION = "run"
     DESCRIPTION = """
+    re.findall(pattern, string, flags=0)
+
+    Return all non-overlapping matches of pattern in 
+    string[s], as a list of strings. The string is scanned 
+    left-to-right, and matches are returned in the order 
+    found. If one or more groups are present in the pattern, 
+    return a list of groups.
+    """
+    DESCRIPTION_HTML = """
     <code>re.<b>findall</b>(<i>pattern, string, flags=0</i>)</code>
     Return all non-overlapping matches of pattern in <i>string<b>[s]</b></i>, as a list of strings. 
     The string is scanned left-to-right, and matches are returned in the order found. 
@@ -253,6 +306,14 @@ class OvumReFindIter(OvumRegexStringBase):
     OUTPUT_IS_LIST = (True,)
     FUNCTION = "run"
     DESCRIPTION = """
+    re.finditer(pattern, string, flags=0)
+
+    Return an iterator over all non-overlapping matches in 
+    string[s]. For each match, the iterator returns a 
+    RE_MATCH_T. The string is scanned left-to-right, and 
+    matches are returned in the order found.
+    """
+    DESCRIPTION_HTML = """
     <code>re.<b>finditer</b>(<i>pattern, string, flags=0</i>)</code>
     Return an iterator over all non-overlapping matches in <i>string<b>[s]</b></i>. For each match, 
     the iterator returns a <code>RE_MATCH_T</code>. The string is scanned left-to-right, 
@@ -270,19 +331,12 @@ class OvumReFindIter(OvumRegexStringBase):
         return (outputs,)
 
 
-class OvumReSub(OvumRegexStringBase):
-    NAME = "re.sub (Regex Sub)"
+class OvumReSubBase(OvumRegexStringBase):
+    """Base class for regex substitution operations that share common logic."""
     RETURN_TYPES = (STRING, INT)
     RETURN_NAMES = ("result", "count")
     OUTPUT_IS_LIST = (True, True)
     FUNCTION = "run"
-    DESCRIPTION = """
-    <code>re.<b>sub</b>(<i>pattern, repl, string, count=0, flags=0</i>)</code>
-    Return the string obtained by replacing the leftmost non-overlapping occurrences of 
-    pattern in <i>string<b>[s]</b></i> by the replacement repl. If the pattern isn't found, 
-    string is returned unchanged. count is the maximum number of pattern occurrences to be replaced.
-    <a href="https://docs.python.org/3.11/library/re.html#re.sub">re.sub @ docs.python.org</a>
-    """
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -304,38 +358,42 @@ class OvumReSub(OvumRegexStringBase):
         return (out_strings, counts)
 
 
-class OvumReSubN(OvumRegexStringBase):
-    NAME = "re.subn (Regex SubN)"
-    RETURN_TYPES = (STRING, INT)
-    RETURN_NAMES = ("result", "count")
-    OUTPUT_IS_LIST = (True, True)
-    FUNCTION = "run"
+class OvumReSub(OvumReSubBase):
+    NAME = "re.sub (Regex Sub)"
     DESCRIPTION = """
+    re.sub(pattern, repl, string, count=0, flags=0)
+
+    Return the string obtained by replacing the leftmost 
+    non-overlapping occurrences of pattern in string[s] by 
+    the replacement repl. If the pattern isn't found, string 
+    is returned unchanged. count is the maximum number of 
+    pattern occurrences to be replaced.
+    """
+    DESCRIPTION_HTML = """
+    <code>re.<b>sub</b>(<i>pattern, repl, string, count=0, flags=0</i>)</code>
+    Return the string obtained by replacing the leftmost non-overlapping occurrences of 
+    pattern in <i>string<b>[s]</b></i> by the replacement repl. If the pattern isn't found, 
+    string is returned unchanged. count is the maximum number of pattern occurrences to be replaced.
+    <a href="https://docs.python.org/3.11/library/re.html#re.sub">re.sub @ docs.python.org</a>
+    """
+
+
+class OvumReSubN(OvumReSubBase):
+    NAME = "re.subn (Regex SubN)"
+    DESCRIPTION = """
+    re.subn(pattern, repl, string, count=0, flags=0)
+
+    Perform the same operation as sub(), but return a tuple 
+    (new_string, number_of_subs_made). The replacement repl 
+    can be either a string or a callable; if a string, 
+    backslash escapes in it are processed.
+    """
+    DESCRIPTION_HTML = """
     <code>re.<b>subn</b>(<i>pattern, repl, string, count=0, flags=0</i>)</code>
     Perform the same operation as <b>sub()</b>, but return a tuple <code>(new_string, number_of_subs_made)</code>. 
     The replacement repl can be either a string or a callable; if a string, backslash escapes in it are processed.
     <a href="https://docs.python.org/3.11/library/re.html#re.subn">re.subn @ docs.python.org</a>
     """
-
-    @classmethod
-    def INPUT_TYPES(cls):
-        base = super().INPUT_TYPES()
-        base["required"]["repl"] = (STRING, {"default": ""})
-        base["optional"]["count"] = (INT, {"default": 0, "min": 0})
-        return base
-
-    def run(self, pattern: str, string: str, repl: str,
-            string_in: Optional[Union[str, List[str]]] = None, flags: int = re.IGNORECASE, count: int = 0):
-        # identical to Sub since we already expose subn output
-        pat = _compile(pattern, flags)
-        strings, from_list = self._get_strings(string, string_in)
-        out_strings: List[str] = []
-        counts: List[int] = []
-        for s in strings:
-            res, n = pat.subn(repl, s, count)
-            out_strings.append(res)
-            counts.append(n)
-        return (out_strings, counts)
 
 
 class OvumReEscape:
@@ -346,6 +404,15 @@ class OvumReEscape:
     OUTPUT_IS_LIST = (True,)
     FUNCTION = "run"
     DESCRIPTION = """
+    re.escape(pattern)
+
+    Escape special characters in pattern[s]. This is useful 
+    if you want to match an arbitrary literal string that 
+    may have regular expression metacharacters in it. As of 
+    Python 3.7, only characters that can change the meaning 
+    of a regular expression are escaped.
+    """
+    DESCRIPTION_HTML = """
     <code>re.<b>escape</b>(<i>pattern</i>)</code>
     Escape special characters in <i>pattern<b>[s]</b></i>. This is useful if you want to match an arbitrary 
     literal string that may have regular expression metacharacters in it. As of Python 3.7, 
@@ -386,6 +453,14 @@ class OvumReMatchInfo:
     RETURN_NAMES = ("string", "pattern", "flags", "lastindex", "lastgroup")
     OUTPUT_IS_LIST = (True, True, True, True, True)
     DESCRIPTION = """
+    Extract information from RE_MATCH_T objects:
+
+    The original string, pattern, flags used for matching, 
+    the index of the last matched capturing group, and the 
+    name of the last matched capturing group. These are 
+    read-only attributes of the match object.
+    """
+    DESCRIPTION_HTML = """
     Extract information from <code>RE_MATCH_T</code> objects: the original string, pattern, flags used for matching, 
     the index of the last matched capturing group, and the name of the last matched capturing group.
     These are read-only attributes of the match object.
@@ -432,6 +507,14 @@ class OvumReMatchGroup:
     RETURN_NAMES = ("group", "groups", "groupdict")
     OUTPUT_IS_LIST = (True, True, True)
     DESCRIPTION = """
+    match.group(group1, ...), match.groups(default=None), match.groupdict(default=None)
+
+    Return subgroups of the match. group() returns one or 
+    more subgroups, groups() returns a tuple containing all 
+    subgroups, and groupdict() returns a dictionary 
+    containing all named subgroups.
+    """
+    DESCRIPTION_HTML = """
     <code>match.<b>group</b>(<i>group1, ...</i>)</code>, <code>match.<b>groups</b>(<i>default=None</i>)</code>, <code>match.<b>groupdict</b>(<i>default=None</i>)</code>
     Return subgroups of the match. <b>group()</b> returns one or more subgroups, <b>groups()</b> returns a tuple 
     containing all subgroups, and <b>groupdict()</b> returns a dictionary containing all named subgroups.
@@ -479,6 +562,14 @@ class OvumReMatchSpan:
     RETURN_NAMES = ("span", "start", "end")
     OUTPUT_IS_LIST = (True, True, True)
     DESCRIPTION = """
+    match.span(group), match.start(group), match.end(group)
+
+    Return the indices of the start and end of the substring 
+    matched by group. span() returns a 2-tuple (start, end), 
+    start() returns the start index, and end() returns the 
+    end index.
+    """
+    DESCRIPTION_HTML = """
     <code>match.<b>span</b>(<i>group</i>)</code>, <code>match.<b>start</b>(<i>group</i>)</code>, <code>match.<b>end</b>(<i>group</i>)</code>
     Return the indices of the start and end of the substring matched by group. <b>span()</b> returns a 2-tuple 
     <code>(start, end)</code>, <b>start()</b> returns the start index, and <b>end()</b> returns the end index.
@@ -522,6 +613,16 @@ class OvumReMatchExpand:
     RETURN_NAMES = ("expanded",)
     OUTPUT_IS_LIST = (True,)
     DESCRIPTION = """
+    match.expand(template)
+
+    Return the string obtained by doing backslash 
+    substitution on the template string, similar to the 
+    sub() method. Escapes such as \\n are converted to the 
+    appropriate characters, and numeric backreferences (\\1, 
+    \\2) and named backreferences (\\g<name>) are 
+    substituted.
+    """
+    DESCRIPTION_HTML = """
     <code>match.<b>expand</b>(<i>template</i>)</code>
     Return the string obtained by doing backslash substitution on the template string, 
     similar to the <b>sub()</b> method. Escapes such as <code>\\n</code> are converted to the appropriate characters, 
@@ -557,6 +658,13 @@ class OvumReMatchSelect:
     RETURN_TYPES = (RE_MATCH_T,)
     RETURN_NAMES = ("match",)
     DESCRIPTION = """
+    Select a specific match from a list of RE_MATCH_T objects by index.
+
+    This utility node helps extract individual matches from 
+    operations that return multiple matches, such as 
+    finditer(). Index is clamped to valid range.
+    """
+    DESCRIPTION_HTML = """
     Select a specific match from a list of <code>RE_MATCH_T</code> objects by index. 
     This utility node helps extract individual matches from operations that return multiple matches, 
     such as <b>finditer()</b>. Index is clamped to valid range.
@@ -590,6 +698,13 @@ class OvumReMatchView:
     RETURN_NAMES = ("text",)
     OUTPUT_IS_LIST = (False,)
     DESCRIPTION = """
+    Generate a human-readable representation of RE_MATCH_T objects for debugging and inspection.
+
+    Shows the pattern, flags, span, matched text, groups, 
+    and named groups in a formatted string. Useful for 
+    understanding what was matched and how.
+    """
+    DESCRIPTION_HTML = """
     Generate a human-readable representation of <code>RE_MATCH_T</code> objects for debugging and inspection. 
     Shows the pattern, flags, span, matched text, groups, and named groups in a formatted string. 
     Useful for understanding what was matched and how.

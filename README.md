@@ -316,6 +316,37 @@ These nodes are complementary to the excellent collection at https://github.com/
 
 ## Open Output via Shell (secure)
 
+## Text Ovary (overlay text on images)
+
+Text Ovary is a polished, in-house merge of the excellent TextOverlay node (sfinktah/comfyui-textoverlay) adapted for Ovum.
+
+Why you’ll like it:
+- Super simple: plug in an IMAGE and a STRING, pick a font, done.
+- Looks great: fill + stroke with independent opacity to keep captions readable over any background.
+- Precise placement: left/center/right, top/middle/bottom, with padding and x/y nudges.
+- Multiline aware: sensible line spacing and alignment across lines.
+- Batch-friendly: renders the same text across a whole batch efficiently.
+
+Inputs:
+- image (IMAGE)
+- text (STRING, multiline)
+- font_size (INT)
+- font (choice from bundled fonts)
+- fill_color_hex (STRING, e.g. #ffffff)
+- stroke_color_hex (STRING)
+- stroke_thickness (FLOAT, relative to font size)
+- padding (INT)
+- horizontal_alignment (left|center|right)
+- vertical_alignment (top|middle|bottom)
+- x_shift, y_shift (INT)
+- line_spacing (FLOAT)
+- stroke_opacity (FLOAT)
+
+Output:
+- IMAGE with the text composited
+
+Tip: Pair with Python String Format to build captions dynamically from metadata or prompts.
+
 Safely open your rendered media with the system’s default app—no fragile shell strings, no workflow‑stopping errors.
 
 Why you’ll like it:
