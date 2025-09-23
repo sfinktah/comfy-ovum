@@ -88,15 +88,6 @@ def find_and_replace_wildcards(prompt, offset_seed, debug=False):
                     last_end = m.end()
                     continue
 
-                # Check if requested index is valid for non-filtered searches
-                if not words_to_find and offset >= num_lines:
-                    error_msg = f"[ERROR: invalid index {offset}, only {num_lines} items are listed in {wildcard_file}.txt]"
-                    new_prompt += error_msg
-                    if debug:
-                        print(error_msg)
-                    last_end = m.end()
-                    continue
-
                 if words_to_find:
                     for i in range(lines_to_insert):
                         start_idx = (offset + i) % num_lines
