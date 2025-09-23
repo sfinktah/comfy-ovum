@@ -295,7 +295,7 @@ export class Timer {
                 try {
                     localStorage.setItem(LOCALSTORAGE_KEY + '.node_name_cache', JSON.stringify(Timer.nodeNameCache));
                 } catch (e) {
-                    console.warn('[Timer] Failed to persist node name cache:', e);
+                    Logger.log({class:'ovum.timer',method:'getNodeNameByIdCached',severity:'warn',tag:'error', nodeName:'ovum.timer'}, '[Timer] Failed to persist node name cache:', e);
                 }
             }
             else if (name && name.startsWith('id:')) {
@@ -305,7 +305,7 @@ export class Timer {
             }
             return name;
         } catch (err) {
-            console.warn('[Timer] Failed to get node name by id:', err);
+            Logger.log({class:'ovum.timer',method:'getNodeNameByIdCached',severity:'warn',tag:'error', nodeName:'ovum.timer'}, '[Timer] Failed to get node name by id:', err);
             // Fallback to direct call
             return getNodeNameById(id);
         }
@@ -332,11 +332,11 @@ export class Timer {
                 try {
                     localStorage.setItem(LOCALSTORAGE_KEY + '.node_name_cache', JSON.stringify(Timer.nodeNameCache));
                 } catch (e) {
-                    console.warn('[Timer] Failed to persist pruned node name cache:', e);
+                    Logger.log({class:'ovum.timer',method:'pruneOldCachedNames',severity:'warn',tag:'error', nodeName:'ovum.timer'}, '[Timer] Failed to persist pruned node name cache:', e);
                 }
             }
         } catch (err) {
-            console.warn('[Timer] Failed to prune node name cache:', err);
+            Logger.log({class:'ovum.timer',method:'pruneOldCachedNames',severity:'warn',tag:'error', nodeName:'ovum.timer'}, '[Timer] Failed to prune node name cache:', err);
         }
     }
 
@@ -462,7 +462,7 @@ export class Timer {
             const m = msg.match(/torch\.backends\.cudnn\.enabled (?:still )?set to (true|false)/i);
             if (m) {
                 Timer.cudnn_enabled = m[1].toLowerCase() === "true";
-                if (Timer.debug) console.log('[Timer] cudnn enabled:', Timer.cudnn_enabled);
+                if (Timer.debug) Logger.log({class:'ovum.timer',method:'onLog',severity:'debug',tag:'flow', nodeName:'ovum.timer'}, '[Timer] cudnn enabled:', Timer.cudnn_enabled);
             }
         });
     }
@@ -503,7 +503,7 @@ export class Timer {
             // Persist complete history after completion
             Timer.saveToStorage();
             // Trigger upload of timing data at end of execution
-            onUploadGraphData().catch(err => console.warn('[Timer] Upload timing failed:', err));
+            onUploadGraphData().catch(err => Logger.log({class:'ovum.timer',method:'executionSuccess',severity:'warn',tag:'error', nodeName:'ovum.timer'}, '[Timer] Upload timing failed:', err));
         }
     }
 
@@ -543,7 +543,7 @@ export class Timer {
                 if (typeof Timer.onChange === "function") Timer.onChange();
             }
         } catch (err) {
-            console.warn("[Timer] editRunNotes failed:", err);
+            Logger.log({class:'ovum.timer',method:'editRunNotes',severity:'warn',tag:'error', nodeName:'ovum.timer'}, "[Timer] editRunNotes failed:", err);
         }
     }
 
@@ -615,9 +615,9 @@ export class Timer {
 
         // Add individual columns for each of the last n runs
         const lastNRunIds = Object.keys(Timer.run_history).sort().reverse().slice(0, Timer.last_n_runs); // -1 to exclude the current run
-        if (Timer.debug) console.log('[Timer] lastNRunIds', lastNRunIds);
+        if (Timer.debug) Logger.log({class:'ovum.timer',method:'html',severity:'debug',tag:'flow', nodeName:'ovum.timer'}, '[Timer] lastNRunIds', lastNRunIds);
         const lastNRunCount = Math.min(lastNRunIds.length, Timer.last_n_runs);
-        if (Timer.debug) console.log('[Timer] lastNRunCount', lastNRunCount);
+        if (Timer.debug) Logger.log({class:'ovum.timer',method:'html',severity:'debug',tag:'flow', nodeName:'ovum.timer'}, '[Timer] lastNRunCount', lastNRunCount);
         let displayedRunNumber = 1;
         for (let i = lastNRunCount - 1; i >= 0; i--) {
             const runId = lastNRunIds[i];
@@ -704,10 +704,10 @@ export class Timer {
             return acc;
         }, [])
         const runNodeIds = currentRunHistory.flatMap(o => Object.keys(o))
-        if (Timer.debug) console.log("[Timer] currentRunHistory: ", currentRunHistory);
-        if (Timer.debug) console.log("[Timer] runNodeIds: ", runNodeIds);
+        if (Timer.debug) Logger.log({class:'ovum.timer',method:'html',severity:'debug',tag:'flow', nodeName:'ovum.timer'}, "[Timer] currentRunHistory: ", currentRunHistory);
+        if (Timer.debug) Logger.log({class:'ovum.timer',method:'html',severity:'debug',tag:'flow', nodeName:'ovum.timer'}, "[Timer] runNodeIds: ", runNodeIds);
         const currentNodeIds = uniq(runNodeIds); // this.getUniqueNodeIds(runNodeIds);
-        if (Timer.debug) console.log("[Timer] currentNodeIds: ", currentNodeIds);
+        if (Timer.debug) Logger.log({class:'ovum.timer',method:'html',severity:'debug',tag:'flow', nodeName:'ovum.timer'}, "[Timer] currentNodeIds: ", currentNodeIds);
 
         const averagesByK = (function averageByK(lastNRunIds) {
             const sums = Object.create(null);
@@ -716,7 +716,7 @@ export class Timer {
             for (const id of lastNRunIds) {
                 const nodes = Timer.run_history[id]?.nodes;
                 if (!nodes) {
-                    if (Timer.debug) console.log(`[Timer] [averagesByK] No nodes found for run ${id}`);
+                    if (Timer.debug) Logger.log({class:'ovum.timer',method:'html',severity:'debug',tag:'flow', nodeName:'ovum.timer'}, `[Timer] [averagesByK] No nodes found for run ${id}`);
                     continue;
                 }
 

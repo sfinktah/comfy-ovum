@@ -138,7 +138,7 @@ class SetTwinNodes extends TwinNodes {
      * Helper to compute and set the combined title from connected widgets' values,
      * and update node color from the first connected typed link
      */
-    updateTitle(collapsed = false) {
+    updateTitle(collapsed) {
         log({ class: "SetTwinNodes", method: "updateTitle", severity: "trace", tag: "function_entered" }, `collapsed: ${collapsed}`);
         // can find the event for collapsing a node, so we'll just apply the title shortening all the time
         if (collapsed) {
@@ -150,7 +150,6 @@ class SetTwinNodes extends TwinNodes {
         else {
             const names = extractWidgetNames(this);
             this.title = computeTwinNodeTitle(names, "set", disablePrefix);
-
             this.applyAbbreviatedOutputLabels();
         }
     }
@@ -170,14 +169,27 @@ class SetTwinNodes extends TwinNodes {
         if (!items.length) return;
 
         const analysis = analyzeNamesForAbbrev(items.map(it => it.name));
-        if (analysis && analysis.use) {
+        log({ class: "SetTwinNodes", method: "applyAbbreviatedOutputLabels", severity: "trace", tag: "analysis" }, {analysis});
+        if (analysis) {
             items.forEach((it, j) => {
-                const short = analysis.shortNames[j] || it.name;
-                const displayName = short.length > 12 ? short.substring(0, 8) + "…" : short;
-                this.setOutput(it.index, {
-                    name: short,
-                    label: displayName
-                });
+                if (analysis.use) {
+                    const short = analysis.shortNames[j] || it.name;
+                    const evenShorter = short.length > 12 ? short.substring(0, 8) + "…" : short;
+                    log({
+                        class: "SetTwinNodes",
+                        method: "applyAbbreviatedOutputLabels",
+                        severity: "trace",
+                        tag: "analysis"
+                    }, {short, evenShorter});
+                    this.setInputAndOutput(it.index, {
+                        name: short,
+                    });
+                }
+                else {
+                    this.setInputAndOutput(it.index, {
+                        name: it.name,
+                    });
+                }
             });
         }
     }
@@ -232,7 +244,6 @@ class SetTwinNodes extends TwinNodes {
     }
 
     setType(type, widgetIndex) {
-        // Robustly find the first callsite with a function name (Class.function or function) from the stack
         const widget = this.widgets?.[widgetIndex];
         const widgetName = widget?.name;
         const widgetValue = widget?.value;
@@ -283,12 +294,10 @@ class SetTwinNodes extends TwinNodes {
 
         // Input disconnected
         if (type === LiteGraph.INPUT && !isConnected) {
-            this.resetInput(index);
-            this.resetOutput(index);
-            this.updateTitle();
-            this.updateColors();
+            this.setInputAndOutput(index, {
+                type: "*",
+            });
         }
-
 
         // Input connected
         if (type === LiteGraph.INPUT && isConnected && link_info && this.graph) {
@@ -320,22 +329,22 @@ class SetTwinNodes extends TwinNodes {
                     validateWidgetName(this, index);
                 }
 
-                // Ensure type is updated and mirror to output, but keep names/labels/values unchanged
+                // Ensure type is updated
                 this.resetInput(index, {
                     type: srcSlotType,
-                    name: widgetName,
-                    label: widgetName
+                    name: this.inputs[index].name === "*" ? widgetName : this.inputs[index].name,
                 });
+
                 this.resetOutput(index, {
                     type: srcSlotType,
-                    name: widgetName,
-                    label: widgetName
+                    name: this.outputs[index].name === "*" ? widgetName : this.outputs[index].name,
                 });
+
             }
         }
 
-        // this.updateTitle();
-        // this.updateColors();
+        this.updateTitle();
+        this.updateColors();
 
     }
 
@@ -378,29 +387,6 @@ class SetTwinNodes extends TwinNodes {
         this.canvas.setDirty(true, true);
         log({ class: "SetTwinNodes", method: "checkConnections", severity: "debug", tag: "status" }, "checkConnections", this.currentGetters);
     }
-
-    update() {
-        log({ class: "SetTwinNodes", method: "update", severity: "trace", tag: "function_entered" }, "update");
-        if (!this.graph) {
-            return;
-        }
-
-        // Propagate types to all getters that share at least one of this node's names
-        // this line only used for debug output
-        // propagateToGetters(this, getters);
-
-        // Rename propagation across all widget indices:
-        // compare previousNames snapshot vs current widget values and
-        // update any GetTwinNodes widgets that still reference the old name.
-        // const currNames = Array.isArray(this.widgets)
-        //     ? this.widgets.map(widget => safeStringTrim(widget?.value))
-        //     : [];
-        // this.propagateNameChanges2(currNames);
-
-        // Update the previousNames snapshot
-        // this.properties.previousNames = currNames;
-    }
-
 
     propagateNameChanges2(currNames) {
         // const prevNames = Array.isArray(this.properties.previousNames) ? this.properties.previousNames : [];

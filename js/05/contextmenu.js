@@ -16,6 +16,7 @@
 /** @typedef {import('../01/typedefs.js').INodeInputSlot} INodeInputSlot */
 
 import {app} from "../../../scripts/app.js";
+import {GraphHelpers} from "../common/graphHelpersForTwinNodes.js";
 
 // Stolen from Kijai
 // Adds context menu entries, code partly from pyssssscustom-scripts
@@ -132,8 +133,6 @@ app.registerExtension({
         }, 1000);
     },
     async setup(app) {
-
-
         app.ui.settings.addSetting({
             id: "ovum.SetGetMenu",
             name: "ovum: Make TwinNodes default options",
@@ -203,10 +202,36 @@ app.registerExtension({
         const getLinkById = (id, links = getLinks()) => links[id];
         const getAllNodes = () => graph._nodes ?? [];
         const formatVariables = (text) => text.toLowerCase().replace(/_./g, m => m.replace("_", "").toUpperCase());
-        const isGetNode = (node) => node.type === "GetTwinNodes";
-        const isSetNode = (node) => node.type === "SetTwinNodes";
-        const isGetSetNode = (node) => isGetNode(node) || isSetNode(node);
-        const getGetSetNodes = (nodes = getAllNodes()) => nodes.filter(n => isGetSetNode(n));
+        const isGetTwinNode = (node) => node.type === "GetTwinNodes";
+        const isSetTwinNode = (node) => node.type === "SetTwinNodes";
+        const isGetSetTwinNode = (node) => isGetTwinNode(node) || isSetTwinNode(node);
+        const getGetSetTwinNodes = (nodes = getAllNodes()) => nodes.filter(n => isGetSetTwinNode(n));
+
+        // Support detection for KJNodes and EasyUse Get/Set nodes
+        const KJ_SET_TYPE = "SetNode";
+        const EASY_USE_SET_TYPE = "easy setNode";
+        const toGetType = (setType) => {
+            if (!setType || typeof setType !== "string") return setType;
+            // Replace the first occurrence of "set"/"Set" with "get"/"Get"
+            return setType.replace(/set/i, (m) => (m[0] === "S" ? "Get" : "get"));
+        };
+        const isKJSetNode = (node) => node?.type === KJ_SET_TYPE;
+        const isEasyUseSetNode = (node) => node?.type === EASY_USE_SET_TYPE;
+        const isKJGetNode = (node) => node?.type === toGetType(KJ_SET_TYPE);          // "GetNode"
+        const isEasyUseGetNode = (node) => node?.type === toGetType(EASY_USE_SET_TYPE); // "easy getNode"
+
+        const isAnyGetNode = (node) => node?.type === isGetTwinNode(node) || isKJGetNode(node) || isEasyUseGetNode(node);
+        const isAnySetNode = (node) => isGetTwinNode(node) || isKJSetNode(node) || isEasyUseSetNode(node);
+        const isAnyGetSetNode = (node) => isAnyGetNode(node) || isAnySetNode(node);
+        const getAnyGetSetNodes = (nodes = getAllNodes()) => nodes.filter(n => isAnyGetSetNode(n))
+            .sort((a, b) => {
+                // isGetSetTwinNode nodes first
+                if (isGetSetTwinNode(a) && !isGetSetTwinNode(b)) return -1;
+                if (!isGetSetTwinNode(a) && isGetSetTwinNode(b)) return 1;
+                // Then sort by id
+                return a.id - b.id;
+            });
+
 
         const setWidgetValue = (node, value, index = 0) => {
             if (!node.widgets_values) node.widgets_values = [];
@@ -327,7 +352,7 @@ app.registerExtension({
 
             if (originId === undefined || targetId === undefined || !originNode || !targetNode) return false;
 
-            if (excludeIfAlreadyGetSet && (isGetSetNode(originNode) || isGetSetNode(targetNode))) return false;
+            if (excludeIfAlreadyGetSet && (isGetSetTwinNode(originNode) || isGetSetTwinNode(targetNode))) return false;
 
             const fromToSuffix = `_from_${originId}_to_${targetId}`;
             let variableName = formatVariables(targetNode.getInputInfo(targetSlot)?.name ?? type.toLowerCase());
@@ -341,7 +366,7 @@ app.registerExtension({
             let hasConflict = false;
             let foundExisting = false;
 
-            if (isGetSetNode(originNode)) {
+            if (isGetSetTwinNode(originNode)) {
                 variableName = getWidgetValue(originNode);
                 foundExisting = true;
             } else {
@@ -351,7 +376,7 @@ app.registerExtension({
                         /** @type {LLink} */
                         const l = getLinkById(linkId);
                         const maybeSet = getNodeById(l?.target_id ?? -1);
-                        if (maybeSet && isSetNode(maybeSet)) {
+                        if (maybeSet && isSetTwinNode(maybeSet)) {
                             variableName = getWidgetValue(maybeSet);
                             foundExisting = true;
                         }
@@ -359,8 +384,8 @@ app.registerExtension({
                 }
 
                 if (!foundExisting) {
-                    for (const node of getGetSetNodes()) {
-                        if (!(variableName === getWidgetValue(node) && isSetNode(node))) continue;
+                    for (const node of getGetSetTwinNodes()) {
+                        if (!(variableName === getWidgetValue(node) && isSetTwinNode(node))) continue;
                         const incomingLinkId = node.inputs[0]?.link;
                         const incomingLink = getLinkById(incomingLinkId);
                         if (incomingLink?.origin_id === originNode.id) {
@@ -438,6 +463,41 @@ app.registerExtension({
 
         const originalHandler = LGraphCanvas.prototype.showLinkMenu;
 
+
+        const orig = LGraphCanvas.prototype.getCanvasMenuOptions;
+        LGraphCanvas.prototype.getCanvasMenuOptions = function () {
+            const options = orig.apply(this, arguments);
+            const nodes = app.graph._nodes;
+            const types = nodes.reduce((p, n) => {
+                if (n.type in p) {
+                    p[n.type].push(n);
+                } else {
+                    p[n.type] = [n];
+                }
+                return p;
+            }, {});
+            options.push({
+                content: "Select all nodes of type",
+                has_submenu: true,
+                submenu: {
+                    options: Object.keys(types)
+                        .sort()
+                        .map((t) => ({
+                            content: t,
+                            callback: () => {
+                                const nodes = GraphHelpers.getNodesByType(app.graph, t);
+                                if (nodes.length) {
+                                    app.canvas.selectNodes(nodes, false);
+                                    app.canvas.fitViewToSelectionAnimated();
+                                }
+                            }
+                        })),
+                },
+            });
+
+            return options;
+        };
+
         setTimeout(() => {
             LGraphCanvas.prototype.showLinkMenu = useTryCatchCallback(
                 originalHandler,
@@ -451,6 +511,9 @@ app.registerExtension({
                     }, "showLinkMenu", link, event);
 
                     // If shift key is pressed, convert the link to a Get/Set pair
+                    // Firstly, if the shift key is pressed, showLinkMenu won't even
+                    // get called.  All the modifier keys have this result.
+                    // TODO: Do something like that fancy alignment node I used that hijacks (configurable) ~ key
                     if (1 || event.shiftKey) {
                         convertLinkToGetSetNode(link);
                         return false;

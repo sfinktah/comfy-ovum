@@ -606,6 +606,7 @@ class OvumReMatchSpan:
         return (spans, starts, ends)
 
 
+# ^(?P<root>(?P<base>.*?/)(?P<output>output/|input/)(?P<subdirs>.*/)?)?(?P<fnbase>(?:.*?)(?:_\d{5})?)(?P<post>(?P<seq>(?:_+[1-9][0-9]{0,4}_)+)?(?P<tailseq>(?:_+0\d{4})+_?)?)(?P<ext>\.[a-z][a-z0-9]{2,5})(?P<whitespace>\s*)$
 class OvumReMatchExpand:
     NAME = "re.Match.expand (Regex Match Expand)"
     CATEGORY = "ovum/regex"

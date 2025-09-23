@@ -19,10 +19,11 @@ function splitNameTokens(str) {
 
 /**
  * Analyze a list of names and return abbreviated forms and a compact title suggestion.
- * Prefers common suffix; falls back to common prefix. Only activates if at least one name is "long" (>6 chars)
- * and a non-empty common prefix/suffix exists.
+ * Prefers common suffix; falls back to common prefix. If neither is found, tries a common infix
+ * (longest common contiguous token subsequence present in all names).
+ * Only activates if at least one name is "long" (>6 chars) and a non-empty common part exists.
  * @param {string[]} names
- * @returns {{use: boolean, mode?: 'prefix'|'suffix', common?: string[], shortNames?: string[], titleText?: string}}
+ * @returns {{use: boolean, mode?: 'prefix'|'suffix'|'infix', common?: string[], shortNames?: string[], titleText?: string}}
  */
 export function analyzeNamesForAbbrev(names) {
     const normalized = (names || []).map(n => safeStringTrim(n)).filter(Boolean);
@@ -56,13 +57,75 @@ export function analyzeNamesForAbbrev(names) {
         }
     }
 
+    // If neither suffix nor prefix exists, attempt to find a common infix (middle) subsequence
     let mode = suffix.length ? 'suffix' : (prefix.length ? 'prefix' : null);
+    let common = mode === 'suffix' ? suffix : (mode === 'prefix' ? prefix : null);
+
+    // Helper to find the longest common contiguous subsequence across all lists
+    function findLongestCommonContiguousSubsequence(lists) {
+        if (!lists.length) return [];
+        const ref = lists[0];
+        let best = [];
+        for (let i = 0; i < ref.length; i++) {
+            for (let j = i + 1; j <= ref.length; j++) {
+                const sub = ref.slice(i, j);
+                if (!sub.length) continue;
+                // Quick skip if current sub can't beat best
+                if (sub.length <= best.length) continue;
+
+                const presentInAll = lists.every(lst => {
+                    // search sub contiguously within lst
+                    for (let a = 0; a + sub.length <= lst.length; a++) {
+                        let ok = true;
+                        for (let b = 0; b < sub.length; b++) {
+                            if (lst[a + b] !== sub[b]) { ok = false; break; }
+                        }
+                        if (ok) return true;
+                    }
+                    return false;
+                });
+
+                if (presentInAll) {
+                    best = sub;
+                }
+            }
+        }
+        return best;
+    }
+
+    if (!mode) {
+        const infix = findLongestCommonContiguousSubsequence(tokenLists);
+        if (infix.length) {
+            mode = 'infix';
+            common = infix;
+        }
+    }
+
     if (!mode || !anyLong) return { use: false };
 
-    const common = mode === 'suffix' ? suffix : prefix;
+    // Build short tokens per name by removing the common part according to the mode
     const shortTokensPer = tokenLists.map(lst => {
-        if (mode === 'suffix') return lst.slice(0, Math.max(0, lst.length - suffix.length));
-        return lst.slice(prefix.length);
+        if (mode === 'suffix') {
+            return lst.slice(0, Math.max(0, lst.length - suffix.length));
+        }
+        if (mode === 'prefix') {
+            return lst.slice(prefix.length);
+        }
+        // mode === 'infix'
+        // remove the first occurrence of the common subsequence
+        let startIndex = -1;
+        for (let a = 0; a + common.length <= lst.length; a++) {
+            let ok = true;
+            for (let b = 0; b < common.length; b++) {
+                if (lst[a + b] !== common[b]) { ok = false; break; }
+            }
+            if (ok) { startIndex = a; break; }
+        }
+        if (startIndex === -1) {
+            // Shouldn't happen if common was verified, but fallback to original
+            return lst.slice();
+        }
+        return lst.slice(0, startIndex).concat(lst.slice(startIndex + common.length));
     });
 
     // Ensure we have at least something for each short name
@@ -74,8 +137,12 @@ export function analyzeNamesForAbbrev(names) {
     let titleText;
     if (mode === 'suffix') {
         titleText = `${shortNames.join('/')}${suffix.length ? ' ' + suffix.join(' ') : ''}`;
-    } else {
+    } else if (mode === 'prefix') {
         titleText = `${prefix.join(' ')}${shortNames.length ? ' ' + shortNames.join('/') : ''}`;
+    } else {
+        // infix: render "<common> <short1>/<short2>/..."
+        // Use underscore to preserve snake_case style for the common middle
+        titleText = `${common.join('_')}${shortNames.length ? ' ' + shortNames.join('/') : ''}`;
     }
 
     return { use: true, mode, common, shortNames, titleText };

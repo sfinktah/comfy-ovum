@@ -66,7 +66,7 @@ app.registerExtension({
 
                     // If all dynamic inputs were removed, re-add arg0
                     if (dyn.length === 0) {
-                        node.addInput("arg0", "*", { label: "arg0", forceInput: true });
+                        node.addInput("arg0", "*", { forceInput: true });
                         dyn = getDynamicInputs(node);
                     }
 

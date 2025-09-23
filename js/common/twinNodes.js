@@ -20,6 +20,7 @@ export class TwinNodes extends LGraphNode {
     numberOfOutputSlots = 2;
     numberOfWidgets = 2;
     colors = [];
+    is_auto_link = false;
 
     constructor(title) {
         super(title);
@@ -40,6 +41,12 @@ export class TwinNodes extends LGraphNode {
     }
 
     onAdded(graph) {
+        if (this.is_auto_link) {
+            setTimeout(() => {
+                this.is_auto_link = false;
+                this.update();
+            }, 500);
+        }
         if (Array.isArray(this.widgets)) {
             for (let i = 0; i < this.widgets.length; i++) {
                 try {
@@ -47,6 +54,12 @@ export class TwinNodes extends LGraphNode {
                 } catch (_e) {}
             }
         }
+    }
+
+    update() {
+        this.updateColors();
+        this.updateTitle();
+        this.serialize();
     }
 
     updateTitle() {
@@ -171,5 +184,15 @@ export class TwinNodes extends LGraphNode {
             name: this.inputs?.[index]?.name,
             label: this.inputs?.[index]?.label
         });
+    }
+
+    setInputAndOutput(index, overrides = {}) {
+        this.setInput(index, overrides);
+        this.setOutput(index, overrides);
+    }
+
+    resetInputAndOutput(index, overrides = {}) {
+        this.resetInput(index, overrides);
+        this.resetOutput(index, overrides);
     }
 }

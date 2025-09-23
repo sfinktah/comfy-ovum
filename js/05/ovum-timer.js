@@ -12,6 +12,7 @@ import { chainCallback, debounce} from '../01/utility.js';
 import { ensureTooltipLib } from '../01/tooltipHelpers.js';
 import { ensureDynamicInputsImpl} from "../01/dynamicInputHelpers.js";
 import { Timer } from '../04/timer-class.js';
+import { Logger } from '../common/logger.js';
 
 window.Timer = Timer;
 
@@ -61,7 +62,7 @@ app.registerExtension({
         import("../01/timer-styles.js").then(({ injectTimerStyles }) => {
             injectTimerStyles();
         }).catch(err => {
-            console.error("Failed to load timer styles:", err);
+            Logger.log({class:'ovum.timer',method:'setup',severity:'error',tag:'import'}, "Failed to load timer styles:", err);
         });
 
         const styleLink = document.createElement('link');
@@ -76,12 +77,12 @@ app.registerExtension({
 
         // Collect system information when socket opens
         function onSocketOpen() {
-            console.info("[ComfyUI] websocket opened/reconnected");
+            Logger.log({class:'ovum.timer',method:'onSocketOpen',severity:'info',tag:'websocket'}, "[ComfyUI] websocket opened/reconnected");
             // Record system information when connection opens
             Timer.cudnn_enabled = null;
             Timer.current_run_id = null;
             app.api.subscribeLogs(true).then(x => {
-                console.log("Logs subscribed", x);
+                Logger.log({class:'ovum.timer',method:'onSocketOpen',severity:'info',tag:'logs'}, "Logs subscribed", x);
             });
             app.api.getSystemStats().then(x => {
                 Timer.systemInfo = {
@@ -90,15 +91,15 @@ app.registerExtension({
                     gpu: x.devices?.[0]?.name || '',
                 };
                 Timer.pending_run_notes = JSON.stringify(Timer.systemInfo)
-                console.log("System Info Collected:", Timer.systemInfo);
+                Logger.log({class:'ovum.timer',method:'onSocketOpen',severity:'info',tag:'system'}, "System Info Collected:", Timer.systemInfo);
             }).catch(err => {
-                console.warn("Failed to collect system information:", err);
+                Logger.log({class:'ovum.timer',method:'onSocketOpen',severity:'warn',tag:'system'}, "Failed to collect system information:", err);
             });
         }
 
         // Handle socket close events
         function onSocketClose(event) {
-            console.warn("[ComfyUI] websocket closed", event.code, event.reason);
+            Logger.log({class:'ovum.timer',method:'onSocketClose',severity:'warn',tag:'websocket'}, "[ComfyUI] websocket closed", event.code, event.reason);
             Timer.systemInfo = {...Timer.systemInfo, connectionClosed: true, closeCode: event.code, closeReason: event.reason};
         }
 
@@ -124,7 +125,7 @@ app.registerExtension({
             if (e.key === 'Control') Timer.ctrlDown = false;
         });
 
-        console.log('ovum.timer registered');
+        Logger.log({class:'ovum.timer',method:'setup',severity:'info',tag:'registration'}, 'ovum.timer registered');
     },
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
         if (nodeType.comfyClass === "Timer") {
@@ -133,11 +134,11 @@ app.registerExtension({
             });
 
             chainCallback(nodeType.prototype, "onExecuted", function (message) {
-                console.debug("[Timer] onExecuted (chainCallback)", message);
+                Logger.log({class:'Timer',method:'onExecuted',severity:'debug',tag:'execution'}, "[Timer] onExecuted (chainCallback)", message);
                 const timerNode = this;
                 let bg_image = message["bg_image"];
                 if (bg_image) {
-                    console.log("[Timer] onExecuted: bg_image", bg_image);
+                    Logger.log({class:'Timer',method:'onExecuted',severity:'info',tag:'background'}, "[Timer] onExecuted: bg_image", bg_image);
                     this.properties.currentRunning = {data : bg_image };
                 }
                 if (message["queued_run_notes"]) {
@@ -146,13 +147,13 @@ app.registerExtension({
                     // Ensure we have a run id
                     if (!Timer.current_run_id) {
                         Timer.current_run_id = Date.now().toString();
-                        console.debug("[Timer] Created new current_run_id:", Timer.current_run_id);
+                        Logger.log({class:'Timer',method:'onExecuted',severity:'debug',tag:'run_id'}, "[Timer] Created new current_run_id:", Timer.current_run_id);
                     }
                     if (queuedText && Timer.current_run_id) {
                         const existing = String(Timer.run_notes[Timer.current_run_id] || "");
                         const combined = String(existing ? `${queuedText}\n${existing}` : queuedText);
                         Timer.run_notes[Timer.current_run_id] = combined.trim();
-                        console.debug("[Timer] Updated run_notes for run:", Timer.current_run_id, "combined:", combined);
+                        Logger.log({class:'Timer',method:'onExecuted',severity:'debug',tag:'run_notes'}, "[Timer] Updated run_notes for run:", Timer.current_run_id, "combined:", combined);
                     }
                     timerNode.setDirtyCanvas?.(true);
 
@@ -160,7 +161,7 @@ app.registerExtension({
             });
 
             chainCallback(nodeType.prototype, "onNodeCreated", /** @this {ComfyNode} */ function () {
-                console.log('beforeRegisterNodeDef.onNodeCreated', this);
+                Logger.log({class:'Timer',method:'onNodeCreated',severity:'debug',tag:'node_creation'}, 'beforeRegisterNodeDef.onNodeCreated', this);
                 const node = this;
 
                 // Ensure built-in widgets (like 'Run notes (for queued run)') render above the dynamic inputs
@@ -234,7 +235,7 @@ app.registerExtension({
 
                         ensureDynamicInputs(isConnecting);
                     } catch (err) {
-                        console.warn("[formatter] onConnectionsChange error:", err);
+                        Logger.log({class:'Timer',method:'onConnectionsChange',severity:'warn',tag:'error'}, "[formatter] onConnectionsChange error:", err);
                     }
                 });
                 // ---- End dynamic inputs ----
