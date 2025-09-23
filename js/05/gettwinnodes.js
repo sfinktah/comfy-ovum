@@ -527,7 +527,6 @@ app.registerExtension({
                         if (this.outputs?.[i]) {
                             this.setOutput(i, {
                                 name: label || '*',
-                                label: label || '*',
                                 type: t
                             });
                         }

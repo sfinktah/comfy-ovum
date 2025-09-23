@@ -1,9 +1,9 @@
-# ComfyUI custom node: Knob
+# ComfyUI custom node: BigKnob
 # Provides a numeric value with clamping and rounding, suitable for driving parameters from a UI knob.
 
 from typing import Dict, Any, Tuple
 
-class Knob:
+class BigKnob:
     """
     A numeric knob node.
     Inputs:
@@ -19,8 +19,8 @@ class Knob:
     @classmethod
     def INPUT_TYPES(cls) -> Dict[str, Dict[str, Tuple[str, Dict[str, Any]]]]:
         return {
-            "hidden": {
-                "value": ("FLOAT", {"default": 0.5}),
+            "required": {
+                "value": ("FLOAT", {"default": 0.5, "step": 0.01, "min": 0.0, "max": 1.0, "tooltip": "Current value"}),
             }
         }
 
@@ -57,4 +57,4 @@ class Knob:
         # Return single FLOAT
         return (float(rounded),)
 
-CLAZZES = [Knob]
+CLAZZES = [BigKnob]

@@ -53,10 +53,10 @@ function setWidgetValue(node, name, value) {
 }
 
 app.registerExtension({
-    name: "pyobjects.knob.ui",
+    name: "ovum.ui.knob",
     async beforeRegisterNodeDef(nodeType, nodeData, appInstance) {
         // Bind only to our Python node
-        if (!nodeData || nodeData.name !== "Knob") return;
+        if (!nodeData || nodeData.name !== "BigKnob") return;
 
         // Initialize per-instance state and defaults
         chainCallback(nodeType.prototype, "onNodeCreated", function () {
@@ -84,6 +84,10 @@ app.registerExtension({
         // Draw knob foreground (circular control)
         chainCallback(nodeType.prototype, "onDrawForeground", function (ctx) {
             if (this.flags?.collapsed) return;
+            const mode = Number(this.mode ?? 0);
+            const isMuted = mode === 2;
+            const isBypassed = mode === 4;
+            if (isMuted || isBypassed) return;
 
             const min = getNum(this, "min", 0);
             const max = getNum(this, "max", 1);
@@ -137,7 +141,7 @@ app.registerExtension({
             ctx.arc(center_x, center_y, radius * 0.75, 0, Math.PI * 2, true);
             ctx.fill();
 
-            // Knob handle
+            // BigKnob handle
             ctx.fillStyle = this.mouseOver ? "white" : (this.properties.color || "#7AF");
             ctx.beginPath();
             const angle = this.__knobNorm * Math.PI * 1.5 + Math.PI * 0.75;
