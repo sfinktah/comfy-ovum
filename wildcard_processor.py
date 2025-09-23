@@ -319,17 +319,6 @@ class OvumWildcardProcessor:
             "hidden": {"prompt_": "PROMPT", "extra_pnginfo": "EXTRA_PNGINFO"},
         }
 
-
-    @staticmethod
-    def _search_and_replace(prompt: str, extra_pnginfo, prompt_):
-        # Reuse ImpactPack wildcards pre-processing if available; fallback to pass-through
-        try:
-            # The ExtensiblePromptProcessor delegates to modules.impact.wildcards
-            # We mimic the behavior used in mikey_nodes: perform wildcard processing and random syntax
-            return prompt
-        except Exception:
-            return prompt
-
     def process(self, prompt, seed, prompt_=None, extra_pnginfo=None):
         if prompt_ is None:
             prompt_ = {}

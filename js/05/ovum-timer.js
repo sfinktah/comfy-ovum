@@ -13,6 +13,7 @@ import { ensureTooltipLib } from '../01/tooltipHelpers.js';
 import { ensureDynamicInputsImpl} from "../01/dynamicInputHelpers.js";
 import { Timer } from '../04/timer-class.js';
 import { Logger } from '../common/logger.js';
+import {html_impl} from "../04/timer-html.js";
 
 window.Timer = Timer;
 
@@ -240,7 +241,7 @@ app.registerExtension({
                 });
                 // ---- End dynamic inputs ----
 
-                const inputEl = Timer.html();
+                const inputEl = html_impl();
 
                 const widget = this.addDOMWidget(name, 'textmultiline', inputEl, {
                     getValue() {
@@ -269,13 +270,13 @@ app.registerExtension({
                 Timer.onChange = debounce(function () {
                     const existingTable = widget.element.querySelector('.cg-timer-table');
                     if (existingTable) {
-                        existingTable.parentNode.replaceChild(Timer.html('table'), existingTable);
+                        existingTable.parentNode.replaceChild(html_impl('table'), existingTable);
                         const existingNotes = widget.element.querySelector('.cg-timer-notes-list-wrapper');
                         if (existingNotes) {
-                            existingNotes.parentNode.replaceChild(Timer.html('cg-timer-notes-list-wrapper'), existingNotes);
+                            existingNotes.parentNode.replaceChild(html_impl('cg-timer-notes-list-wrapper'), existingNotes);
                         }
                     } else {
-                        widget.element.replaceChild(Timer.html(), widget.element.firstChild);
+                        widget.element.replaceChild(html_impl(), widget.element.firstChild);
                     }
                 }, 500);
                 setTimeout(() => {
