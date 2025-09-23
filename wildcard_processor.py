@@ -78,15 +78,41 @@ def find_and_replace_wildcards(prompt, offset_seed, debug=False):
             with open(file_path, 'r', encoding='utf-8') as file:
                 file_lines = file.readlines()
                 num_lines = len(file_lines)
+
+                # Check if the file is empty
+                if num_lines == 0:
+                    error_msg = f"[ERROR: file {wildcard_file}.txt is empty in {search_path}]"
+                    new_prompt += error_msg
+                    if debug:
+                        print(error_msg)
+                    last_end = m.end()
+                    continue
+
+                # Check if requested index is valid for non-filtered searches
+                if not words_to_find and offset >= num_lines:
+                    error_msg = f"[ERROR: invalid index {offset}, only {num_lines} items are listed in {wildcard_file}.txt]"
+                    new_prompt += error_msg
+                    if debug:
+                        print(error_msg)
+                    last_end = m.end()
+                    continue
+
                 if words_to_find:
                     for i in range(lines_to_insert):
                         start_idx = (offset + i) % num_lines
+                        found_matching_line = False
                         for j in range(num_lines):
                             line_number = (start_idx + j) % num_lines
                             line = file_lines[line_number].strip()
                             if any(re.search(r'\b' + re.escape(word) + r'\b', line, re.IGNORECASE) for word in words_to_find):
                                 selected_lines.append(line)
+                                found_matching_line = True
                                 break
+                        if not found_matching_line:
+                            # No matching line found for the filter words
+                            filter_words_str = ', '.join(words_to_find)
+                            error_msg = f"[ERROR: no lines matching filter words '{filter_words_str}' found in {wildcard_file}.txt]"
+                            selected_lines.append(error_msg)
                 else:
                     start_idx = offset % num_lines
                     for i in range(lines_to_insert):
@@ -106,8 +132,14 @@ def find_and_replace_wildcards(prompt, offset_seed, debug=False):
             if debug:
                 print('Wildcard prompt selected: ' + replacement_text)
         else:
+            # File not found - generate error message
+            if wildcard_dir:
+                error_msg = f"[ERROR: file not found {wildcard_file}.txt in {search_path}]"
+            else:
+                error_msg = f"[ERROR: file not found {wildcard_file}.txt in {wildcard_path}]"
+            new_prompt += error_msg
             if debug:
-                print(f'Wildcard file {wildcard_file}.txt not found in {search_path}')
+                print(error_msg)
         last_end = m.end()
     new_prompt += prompt[last_end:]
     return new_prompt
