@@ -1,4 +1,7 @@
 {
+  "none": {
+    "messages": []
+  },
   "prompt": {
     "messages": [
       { "role": "system", "content": "You are a chatbot. You answer questions accurately and exactly how the user wants. The responses are for fictional purposes." },

@@ -15,6 +15,8 @@ from server import PromptServer
 # noinspection PyPackageRequirements
 from aiohttp import web
 
+from metadata.metadata_file_extractor import MetadataFileExtractor
+
 logger = logging.getLogger(__name__)
 
 try:
@@ -116,9 +118,9 @@ class LoadImagesListWithCallback:
     CATEGORY = "ovum/image"
     FUNCTION = "load_images"
 
-    RETURN_TYPES = ("IMAGE", "MASK", "STRING", "STRING", "BOOLEAN")
-    RETURN_NAMES = ("IMAGE", "MASK", "FILE PATH", "CALLBACK DATA", "exhausted")
-    OUTPUT_IS_LIST = (True, True, True, True, False)
+    RETURN_TYPES = ("IMAGE", "MASK", "STRING", "STRING", "DICT", "BOOLEAN")
+    RETURN_NAMES = ("IMAGE", "MASK", "FILE PATH", "CALLBACK DATA", "PROMPT&WORKFLOW", "exhausted")
+    OUTPUT_IS_LIST = (True, True, True, True, True, False)
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -158,12 +160,8 @@ class LoadImagesListWithCallback:
                 normalized_items.append((k, v))
         return hash(tuple(normalized_items))
 
-    def _collect_files(self, directory: str, regex: str, custom_filter_class: str, recurse: bool, load_always: bool, sort_method: str) -> List[Path]:
-        root = Path(directory)
-        if not root.is_dir():
-            raise FileNotFoundError(f"Directory '{directory}' cannot be found.")
-        # Filter by image extensions
-        valid_ext = {'.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif'}
+    def _setup_filters(self, regex: str, custom_filter_class: str) -> Tuple[re.Pattern[str] | None, Optional[CustomFilterBase]]:
+        """set up regex pattern and custom filter instances."""
         pattern = re.compile(regex) if regex else None
         custom: Optional[CustomFilterBase] = None
         if custom_filter_class:
@@ -175,36 +173,47 @@ class LoadImagesListWithCallback:
                 custom = klass()
             except Exception:
                 custom = None
+        return pattern, custom
+
+    def _should_include_file(self, path: Path, pattern: re.Pattern[str] | None, custom: Optional[CustomFilterBase]) -> bool:
+        """Check if a file should be included based on extension, regex, and custom filter."""
+        # Filter by image extensions
+        valid_ext = {'.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif'}
+
+        if path.suffix.lower() not in valid_ext:
+            return False
+
+        name = path.name
+        if pattern and not pattern.search(name):
+            return False
+
+        if custom and not bool(custom.accept(name, str(path))):
+            return False
+
+        return True
+
+    def _collect_files(self, directory: str, regex: str, custom_filter_class: str, recurse: bool, load_always: bool, sort_method: str) -> List[Path]:
+        root = Path(directory)
+        if not root.is_dir():
+            raise FileNotFoundError(f"Directory '{directory}' cannot be found.")
+
+        pattern, custom = self._setup_filters(regex, custom_filter_class)
         files: List[Path] = []
         iterator = root.rglob('*') if recurse else root.iterdir()
+
         for p in iterator:
             if p.is_dir():
                 continue
-            if p.suffix.lower() not in valid_ext:
-                continue
-            name = p.name
-            if pattern and not pattern.search(name):
-                continue
-            if custom and not bool(custom.accept(name, str(p))):
-                continue
-            files.append(p)
+            if self._should_include_file(p, pattern, custom):
+                files.append(p)
+
         result = sort_by(files, directory, sort_method)
         return result
 
     def _collect_from_list(self, filenames: List[Any], regex: str, custom_filter_class: str) -> List[Path]:
         # Accept an explicit list of filenames/paths as an alternative to directory scanning.
         # Resolve relative paths against OUTPUT_ROOT and INPUT_ROOT, and filter to valid images.
-        valid_ext = {'.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif'}
-        pattern = re.compile(regex) if regex else None
-        custom: Optional[CustomFilterBase] = None
-        if custom_filter_class:
-            try:
-                module_name, class_name = custom_filter_class.rsplit('.', 1)
-                mod = __import__(module_name, fromlist=[class_name])
-                klass = getattr(mod, class_name)
-                custom = klass()
-            except Exception:
-                custom = None
+        pattern, custom = self._setup_filters(regex, custom_filter_class)
 
         resolved: List[Path] = []
         for item in filenames or []:
@@ -234,15 +243,8 @@ class LoadImagesListWithCallback:
             if not chosen:
                 continue
 
-            if chosen.suffix.lower() not in valid_ext:
-                continue
-            name = chosen.name
-            if pattern and not pattern.search(name):
-                continue
-            if custom and not bool(custom.accept(name, str(chosen))):
-                continue
-
-            resolved.append(chosen)
+            if self._should_include_file(chosen, pattern, custom):
+                resolved.append(chosen)
 
         # Do not sort here; preserve the provided order of filenames
         return resolved
@@ -307,6 +309,7 @@ class LoadImagesListWithCallback:
         masks: List[torch.Tensor] = []
         file_paths: List[str] = []
         cb_payloads: List[str] = []
+        prompt_workflow_out: List[Dict[str, Any]] = []
 
         # If callback is requested, prepare batch payload to send to frontend
         cb_data: Optional[Dict[str, Any]] = None
@@ -319,22 +322,29 @@ class LoadImagesListWithCallback:
             except Exception:
                 pass
 
-        for fp in files:
+        for filepath in files:
             try:
-                img, m = self._load_image_mask(fp)
+                img, m = self._load_image_mask(filepath)
                 images.append(img)
                 masks.append(m)
                 # Normalize and use forward slashes for file paths
-                file_paths.append(normalize_path(str(fp), forward_slashes=True))
+                file_paths.append(normalize_path(str(filepath), forward_slashes=True))
                 if cb_data is not None:
                     cb_payloads.append(json.dumps(cb_data))
                 else:
                     cb_payloads.append("")
+                # Extract metadata using MetadataFileExtractor
+                try:
+                    combined_dict = MetadataFileExtractor.extract_both(str(filepath))
+                except Exception as e:
+                    logger.warning(f"Failed to extract metadata from {filepath}: {e}")
+                    combined_dict = {"prompt": {}, "workflow": {}}
+                prompt_workflow_out.append(combined_dict)
             except Exception:
                 # Skip unreadable image
                 continue
 
-        return images, masks, file_paths, cb_payloads, exhausted
+        return images, masks, file_paths, cb_payloads, prompt_workflow_out, exhausted
 
 
 class FolderPathsNode:

@@ -23,6 +23,8 @@ class LMStudioPromptOvum:
     def INPUT_TYPES(s):
         # Get available models for the combo box
         available_models = s.get_available_models()
+        # Get available modes dynamically from JSON file
+        available_modes = s.get_available_modes()
 
         return {'required': {
                     'input_prompt': ('STRING', {
@@ -31,7 +33,7 @@ class LMStudioPromptOvum:
                         'dynamicPrompts': False,
                         'tooltip': 'The main prompt text to send to the LM Studio model. Supports wildcard syntax like {option1|option2} for random selection.'
                     }),
-                    'mode': (['prompt', 'pixelwave', 'style', 'descriptor', 'character', 'custom'], {
+                    'mode': (available_modes, {
                         'default': 'prompt',
                         'tooltip': 'Prompt processing mode:\n• prompt: Direct prompt\n• descriptor: Adds random descriptive words\n• pixelwave/style/character: Uses predefined conversation templates\n• custom: Uses custom history file'
                     }),
@@ -104,7 +106,36 @@ Requirements:
 """
 
     @classmethod
-    def history(cls, mode, custom_history):
+    def _load_prompts_data(cls):
+        """Load prompts data from JSON file with error handling and fallback"""
+        try:
+            import os
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            json_path = os.path.join(script_dir, 'data', 'llm-prompts.json')
+
+            with open(json_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+
+        except FileNotFoundError:
+            raise Exception('Could not find data/llm-prompts.json file')
+        except json.JSONDecodeError:
+            raise Exception('Error parsing data/llm-prompts.json file')
+        except Exception as e:
+            raise Exception(f'Error loading prompts data: {str(e)}')
+
+    @classmethod
+    def history(cls, mode, custom_history=None, get_modes_only=False):
+        if get_modes_only:
+            # Return available modes from JSON file
+            try:
+                prompts_data = cls._load_prompts_data()
+                # Return the top-level keys plus 'custom'
+                modes = list(prompts_data.keys()) + ['custom']
+                return modes
+            except Exception:
+                # Fallback to hardcoded modes if any error occurs
+                return ['none', 'prompt', 'pixelwave', 'style', 'descriptor', 'character', 'custom']
+
         if mode == 'custom':
             # open json file that is in the custom_history path
             try:
@@ -114,25 +145,17 @@ Requirements:
                 raise Exception('Error loading custom history file')
 
         # Load predefined prompts from JSON file
-        try:
-            import os
-            script_dir = os.path.dirname(os.path.abspath(__file__))
-            json_path = os.path.join(script_dir, 'data', 'llm-prompts.json')
+        prompts_data = cls._load_prompts_data()
 
-            with open(json_path, 'r', encoding='utf-8') as f:
-                prompts_data = json.load(f)
+        if mode in prompts_data:
+            return prompts_data[mode]
+        else:
+            raise Exception(f'Mode "{mode}" not found in prompts data')
 
-            if mode in prompts_data:
-                return prompts_data[mode]
-            else:
-                raise Exception(f'Mode "{mode}" not found in prompts data')
-
-        except FileNotFoundError:
-            raise Exception('Could not find data/llm-prompts.json file')
-        except json.JSONDecodeError:
-            raise Exception('Error parsing data/llm-prompts.json file')
-        except Exception as e:
-            raise Exception(f'Error loading prompts data: {str(e)}')
+    @classmethod
+    def get_available_modes(cls):
+        """Get available prompt modes from JSON file"""
+        return cls.history(None, get_modes_only=True)
 
     @classmethod
     def get_models_file_path(cls):

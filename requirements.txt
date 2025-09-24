@@ -1,3 +1,5 @@
+pymediainfo
+tomli-w
 requests
 braceexpand
 pillow
