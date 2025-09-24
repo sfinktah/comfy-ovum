@@ -92,6 +92,7 @@ class WorkflowWidgetToAnyOvum:
                 "id": ("STRING", {"multiline": False}),
                 "widget_name": ("STRING", {"multiline": False}),
                 "return_all": ("BOOLEAN", {"default": False}),
+                "from_prompt": ("BOOLEAN", {"default": False, "tooltip": "prompt is used instead of workflow"}),
                 "PROMPT&WORKFLOW": ("DICT",),
             },
             "optional": {
@@ -107,13 +108,13 @@ class WorkflowWidgetToAnyOvum:
 Selects a node and it's specified widget and outputs the value as its original type.  
 Takes a PROMPT&WORKFLOW dict input containing 'workflow' and 'prompt' keys.
 To see node id's, enable node id display from Manager badge menu.  
-Alternatively you can search with the node title. Node titles ONLY exist if they  
-are manually edited!
+Alternatively you can search with the node title.
 """
 
     @classmethod
     def get_widget_value(cls, id, widget_name, unique_id, return_all=False, node_title="", **kwargs):
         promptAndWorkflow = kwargs["PROMPT&WORKFLOW"]
+        fromPrompt = kwargs["from_prompt"]
         meta = MetadataProcessor(promptAndWorkflow['workflow'], promptAndWorkflow['prompt'])
 
         # find node
@@ -127,12 +128,16 @@ are manually edited!
                 raise ValueError(f"No prompt entry found for node id: {node_full_id}")
             return (values.get('inputs') or {},)
         else:
-            result = meta.getPromptInputValue(node_full_id, widget_name)
-            if result is None:
-                raise ValueError(f"Widget '{widget_name}' not found for node id: {node_full_id}")
-            if not isinstance(result, (list, tuple)) or len(result) == 0:
-                raise ValueError(f"Invalid result format for widget '{widget_name}' in node id: {node_full_id}")
-            native = result[0]
+            if fromPrompt:
+                result = meta.getPromptInputValue(node_full_id, widget_name)
+                if result is None:
+                    raise ValueError(f"Widget '{widget_name}' not found for node id: {node_full_id}")
+                if not isinstance(result, (list, tuple)) or len(result) == 0:
+                    raise ValueError(f"Invalid result format for widget '{widget_name}' in node id: {node_full_id}")
+                native = result[0]
+            else:
+                native = meta.getWorkflowWidgetValue(node_full_id, widget_name)
+            logger.info(f"Widget '{widget_name}' returned: {native} ({type(native)}")
             return (native,)
 
 METADATA_RAW = ("METADATA_RAW", {"forceInput": True})
