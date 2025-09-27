@@ -1,6 +1,8 @@
 # Stolen from/extends functionality of https://github.com/aria1th/ComfyUI-LogicUtils/blob/main/pystructure.py
 from common_types import NewPointer, ANYTYPE, _parse_optional_int
 from nodes import NODE_CLASS_MAPPINGS as ALL_NODE_CLASS_MAPPINGS
+import logging
+logger = logging.getLogger(__name__)
 
 
 class ListSlice(NewPointer):
@@ -582,6 +584,132 @@ class ListExtend(NewPointer):
             }
         }
 
+class PassthruOvum:
+    """
+    Return an element from a list by index as anytype.
+    """
+    @classmethod
+    def IS_CHANGED(cls, *args, **kwargs):
+        return float("NaN")  # Forces ComfyUI to consider it always changed
+
+    FUNCTION = "passthru"
+    DESCRIPTION = """
+    Does absolutely nothing but pass through the input and log it to the console (it's a debugging thing)
+    """
+    # INPUT_IS_LIST = True
+    RETURN_TYPES = (ANYTYPE,)
+    RETURN_NAMES = ("any_out",)
+    CATEGORY = "ovum/debug"
+    custom_name="Passthru"
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "optional": {
+                "any_in": (ANYTYPE,),
+            }
+        }
+
+    @classmethod
+    def passthru(cls, any_in=None):
+        logging.info(f"{cls.custom_name}: ({type(any_in)}) {any_in}")
+        return (any_in,)
+
+class PassthruInputIsListOvum:
+    """
+    Return an element from a list by index as anytype.
+    """
+    @classmethod
+    def IS_CHANGED(cls, *args, **kwargs):
+        return float("NaN")  # Forces ComfyUI to consider it always changed
+
+    FUNCTION = "passthru"
+    DESCRIPTION = """
+    Does absolutely nothing but pass through the input and log it to the console (it's a debugging thing)
+    """
+    INPUT_IS_LIST = True
+    RETURN_TYPES = (ANYTYPE,)
+    RETURN_NAMES = ("any_out",)
+    CATEGORY = "ovum/debug"
+    custom_name="Passthru (Input Is List)"
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "optional": {
+                "any_in": (ANYTYPE,),
+            }
+        }
+
+    @classmethod
+    def passthru(cls, any_in=None):
+        logging.info(f"{cls.custom_name}: ({type(any_in)}) {any_in}")
+        return (any_in,)
+
+
+class PassthruInputAndOutputIsListOvum:
+    """
+    Return an element from a list by index as anytype.
+    """
+    @classmethod
+    def IS_CHANGED(cls, *args, **kwargs):
+        return float("NaN")  # Forces ComfyUI to consider it always changed
+
+    FUNCTION = "passthru"
+    DESCRIPTION = """
+    Does absolutely nothing but pass through the input and log it to the console (it's a debugging thing)
+    """
+    INPUT_IS_LIST = True
+    OUTPUT_IS_LIST = (True,)
+    RETURN_TYPES = (ANYTYPE,)
+    RETURN_NAMES = ("any_out",)
+    CATEGORY = "ovum/debug"
+    custom_name="Passthru (Input & Output is List)"
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "optional": {
+                "any_in": (ANYTYPE,),
+            }
+        }
+
+    @classmethod
+    def passthru(cls, any_in=None):
+        logging.info(f"{cls.custom_name}: ({type(any_in)}) {any_in}")
+        return (any_in,)
+
+class PassthruOutputIsListOvum:
+    """
+    Return an element from a list by index as anytype.
+    """
+    @classmethod
+    def IS_CHANGED(cls, *args, **kwargs):
+        return float("NaN")  # Forces ComfyUI to consider it always changed
+
+    FUNCTION = "passthru"
+    DESCRIPTION = """
+    Does absolutely nothing but pass through the input and log it to the console (it's a debugging thing)
+    """
+    OUTPUT_IS_LIST = (True,)
+    RETURN_TYPES = (ANYTYPE,)
+    RETURN_NAMES = ("any_out",)
+    CATEGORY = "ovum/debug"
+    custom_name="Passthru (Output Is List)"
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "optional": {
+                "any_in": (ANYTYPE,),
+            }
+        }
+
+    @classmethod
+    def passthru(cls, any_in=None):
+        logging.info(f"{cls.custom_name}: ({type(any_in)}) {any_in}")
+        return (any_in,)
+
 
 class GetByIndex(NewPointer):
     """
@@ -665,18 +793,30 @@ class MakeFlatImageList:
     Create a list of images, lists of lists of images, batches, whatever.
     """
     RETURN_TYPES = ("IMAGE",)
-    OUTPUT_IS_LIST = (True,)
+    # OUTPUT_IS_LIST = (True,)
     FUNCTION = "doit"
 
-    CATEGORY = "ImpactPack/Util"
+    CATEGORY = "ovum/debug"
 
     def doit(self, **kwargs):
         images = []
 
         for k, v in kwargs.items():
-            images.append(v)
+            logger.info(f"k: {k}, v: {type(v)}")
+            if isinstance(v, list):
+                for i in v:
+                    logger.info(f"i: {i}, v: {type(v)}")
+                    if isinstance(i, list):
+                        for j in i:
+                            logger.info(f"i: {j}, v: {type(v)}")
+                            images.append(j)
+                    else:
+                        images.append(i)
+            else:
+                images.append(v)
 
+        logger.info(f"returned {len(images)} images")
         return (images, )
 
 
-CLAZZES = [ListSlice, ListSplice, RepeatItem, ReverseList, ConcatLists, IndexOf, JoinList, UniqueList, StringListEditor, CastListToAny, CastAnyToList, FromListTypeNode, ReinterpretCast, ReinterpretAsListCast, GetByIndex, ListExtend]
+CLAZZES = [ListSlice, ListSplice, RepeatItem, ReverseList, ConcatLists, IndexOf, JoinList, UniqueList, StringListEditor, CastListToAny, CastAnyToList, FromListTypeNode, ReinterpretCast, ReinterpretAsListCast, GetByIndex, ListExtend, PassthruOvum, PassthruInputIsListOvum, PassthruInputAndOutputIsListOvum, PassthruOutputIsListOvum, OvumLength, MakeFlatImageList]
