@@ -434,8 +434,14 @@ export function validateNodeLinks(node) {
 }
 
 export function setWidgetValue(node, idx, value) {
-    if (!node.widgets || !node.widgets[idx]) return;
+    if (!node.widgets || !node.widgets[idx]) return null;
     node.widgets[idx].value = value;
+    return node.widgets[idx];
+}
+
+export function setWidgetValueWithValidation(node, idx, value) {
+    setWidgetValue(node, idx, value);
+    return validateWidgetName(node, idx);
 }
 
 // Widget name validation helper function
@@ -446,13 +452,13 @@ export function setWidgetValue(node, idx, value) {
  *
  * @param {Object} node - The node containing the widget to validate.
  * @param {number} idx - The widgetIndex of the widget in the node's widget list to validate.
- * @return {void} This function does not return a value.
+ * @return {string} - The widget name after validation.
  */
 export function validateWidgetName(node, idx) {
     const graph = node.graph;
-    if (!graph || !node.widgets || !node.widgets[idx]) return;
-    let base = safeStringTrim(node.widgets[idx].value);
-    if (!base) return;
+    if (!graph || !node.widgets || !node.widgets[idx]) return '' ;
+    let currentValue = safeStringTrim(node.widgets[idx].value);
+    if (!currentValue) return '';
 
     // Collect every widget value from all SetTwinNodes (excluding this exact widget)
     const existingValues = new Set();
@@ -467,17 +473,20 @@ export function validateWidgetName(node, idx) {
         }
     });
 
-    // If base collides, append _0, _1, ...
-    if (existingValues.has(base)) {
+    // If currentValue collides, append _0, _1, ...
+    if (existingValues.has(currentValue)) {
         let tries = 0;
-        let candidate = `${base}_${tries}`;
+        let candidate = `${currentValue}_${tries}`;
         while (existingValues.has(candidate)) {
             tries++;
-            candidate = `${base}_${tries}`;
+            candidate = `${currentValue}_${tries}`;
         }
         setWidgetValue(node, idx, candidate);
+        return candidate;
     }
-    node.update();
+    else {
+        return currentValue;
+    }
 }
 
 // Slot label helper function

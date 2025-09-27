@@ -78,7 +78,7 @@ class SetTwinNodes extends TwinNodes {
                 {}
             );
             // Hook the value setter to track previous value
-            wrapWidgetValueSetter(widget);
+            // wrapWidgetValueSetter(widget);
 
             // callback?(value: any, canvas?: LGraphCanvas, node?: LGraphNode, pos?: Point, e?: CanvasPointerEvent): void;
             /**
@@ -110,10 +110,10 @@ class SetTwinNodes extends TwinNodes {
                 }
             }
 
-            chainCallback(this, 'collapse', function collapse(force) {
-                log({ class: "SetTwinNodes", method: "onMinimize", severity: "trace", tag: "function_entered" }, `force ${force}, flags.collapsed: ${node.flags?.collapsed}`);
-                node.updateTitle(node.flags?.collapsed);
-            });
+            // chainCallback(this, 'collapse', function collapse(force) {
+            //     log({ class: "SetTwinNodes", method: "onMinimize", severity: "trace", tag: "function_entered" }, `force ${force}, flags.collapsed: ${node.flags?.collapsed}`);
+            //     node.updateTitle(node.flags?.collapsed);
+            // });
         }
         ensureSlotCounts(this);
         // Initialize previousNames snapshot to current widget values
@@ -141,17 +141,17 @@ class SetTwinNodes extends TwinNodes {
     updateTitle(collapsed) {
         log({ class: "SetTwinNodes", method: "updateTitle", severity: "trace", tag: "function_entered" }, `collapsed: ${collapsed}`);
         // can find the event for collapsing a node, so we'll just apply the title shortening all the time
-        if (collapsed) {
-            this.fullTitle = this.title;
-            if (this.title.length > 20) {
-                this.title = this.title.substring(0, 19) + "…";
-            }
-        }
-        else {
+        // if (collapsed) {
+        //     this.fullTitle = this.title;
+        //     if (this.title.length > 20) {
+        //         this.title = this.title.substring(0, 19) + "…";
+        //     }
+        // }
+        // else {
             const names = extractWidgetNames(this);
             this.title = computeTwinNodeTitle(names, "set", disablePrefix);
             this.applyAbbreviatedOutputLabels();
-        }
+        // }
     }
 
 
@@ -222,7 +222,7 @@ class SetTwinNodes extends TwinNodes {
         const widgetIndex = this.widgets.indexOf(widget);
         const type = this.inputs?.[widgetIndex]?.type;
         log({ class: "SetTwinNodes", method: "onWidgetChanged", severity: "trace", tag: "function_entered" }, "onWidgetChanged", {name, value, oldValue, type, w: widget});
-        this.graph.sendEventToAllNodes("setnodeNameChange", {
+        this.graph?.sendEventToAllNodes("setnodeNameChange", {
             oldValue,
             value,
             type,
@@ -343,7 +343,7 @@ class SetTwinNodes extends TwinNodes {
             }
         }
 
-        this.updateTitle();
+        // this.updateTitle();
         this.updateColors();
 
     }
@@ -355,7 +355,9 @@ class SetTwinNodes extends TwinNodes {
      * @returns {SetTwinNodes} The cloned node.
      */
     clone() {
-        const cloned = SetTwinNodes.prototype.clone.apply(this);
+        const cloned = TwinNodes.prototype.clone.apply(this);
+        cloned.size = cloned.computeSize();
+        return cloned;
         // Reset all inputs
         if (cloned.inputs) {
             for (let i = 0; i < cloned.inputs.length; i++) {
