@@ -15,6 +15,19 @@ from numpy.__config__ import CONFIG
 logger = logging.getLogger(__name__)
 matches = None
 
+class TautologyStr(str):
+    def __ne__(self, other):
+        return False
+
+class ByPassTypeTuple(tuple):
+    def __getitem__(self, index):
+        if index>0:
+            index=0
+        item = super().__getitem__(index)
+        if isinstance(item, str):
+            return TautologyStr(item)
+        return item
+
 
 class WidgetToStringOvum:
     @classmethod
@@ -140,6 +153,39 @@ Alternatively you can search with the node title.
             logger.info(f"Widget '{widget_name}' returned: {native} ({type(native)}")
             return (native,)
 
+MAX_FLOW_NUM = 20
+class SyncSinkOvum:
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "any_input": (IO.ANY, ),
+            },
+            "optional": {
+                "value%d" % i: (IO.ANY,) for i in range(1, MAX_FLOW_NUM)
+            },
+            "hidden": {
+                "prompt": "PROMPT",
+                "extra_pnginfo": "EXTRA_PNGINFO",
+                "unique_id": "UNIQUE_ID"
+            }
+        }
+
+    RETURN_TYPES = ByPassTypeTuple(tuple([IO.ANY] + [IO.ANY] * (MAX_FLOW_NUM - 1)))
+    RETURN_NAMES = ByPassTypeTuple(tuple(["any_output"] + ["value%d" % i for i in range(1, MAX_FLOW_NUM)]))
+    FUNCTION = "dummy"
+    CATEGORY = "ovum/KJNodes"
+    DESCRIPTION = """
+Does nothing, used to force additional attached inputs to complete before the next node.
+"""
+
+    def dummy(self, any_input, prompt=None, extra_pnginfo=None, unique_id=None, **kwargs):
+        outputs = [kwargs.get("value%d" % num, None) for num in range(1, MAX_FLOW_NUM)]
+        return {
+            "result": tuple([any_input] + outputs),
+        }
+
 METADATA_RAW = ("METADATA_RAW", {"forceInput": True})
 
 class CImagePreviewFromMetadata(PreviewImage):
@@ -241,4 +287,4 @@ class CImagePreviewFromMetadata(PreviewImage):
         return images
 
 
-CLAZZES = [WidgetToStringOvum, WorkflowWidgetToAnyOvum]
+CLAZZES = [WidgetToStringOvum, WorkflowWidgetToAnyOvum, SyncSinkOvum]
