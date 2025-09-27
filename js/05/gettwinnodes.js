@@ -716,11 +716,11 @@ app.registerExtension({
              */
             onAdded(graph) {
                 // Kijai would call this.validateName(graph) on the setter, nothing on the getter
-                if (Array.isArray(this.widgets)) {
-                    for (let i = 0; i < this.widgets.length; i++) {
-                        try { wrapWidgetValueSetter(this.widgets[i]); } catch (_e) {}
-                    }
-                }
+                // if (Array.isArray(this.widgets)) {
+                //     for (let i = 0; i < this.widgets.length; i++) {
+                //         try { wrapWidgetValueSetter(this.widgets[i]); } catch (_e) {}
+                //     }
+                // }
             }
 
             /**

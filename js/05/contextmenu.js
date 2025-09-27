@@ -1,5 +1,5 @@
 /** @typedef {import('@comfyorg/comfyui-frontend-types').ComfyApp} ComfyApp */
-/** @typedef {import('@comfyorg/litegraph').LiteGraph} LiteGraph */
+/** @typedef {import('@comfyorg/comfyui-frontend-types').LiteGraph} LiteGraph */
 /** @typedef {import('@comfyorg/comfyui-frontend-types').LGraphCanvas} LGraphCanvas */
 /** @typedef {import("@comfyorg/comfyui-frontend-types").LGraphNode} LGraphNode */
 /** @typedef {import("@comfyorg/comfyui-frontend-types").LiteGraph} LiteGraph */
@@ -17,6 +17,7 @@
 
 import {app} from "../../../scripts/app.js";
 import {GraphHelpers} from "../common/graphHelpersForTwinNodes.js";
+import {setWidgetValue, setWidgetValueWithValidation} from "../01/twinnodeHelpers.js";
 
 // Stolen from Kijai
 // Adds context menu entries, code partly from pyssssscustom-scripts
@@ -29,6 +30,12 @@ function addMenuHandler(nodeType, cb) {
         return r;
     };
 }
+
+function jumpToNodeWithLinkId(id) {
+    app.canvas.selectNode(app.graph.getNodeById(app.graph._links.get(id).origin_id), false); app.canvas.fitViewToSelectionAnimated()
+}
+
+window.jumpToNodeWithLinkId = jumpToNodeWithLinkId;
 
 function addNode(name, nextTo, options) {
     options = {side: "left", select: true, shiftY: 0, shiftX: 0, ...(options || {})};
@@ -178,13 +185,13 @@ app.registerExtension({
         const getWidgetByName = (node, name) => node.widgets.find(w => w.name === name);
 
         const doesInputWithNameLink = (node, inputName, ignoreIfEmpty) =>
-            !!node.inputs && node.inputs.some(input => input.name === inputName && input.link && !ignoreIfEmpty);
+            node.inputs && node.inputs.some(input => input.name === inputName && input.link && !ignoreIfEmpty);
 
         const getWidgetValue = (node, index = 0) => {
             if (!node) return undefined;
             const widget = node.widgets?.[index];
             if (widget) return widget.value;
-            return node.widgets_values ? node.widgets_values?.[index] : undefined;
+            return node.widgets_values ? node.widgets_values?.[index] : node.widgets?.[index]?.value;
         };
 
         const updateNodeHeight = (node) => node.setSize([node.size[0], node.computeSize()[1]]);
@@ -201,7 +208,8 @@ app.registerExtension({
         const getLinks = () => graph.links ?? [];
         const getLinkById = (id, links = getLinks()) => links[id];
         const getAllNodes = () => graph._nodes ?? [];
-        const formatVariables = (text) => text.toLowerCase().replace(/_./g, m => m.replace("_", "").toUpperCase());
+        // const formatVariables = (text) => text.toLowerCase().replace(/_./g, m => m.replace("_", "").toUpperCase());
+        const formatVariables = (text) => text.toLowerCase().replace(/[^a-z0-9_]+/g, '_');
         const isGetTwinNode = (node) => node.type === "GetTwinNodes";
         const isSetTwinNode = (node) => node.type === "SetTwinNodes";
         const isGetSetTwinNode = (node) => isGetTwinNode(node) || isSetTwinNode(node);
@@ -233,10 +241,11 @@ app.registerExtension({
             });
 
 
-        const setWidgetValue = (node, value, index = 0) => {
+        const easySetWidgetValue = (node, value, index = 0) => {
             if (!node.widgets_values) node.widgets_values = [];
             node.widgets_values[index] = value;
             node.widgets[index].value = value;
+            return node.widgets[index];
         };
 
         const graphAdd = (node) => graph.add(node);
@@ -356,11 +365,25 @@ app.registerExtension({
 
             const fromToSuffix = `_from_${originId}_to_${targetId}`;
             let variableName = formatVariables(targetNode.getInputInfo(targetSlot)?.name ?? type.toLowerCase());
+            Logger.log({
+                class: 'ovum.contextmenu',
+                method: 'convertLinkToGetSetNode',
+                severity: 'trace',
+                tag: 'variableName',
+                nodeName: 'ovum.contextmenu'
+            }, `1variableName = '${variableName}'`);
 
             if (!variableName) {
                 const outName = originNode.outputs?.[originSlot]?.name;
                 const outType = originNode.outputs?.[originSlot]?.type?.toString();
                 variableName = formatVariables(outName ?? outType ?? fromToSuffix);
+                Logger.log({
+                    class: 'ovum.contextmenu',
+                    method: 'convertLinkToGetSetNode',
+                    severity: 'trace',
+                    tag: 'variableName',
+                    nodeName: 'ovum.contextmenu'
+                }, `2variableName = '${variableName}'`);
             }
 
             let hasConflict = false;
@@ -368,6 +391,13 @@ app.registerExtension({
 
             if (isGetSetTwinNode(originNode)) {
                 variableName = getWidgetValue(originNode);
+                Logger.log({
+                    class: 'ovum.contextmenu',
+                    method: 'convertLinkToGetSetNode',
+                    severity: 'trace',
+                    tag: 'variableName',
+                    nodeName: 'ovum.contextmenu'
+                }, `3variableName = '${variableName}'`);
                 foundExisting = true;
             } else {
                 const originOutputLinks = originNode.outputs?.[originSlot]?.links;
@@ -378,6 +408,13 @@ app.registerExtension({
                         const maybeSet = getNodeById(l?.target_id ?? -1);
                         if (maybeSet && isSetTwinNode(maybeSet)) {
                             variableName = getWidgetValue(maybeSet);
+                            Logger.log({
+                                class: 'ovum.contextmenu',
+                                method: 'convertLinkToGetSetNode',
+                                severity: 'trace',
+                                tag: 'variableName',
+                                nodeName: 'ovum.contextmenu'
+                            }, `4variableName = '${variableName}'`);
                             foundExisting = true;
                         }
                     }
@@ -394,7 +431,16 @@ app.registerExtension({
                             hasConflict = true;
                         }
                     }
-                    if (hasConflict) variableName += fromToSuffix;
+                    if (hasConflict) {
+                        variableName += fromToSuffix;
+                        Logger.log({
+                            class: 'ovum.contextmenu',
+                            method: 'convertLinkToGetSetNode',
+                            severity: 'trace',
+                            tag: 'variableName',
+                            nodeName: 'ovum.contextmenu'
+                        }, `5variableName = '${variableName}'`);
+                    }
                 }
             }
 
@@ -404,15 +450,34 @@ app.registerExtension({
                 setNode.is_auto_link = true;
 
                 const [x, y] = originNode.getConnectionPos(false, originSlot);
-                setNode.pos = [x + 20, y];
+                setNode.pos = [x + 20, y + 15];
 
-                setNode.inputs[0].name = variableName;
-                setNode.inputs[0].type = type;
-                setNode.inputs[0].widget = targetNode.inputs[targetSlot].widget;
+                // setNode.setInputAndOutput(0, { name: variableName, type })
+                // setNode.inputs[0].name = variableName;
+                // setNode.inputs[0].type = type;
+                // setNode.inputs[0].widget = targetNode.inputs[targetSlot].widget;
 
-                setWidgetValue(setNode, variableName);
                 graphAdd(setNode);
-                // setNode.flags.collapsed = true;
+                Logger.log({
+                    class: 'ovum.contextmenu',
+                    method: 'convertLinkToGetSetNode',
+                    severity: 'trace',
+                    tag: 'variableName',
+                    nodeName: 'ovum.contextmenu'
+                }, `6variableName = '${variableName}'`);
+                // setTimeout(() => {
+                    // (value, canvas, node,...
+                    const w = easySetWidgetValue(setNode, variableName);
+                    Logger.log({
+                        class: 'ovum.contextmenu',
+                        method: 'convertLinkToGetSetNode',
+                        severity: 'trace',
+                        tag: 'setWidgetValue',
+                        nodeName: 'ovum.contextmenu',
+                    }, `setNode: setWidgetValue(${variableName}) returned widget`, w);
+                    setNode.widgets[0].callback(variableName, app.canvas, setNode);
+                // }, 0);
+                setNode.flags.collapsed = true;
 
                 let savedWidgetValues = [];
                 if (originNode.widgets) {
@@ -436,7 +501,7 @@ app.registerExtension({
                         if (originNode) {
                             originNode.connect(originSlot, setNode, 0);
                             for (const [idx, val] of savedWidgetValues.entries()) {
-                                setWidgetValue(originNode, val, idx);
+                                easySetWidgetValue(originNode, val, idx);
                             }
                             if (setNode !== null) setNode.setSize(setNode.computeSize());
                         }
@@ -447,16 +512,31 @@ app.registerExtension({
             /** @type {GetTwinNodes} */
             const getNode = LiteGraph.createNode("GetTwinNodes");
             const [tx, ty] = targetNode.getConnectionPos(true, targetSlot);
-            getNode.pos = [tx - 150, ty];
+            getNode.pos = [tx - 150, ty + 15];
 
-            getNode.outputs[0].name = variableName;
-            getNode.outputs[0].type = type;
+            // getNode.outputs[0].name = variableName;
+            // getNode.outputs[0].type = type;
             // getNode.outputs[0].widget = targetNode.inputs[targetSlot].widget;
 
             graphAdd(getNode);
-            setWidgetValue(getNode, variableName);
+            // setWidgetValue(getNode, variableName);
 
-            // getNode.flags.collapsed = true;
+            // graphAdd(setNode);
+            // variableName = setWidgetValueWithValidation(setNode, variableName);
+            // setTimeout(() => {
+                // (value, canvas, node,...
+                const w = easySetWidgetValue(getNode, variableName); // .callback(variableName, app.canvas, getNode);
+                Logger.log({
+                    class: 'ovum.contextmenu',
+                    method: 'convertLinkToGetSetNode',
+                    severity: 'trace',
+                    tag: 'setWidgetValue',
+                    nodeName: 'ovum.contextmenu',
+                }, `getNode: setWidgetValue(${variableName}) returned widget`, w);
+                getNode.widgets[0].callback(variableName, app.canvas, getNode);
+            // }, 0);
+
+            getNode.flags.collapsed = true;
             getNode.setSize(getNode.computeSize());
             getNode.connect(0, targetNode, targetSlot);
         };

@@ -344,6 +344,14 @@ class LoadImagesListWithCallback:
                 # Skip unreadable image
                 continue
 
+        # Sanity check: lengths should match; log if they don't to aid debugging
+        if not (len(images) == len(masks) == len(file_paths) == len(cb_payloads) == len(prompt_workflow_out)):
+            logger.warning(
+                "[ovum] Mismatch in output lengths: images=%d masks=%d file_paths=%d cb_payloads=%d prompt_workflow=%d; files=%s",
+                len(images), len(masks), len(file_paths), len(cb_payloads), len(prompt_workflow_out),
+                [str(f) for f in files]
+            )
+
         return images, masks, file_paths, cb_payloads, prompt_workflow_out, exhausted
 
 
