@@ -99,6 +99,44 @@ app.registerExtension({
                 }
             });
 
+            // NOTE TO FUTURE SELF:
+            // Here is some interesting code from LG_Tools.  I find the way it looks at the stackTrace to a possibly neat solution to some issues.
+            //
+            // 处理连接变化
+            // onConnectionsChange(type, index, connected, link_info) {
+            //     if (!link_info || type !== LiteGraph.INPUT) return;
+            //
+            //     const stackTrace = new Error().stack;
+            //
+            //     // 处理断开连接
+            //     if (!connected) {
+            //         if (!stackTrace.includes('LGraphNode.prototype.connect') &&
+            //             !stackTrace.includes('LGraphNode.connect') &&
+            //             !stackTrace.includes('loadGraphData')) {
+            //             this.removeInput(index);
+            //         }
+            //     }
+            //
+            //     // 重新编号输入端口
+            //     let inputIndex = 1;
+            //     this.inputs.forEach(input => {
+            //         const newName = `input_${inputIndex}`;
+            //         if (input.name !== newName) {
+            //             input.name = newName;
+            //         }
+            //         inputIndex++;
+            //     });
+            //
+            //     // 如果最后一个端口被连接，添加新端口
+            //     const lastInput = this.inputs[this.inputs.length - 1];
+            //     if (lastInput?.link != null) {
+            //         this.addInput(`input_${inputIndex}`, "*");
+            //     }
+            //
+            //     this.setDirtyCanvas(true, true);
+            // }
+
+
             //            onConnectionsChange(this: ComfyNode, type: ISlotType, widgetIndex: number, isConnected: boolean, link_info: LLink | null | undefined, inputOrOutput: INodeInputSlot | INodeOutputSlot | SubgraphIO): void;
             // Update labels/types and manage dynamic slots on connect/disconnect
             /** Called for each connection that is created, updated, or removed. This includes "restored" connections when deserialising. */

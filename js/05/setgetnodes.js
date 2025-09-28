@@ -19,7 +19,10 @@
 import {app} from "../../../scripts/app.js";
 import {GraphHelpers} from "../common/graphHelpersForTwinNodes.js";
 import {analyzeNamesForAbbrev, computeTwinNodeTitle, extractWidgetNames, safeStringTrim} from "../01/stringHelper.js";
-import {ensureSlotCounts, findGetters, validateWidgetName, wrapWidgetValueSetter, setWidgetValue} from "../01/twinnodeHelpers.js";
+import {
+    ensureSlotCounts, findGetters, validateWidgetValue, wrapWidgetValueSetter, setWidgetValue,
+    setWidgetValueWithValidation, suggestValidWidgetValue
+} from "../01/twinnodeHelpers.js";
 import { chainCallback } from "../01/utility.js";
 import {TwinNodes} from "../common/twinNodes.js";
 import {drawTextWithBg, getWidgetBounds} from "../01/canvasHelpers.js";
@@ -101,7 +104,7 @@ class SetTwinNodes extends TwinNodes {
                     // e: e
                 });
                 if (node && node.graph) {
-                    validateWidgetName(node, idx);
+                    validateWidgetValue(node, idx);
                     node.updateTitle();
                     node.updateColors();
                     node.checkConnections();
@@ -221,10 +224,12 @@ class SetTwinNodes extends TwinNodes {
         // onWidgetChanged {name: 'Constant 2', value: 'con2', oldValue: 'IMAGE', widget: TextWidget}
         const widgetIndex = this.widgets.indexOf(widget);
         const type = this.inputs?.[widgetIndex]?.type;
-        log({ class: "SetTwinNodes", method: "onWidgetChanged", severity: "trace", tag: "function_entered" }, "onWidgetChanged", {name, value, oldValue, type, w: widget});
+        const validWidgetValue = suggestValidWidgetValue(this, widgetIndex, value);
+        // Somewhere a validateWidgetValue will be called to actually fix the value
+        log({ class: "SetTwinNodes", method: "onWidgetChanged", severity: "trace", tag: "function_entered" }, "onWidgetChanged", {validWidgetValue, name, value, oldValue, type, w: widget});
         this.graph?.sendEventToAllNodes("setnodeNameChange", {
             oldValue,
-            value,
+            value: validWidgetValue,
             type,
             widgetIndex,
             nodeId: this.id
@@ -324,9 +329,7 @@ class SetTwinNodes extends TwinNodes {
                 // If widget exists, name the input slot after the widget value, otherwise name widget after the input
                 if (!widgetName) {
                     widgetName = srcSlotName;
-                    setWidgetValue(this, index, widgetName);
-                    // renumber if there are duplicates
-                    validateWidgetName(this, index);
+                    setWidgetValueWithValidation(this, index, widgetName);
                 }
 
                 // Ensure type is updated
@@ -379,7 +382,7 @@ class SetTwinNodes extends TwinNodes {
     onAdded(graph) {
         if (Array.isArray(this.widgets)) {
             for (let i = 0; i < this.widgets.length; i++) {
-                validateWidgetName(this, i);
+                validateWidgetValue(this, i);
             }
         }
     }
@@ -625,7 +628,7 @@ class SetTwinNodes extends TwinNodes {
             ];
 
             // Provide a default link object with necessary properties
-            const defaultLink = {type: 'default', color: this.slotColor};
+            const defaultLink = {type: 'default', color: slotIndex === 0 ? '#8a8' : '#335'};
 
             for (const getter of getters) {
                 // Add validation for getter

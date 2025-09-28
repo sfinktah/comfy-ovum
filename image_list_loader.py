@@ -120,7 +120,7 @@ class LoadImagesListWithCallback:
 
     RETURN_TYPES = ("IMAGE", "MASK", "STRING", "STRING", "DICT", "BOOLEAN")
     RETURN_NAMES = ("IMAGE", "MASK", "FILE PATH", "CALLBACK DATA", "PROMPT&WORKFLOW", "exhausted")
-    OUTPUT_IS_LIST = (True, True, True, True, True, False)
+    OUTPUT_IS_LIST = (True, True, False, True, True, False)
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -314,6 +314,7 @@ class LoadImagesListWithCallback:
         # If callback is requested, prepare batch payload to send to frontend
         cb_data: Optional[Dict[str, Any]] = None
         if invoke_callback and files:
+            raise RuntimeError("Technically this bit hasn't been developed/tested yet.")
             file_list = [f.name for f in files]
             rel_or_abs = [self._rel_or_abs(f) for f in files]
             cb_data = {"files": file_list, "paths": rel_or_abs}
@@ -352,7 +353,8 @@ class LoadImagesListWithCallback:
                 [str(f) for f in files]
             )
 
-        return images, masks, file_paths, cb_payloads, prompt_workflow_out, exhausted
+        logger.info("[ovum] file_paths: {}".format(json.dumps(file_paths, indent=0)))
+        return images, masks, file_paths[:], cb_payloads, prompt_workflow_out, exhausted
 
 
 class FolderPathsNode:

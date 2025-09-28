@@ -316,6 +316,8 @@ These nodes are complementary to the excellent collection at https://github.com/
 
 ## Open Output via Shell (secure)
 
+When your video has finished generating, have VLC (or your default media player) open it automatically.
+
 ## Text Ovary (overlay text on images)
 
 Text Ovary is a polished, in-house merge of the excellent TextOverlay node (sfinktah/comfyui-textoverlay) adapted for Ovum.
@@ -370,4 +372,54 @@ Tips:
 - Wire filename from your saver node to auto‑open the latest result.
 - Works well with format/concat nodes to build paths dynamically.
 - On headless systems, the open command may be unavailable; you’ll get a clear error message instead of a crash.
+
+## Regex Nodes (ovum/regex)
+
+A compact suite of regex utilities that mirror Python’s re API while being graph-friendly. They accept plain strings or lists and return structured results without crashing your run when there are no matches.
+
+Highlights:
+- Builders and matchers: re.compile flags, search, match, fullmatch, findall, finditer, split, sub, subn
+- Match inspectors: view, span/start/end, group/groups/groupdict, select index, expand templates
+- Escape helper: re.escape for safe literal matching
+
+These nodes keep outputs list-aware to make it easy to fan out results downstream.
+
+## CUDNN Toggle Ovum
+
+Temporarily flip torch.backends.cudnn.enabled (and benchmark) on/off around a section of your graph. Useful for cases where disabling cuDNN speeds up certain ops (e.g., VAE Encode/Decode under ZLUDA). Returns the previous state so you can restore it later.
+
+## Image List Loader + Folder Paths
+
+Load a batch of images from a folder or an explicit list with optional regex/custom filtering, recursion, and sorting. Outputs images, masks, normalized file paths, callback payloads, embedded prompt/workflow info, and an ‘exhausted’ flag.
+- Folder Paths: utility to retrieve common ComfyUI directories as normalized strings for wiring into other nodes.
+
+## BigKnob (Widget)
+
+A simple numeric knob with min/max clamping and precision rounding. Great as a human-friendly dial to drive parameters.
+
+## LM Studio Prompt (Ovum/LLM)
+
+Connect to an LM Studio server to generate text (optionally with an image for vision models). Supports prompt modes, wildcard expansion, dynamic model discovery, and optional auto-unload after inactivity.
+
+## Workflow Helpers (Widgets to values)
+
+- Widget To String (KJNodes): Read a widget from any node in your workflow and return its value as STRING (with smart float formatting).
+- Workflow Widget To Any: Same idea, but returns the native type from a PROMPT&WORKFLOW input.
+- Sync Sink (KJNodes): A no-op sink that forces upstream branches to complete before proceeding; handy for synchronizing flows.
+
+## VHS Helper: Next Video Filename
+
+Predict the next auto-numbered output base path that VHS VideoCombine will use (without writing files), so you can plan downstream file operations deterministically.
+
+## Wildcard Processor (Escapable)
+
+Powerful prompt preprocessor that supports wildcard files, date stamping, simple random ranges, and safe comment/markup stripping. Designed to play nicely with other Ovum text utilities.
+
+## Does Kijai SetNode exist?
+
+Checks your current workflow to see if a Kijai SetNode exists for a given Constant and is actually wired at input 0. Useful for conditionally enabling branches tied to KJNodes Set/Get patterns.
+
+## Folder, Range, and Sequence Utilities
+
+- XRange: A range-like tick node that outputs current value, full list, and an overflow/loop flag with optional repeat and reset behavior. Useful for counters and iteration control.
 

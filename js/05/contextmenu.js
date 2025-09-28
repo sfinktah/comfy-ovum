@@ -17,12 +17,12 @@
 
 import {app} from "../../../scripts/app.js";
 import {GraphHelpers} from "../common/graphHelpersForTwinNodes.js";
-import {setWidgetValue, setWidgetValueWithValidation} from "../01/twinnodeHelpers.js";
+// import {setWidgetValue, setWidgetValueWithValidation} from "../01/twinnodeHelpers.js";
 
 // Stolen from Kijai
 // Adds context menu entries, code partly from pyssssscustom-scripts
 
-function addMenuHandler(nodeType, cb) {
+function addContextMenuHandler(nodeType, cb) {
     const getOpts = nodeType.prototype.getExtraMenuOptions;
     nodeType.prototype.getExtraMenuOptions = function () {
         const r = getOpts.apply(this, arguments);
@@ -116,7 +116,7 @@ app.registerExtension({
         }
 
         // if (nodeData.input && nodeData.input.required) {
-        //     addMenuHandler(nodeType, function (_, options) {
+        //     addContextMenuHandler(nodeType, function (_, options) {
         //         options.unshift(
         //             {
         //                 content: "Add GetTwinNodes",

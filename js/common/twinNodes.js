@@ -13,7 +13,7 @@ export class TwinNodes extends LGraphNode {
     defaultVisibility = true;
     serialize_widgets = true;
     drawConnection = false;
-    slotColors = ["#fff", "#fff"];
+    slotColors = ["#232", "#323"];
     canvas = app?.canvas;
     isVirtualNode = true;
     numberOfInputSlots = 2;

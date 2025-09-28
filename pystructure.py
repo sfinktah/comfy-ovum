@@ -527,12 +527,18 @@ class CastAnyToList(NewPointer):
     """
     FUNCTION = "any_to_list"
     RETURN_TYPES = ("LIST",)
-    INPUT_IS_LIST = True
-    CATEGORY = "Data"
+    # INPUT_IS_LIST = True
+    CATEGORY = "ovum/data"
     custom_name = "Cast Any to Pyobjects/List"
 
     @staticmethod
-    def any_to_list(py_list):
+    def any_to_list(py_list, my_unique_id=None):
+        node_id = str(my_unique_id) if my_unique_id is not None else "unknown"
+        logger.info(f"[ovum] CastAnyToList({node_id}): {type(py_list)}")
+        try:
+            logger.info(f"[ovum] CastAnyToList({node_id})[0]: {type(py_list[0])}")
+        except:
+            pass
         if isinstance(py_list, list):
             return (py_list,)
         elif isinstance(py_list, str):
@@ -545,6 +551,9 @@ class CastAnyToList(NewPointer):
         return {
             "required": {
                 "py_list": (ANYTYPE,),
+            },
+            "hidden": {
+                "my_unique_id": "UNIQUE_ID"
             }
         }
 
@@ -768,12 +777,22 @@ class OvumLength:
     def getLength(any, prompt=None, my_unique_id=None):
         prompt = prompt[0]
         my_unique_id = my_unique_id[0]
-        my_unique_id = my_unique_id.split('.')[len(my_unique_id.split('.')) - 1] if "." in my_unique_id else my_unique_id
+        my_unique_id = my_unique_id.rpartition(".")[-1]
         id, slot = prompt[my_unique_id]['inputs']['any']
         class_type = prompt[id]['class_type']
         node_class = ALL_NODE_CLASS_MAPPINGS[class_type]
         output_is_list = node_class.OUTPUT_IS_LIST[slot] if hasattr(node_class, 'OUTPUT_IS_LIST') else False
+        logger.info(f"[ovum] OvumLength({my_unique_id}): {type(any)}: my_unique_id: {my_unique_id}, output_is_list: {output_is_list}, id: {id}, slot: {slot}, class_type: {class_type}, node_class: {node_class}")
 
+        # [ovum] OvumLength(879): <class 'list'>: my_unique_id: 879, output_is_list: True,  id: 834, slot: 0, class_type: LoadImagesListWithCallback, node_class: <class 'image_list_loader.LoadImagesListWithCallback'>
+        # [ovum] OvumLength(881): <class 'list'>: my_unique_id: 881, output_is_list: True,  id: 834, slot: 4, class_type: LoadImagesListWithCallback, node_class: <class 'image_list_loader.LoadImagesListWithCallback'>
+        # [ovum] OvumLength(880): <class 'list'>: my_unique_id: 880, output_is_list: False, id: 926, slot: 0, class_type: CastAnyToList, node_class: <class 'pystructure.CastAnyToList'>
+        # [ovum] OvumLength(928): <class 'list'>: my_unique_id: 928, output_is_list: False, id: 927, slot: 0, class_type: JsonParseNode, node_class: <class 'C:\zluda\comfyui-n\custom_nodes\comfyui-logicutils.pystructure.JsonParseNode'>
+
+        # [ovum] OvumLength(879): <class 'list'>: my_unique_id: 879, output_is_list: True,  id: 834, slot: 0, class_type: LoadImagesListWithCallback, node_class: <class 'image_list_loader.LoadImagesListWithCallback'>
+        # [ovum] OvumLength(881): <class 'list'>: my_unique_id: 881, output_is_list: True,  id: 834, slot: 4, class_type: LoadImagesListWithCallback, node_class: <class 'image_list_loader.LoadImagesListWithCallback'>
+        # [ovum] OvumLength(880): <class 'list'>: my_unique_id: 880, output_is_list: False, id: 926, slot: 0, class_type: CastAnyToList, node_class: <class 'pystructure.CastAnyToList'>
+        # [ovum] OvumLength(928): <class 'list'>: my_unique_id: 928, output_is_list: False, id: 927, slot: 0, class_type: JsonParseNode, node_class: <class 'C:\zluda\comfyui-n\custom_nodes\comfyui-logicutils.pystructure.JsonParseNode'>
         if output_is_list or len(any) > 1:
             # If output_is_list is True OR if the input list has more than 1 item,
             # return the length of the input list

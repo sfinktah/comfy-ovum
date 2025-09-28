@@ -1,4 +1,5 @@
 import re
+from comfy.comfy_types.node_typing import IO
 
 class NewPointer:
     """A base class that forces ComfyUI to skip caching by returning NaN in IS_CHANGED."""

@@ -440,24 +440,27 @@ export function setWidgetValue(node, idx, value) {
 }
 
 export function setWidgetValueWithValidation(node, idx, value) {
-    setWidgetValue(node, idx, value);
-    return validateWidgetName(node, idx);
+    let widgetValue;
+    setWidgetValue(node, idx, widgetValue = suggestValidWidgetValue(node, idx, value));
+    return widgetValue;
 }
 
-// Widget name validation helper function
+// Widget name validation helper functions
 /**
- * Validates and ensures the uniqueness of a widget's name within a graph structure.
- * If the name conflicts with other widget values in `SetTwinNodes` nodes in the graph,
- * it appends a numeric suffix to resolve the conflict.
+ * Suggests a valid, unique widget name given a suggested name by checking other SetTwinNodes widgets in the same graph.
+ * Excludes the widget at node.widgets[idx] from the conflict check.
  *
- * @param {Object} node - The node containing the widget to validate.
- * @param {number} idx - The widgetIndex of the widget in the node's widget list to validate.
- * @return {string} - The widget name after validation.
+ * @param {Object} node - The node containing the widget (used to access the graph and exclude self).
+ * @param {number} idx - The widgetIndex of the widget in the node's widget list to exclude from conflicts.
+ * @param {string} suggestedName - The desired name to validate.
+ * @return {string} - A valid, unique widget name (may equal suggestedName, or be empty string if invalid).
  */
-export function validateWidgetName(node, idx) {
-    const graph = node.graph;
-    if (!graph || !node.widgets || !node.widgets[idx]) return '' ;
-    let currentValue = safeStringTrim(node.widgets[idx].value);
+export function suggestValidWidgetValue(node, idx, suggestedName) {
+    const graph = node?.graph;
+    const currentValue = safeStringTrim(suggestedName);
+    if (!graph || !Array.isArray(node?.widgets) || typeof idx !== 'number') {
+        return currentValue || '';
+    }
     if (!currentValue) return '';
 
     // Collect every widget value from all SetTwinNodes (excluding this exact widget)
@@ -474,19 +477,36 @@ export function validateWidgetName(node, idx) {
     });
 
     // If currentValue collides, append _0, _1, ...
-    if (existingValues.has(currentValue)) {
-        let tries = 0;
-        let candidate = `${currentValue}_${tries}`;
-        while (existingValues.has(candidate)) {
-            tries++;
-            candidate = `${currentValue}_${tries}`;
-        }
-        setWidgetValue(node, idx, candidate);
-        return candidate;
-    }
-    else {
+    if (!existingValues.has(currentValue)) {
         return currentValue;
     }
+    let tries = 0;
+    let candidate = `${currentValue}_${tries}`;
+    while (existingValues.has(candidate)) {
+        tries++;
+        candidate = `${currentValue}_${tries}`;
+    }
+    return candidate;
+}
+
+/**
+ * Validates and ensures the uniqueness of a widget's name within a graph structure.
+ * If the name conflicts with other widget values in `SetTwinNodes` nodes in the graph,
+ * it appends a numeric suffix to resolve the conflict. Also writes the resolved name back to the widget.
+ *
+ * @param {Object} node - The node containing the widget to validate.
+ * @param {number} idx - The widgetIndex of the widget in the node's widget list to validate.
+ * @return {string} - The widget name after validation.
+ */
+export function validateWidgetValue(node, idx) {
+    const graph = node.graph;
+    if (!graph || !node.widgets || !node.widgets[idx]) return '' ;
+    const currentValue = safeStringTrim(node.widgets[idx].value);
+    const resolved = suggestValidWidgetValue(node, idx, currentValue);
+    if (resolved !== currentValue) {
+        setWidgetValue(node, idx, resolved);
+    }
+    return resolved || '';
 }
 
 // Slot label helper function

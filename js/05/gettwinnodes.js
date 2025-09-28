@@ -1,21 +1,23 @@
 /// <reference lib="es2015.collection" />
-/** @typedef {import("@comfyorg/litegraph/dist/LGraphNode").LGraphNode} LGraphNode */
-/** @typedef {import("@comfyorg/litegraph/dist/LLink").LLink} LLink */
-/** @typedef {import("@comfyorg/litegraph/dist/interfaces").INodeInputSlot} INodeInputSlot */
-/** @typedef {import("@comfyorg/litegraph/dist/interfaces").INodeOutputSlot} INodeOutputSlot */
-/** @typedef {import("@comfyorg/litegraph/dist/interfaces").ISlotType} ISlotType */
-/** @typedef {import("@comfyorg/litegraph/dist/litegraph").LiteGraph} LiteGraph */
-/** @typedef {import("@comfyorg/litegraph/dist/types/serialisation").SubgraphIO} SubgraphIO */
 /** @typedef {import('@comfyorg/comfyui-frontend-types').ComfyApp} ComfyApp */
-/** @typedef {import('@comfyorg/litegraph/dist/litegraph').LGraphCanvas} LGraphCanvas */
-/** @typedef {import('@comfyorg/litegraph/dist/litegraph').LGraph} LGraph */
-/** @typedef {import('@comfyorg/litegraph/dist/litegraph').LLink} LLink */
-/** @typedef {import('@comfyorg/litegraph/dist/litegraph').NodeInputSlot} NodeInputSlot */
-/** @typedef {import('@comfyorg/litegraph/dist/litegraph').NodeOutputSlot} NodeOutputSlot */
-/** @typedef {import('@comfyorg/litegraph/dist/litegraph').Subgraph} Subgraph */
+/** @typedef {import('@comfyorg/comfyui-frontend-types').LiteGraph} LiteGraph */
+/** @typedef {import('@comfyorg/comfyui-frontend-types').LGraphCanvas} LGraphCanvas */
+/** @typedef {import("@comfyorg/comfyui-frontend-types").LGraphNode} LGraphNode */
+/** @typedef {import("@comfyorg/comfyui-frontend-types").LiteGraph} LiteGraph */
+/** @typedef {import('@comfyorg/comfyui-frontend-types').LGraphCanvas} LGraphCanvas */
+/** @typedef {import('@comfyorg/comfyui-frontend-types').LGraph} LGraph */
+/** @typedef {import("@comfyorg/comfyui-frontend-types").LLink} LLink */
+/** @typedef {import("@comfyorg/comfyui-frontend-types").INodeInputSlot} INodeInputSlot */
+/** @typedef {import("@comfyorg/comfyui-frontend-types").INodeOutputSlot} INodeOutputSlot */
+/** @typedef {import("@comfyorg/comfyui-frontend-types").ISlotType} ISlotType */
+/** @typedef {import("@comfyorg/comfyui-frontend-types").SubgraphIO} SubgraphIO */
+/** @typedef {import('@comfyorg/comfyui-frontend-types').ComfyApp} ComfyApp */
+/** @typedef {import("@comfyorg/comfyui-frontend-types").IWidget} IWidget */
+/** @typedef {import("@comfyorg/comfyui-frontend-types").Subgraph} Subgraph */
+/** @typedef {import("@comfyorg/comfyui-frontend-types").IFoundSlot} IFoundSlot */
+/** @typedef {import("@comfyorg/comfyui-frontend-types").IContextMenuValue} IContextMenuValue */
 /** @typedef {import("../../typings/ComfyNode").ComfyNode} ComfyNode */
 /** @typedef {import("../common/graphHelpersForTwinNodes.js").GraphHelpers} GraphHelpers */
-/** @typedef {import("@comfyorg/litegraph/dist/types/widgets").IWidget} IWidget */
 /** @typedef {import("@comfyorg/litegraph/dist/litegraph").ContextMenuItem} ContextMenuItem */
 /** @typedef {import("@comfyorg/litegraph/dist/litegraph").SerializedLGraphNode} SerializedLGraphNode */
 
@@ -724,14 +726,35 @@ app.registerExtension({
             }
 
             /**
+             * Allows extending the slot context menu for this node.
+             * Mirrors LGraphNode.getExtraSlotMenuOptions contract by receiving the canvas and a mutable options array.
+             * @param {IFoundSlot} slot
+             * @returns {IContextMenuValue<string>[]} options Array of context menu option entries to extend in place.
+             */
+            getExtraSlotMenuOptions(slot) {
+                // noinspection UnnecessaryLocalVariableJS
+                /** @type {IContextMenuValue<string>[]} */
+                const options = [{
+                    content: "Doohickey 1",
+                    callback: () => {
+                        // link_pos: (2) [1830.3707275390625, -4726]
+                        // output: NodeOutputSlot {name: 'STRING', localized_name: undefined, #node: GetTwinNodes, #node: GetTwinNodes, …}
+                        // slot: 0
+                        console.log("doohickey 1", slot);
+                    }
+                }];
+                return options;
+            }
+            /**
              * Allows extending the context menu for this node.
              * Mirrors LGraphNode.getExtraMenuOptions contract by receiving the canvas and a mutable options array.
              * @param {LGraphCanvas} _ The graph canvas (unused here).
-             * @param {ContextMenuItem[]} options Array of context menu option entries to extend in place.
-             * @returns {void}
+             * @param {IContextMenuValue<string>[]} options Array of context menu option entries to extend in place.
+             * @returns {IContextMenuValue<string>[]} options Array of context menu option entries to extend in place.
              */
             getExtraMenuOptions(_, options) {
                 const node = this;
+
                 let menuEntry = node.drawConnection ? "Hide connections" : "Show connections";
 
                 options.unshift(
