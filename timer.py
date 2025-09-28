@@ -1,5 +1,7 @@
 import json
 import comfy.utils
+from common_types import ANYTYPE
+
 
 class Timer:
     CATEGORY = "ovum"
@@ -15,7 +17,7 @@ class Timer:
                 #                          "tooltip": "In the case of 'select_on_execution', the selection is dynamically determined at the time of workflow execution. 'select_on_prompt' is an option that exists for older versions of ComfyUI, and it makes the decision before the workflow execution."}),
             },
             "optional": {
-                "image": ("IMAGE", {"tooltip": "This is just used as a trigger"}),
+                "image": (ANYTYPE, {"tooltip": "This is just used connect the timer to the workflow somewhere (not required)"}),
                 **dyn_inputs
             },
             # "hidden": {"unique_id": "UNIQUE_ID", "extra_pnginfo": "EXTRA_PNGINFO"}
