@@ -1,5 +1,4 @@
 import sys, os, importlib, re, os
-from ._cudnn_toggle_api import status
 
 sys.path.insert(0,os.path.dirname(os.path.realpath(__file__)))
 module_root_directory = os.path.dirname(os.path.realpath(__file__))

@@ -24,6 +24,18 @@ export class TwinNodes extends LGraphNode {
 
     constructor(title) {
         super(title);
+        if (!this.properties) {
+            this.properties = {};
+        }
+        this.properties = {
+            bgcolors: [],
+            previousNames: Array(this.numberOfWidgets || 2).fill(""),
+            numberOfWidgets: 2,
+            showOutputText: this.defaultVisibility,
+            failSilently: false,
+            computedTitle: "",
+            ...this.properties
+        };
     }
 
     // Return the previous name recorded for the widget at widgetIndex 'idx'
@@ -62,7 +74,7 @@ export class TwinNodes extends LGraphNode {
         this.serialize();
     }
 
-    updateTitle() {
+    updateTitle(force) {
         // To be overridden by subclasses
         Logger.log({ class: 'TwinNodes', method: 'updateTitle', severity: 'debug', tag: 'function_entered' }, 'Method called');
     }

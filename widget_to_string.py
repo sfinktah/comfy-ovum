@@ -68,7 +68,10 @@ The 'any_input' is required for making sure the node you want the value from exi
 
     @classmethod
     def get_widget_value(cls, id, widget_name, extra_pnginfo, prompt, unique_id, return_all=False, any_input=None, node_title="", allowed_float_decimals=2):
-        from .metadata.metadata_processor import MetadataProcessor
+        try:
+            from .metadata.metadata_processor import MetadataProcessor
+        except Exception:
+            from metadata.metadata_processor import MetadataProcessor
         workflow = extra_pnginfo["workflow"]
         meta = MetadataProcessor(workflow, prompt)
         # find node

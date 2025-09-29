@@ -9,7 +9,7 @@ import time
 import types
 from itertools import islice, zip_longest
 from threading import Timer
-from underscore_helpers import asList # , asListRecursive
+from underscore3.underscore_helpers import asList # , asListRecursive
 
 # https://stackoverflow.com/questions/53978542/how-to-use-collections-abc-from-both-python-3-8-and-python-2-7
 from collections.abc import Sequence, Collection
@@ -1393,45 +1393,42 @@ class underscore(object):
         Aliased as `unique`.
         """
         #return self._wrap(_uniq(self.obj))
-        if iterator is None:
-             def iterator(x, *a): return x
+
+        # Use value-based keys for hashable primitives and identity for unhashables (like list, dict).
+        def _key(v):
+            try:
+                hash(v)
+                return (type(v), v)
+            except TypeError:
+                return (type(v), id(v))
+
+        out = []
+        seen = set()
+
+        if isSorted:
+            last_key_set = False
+            last_key = None
+            for idx, x in enumerate(self.obj):
+                computed = iterator(x, idx, self.obj) if iterator else x
+                k = _key(computed)
+                if not last_key_set or k != last_key:
+                    out.append(x)
+                    last_key = k
+                    last_key_set = True
+            return self._wrap(out)
 
         try:
-            seen = {}
-            result = []
-            for item in self.obj:
-                 marker = iterator(item)
-                 # in old Python versions:
-                 # if seen.has_key(marker)
-                 # but in new ones:
-                 if marker in seen: continue
-                 seen[marker] = 1
-                 result.append(item)
-            return self._wrap(result)
+            # return self._wrap(list(set(self.obj)))
+            return self._wrap(_uniq(self.obj))
         except TypeError: # unhashable type: 'list'
-            ns = self.Namespace()
-            ns.results = []
-            ns.array = self.obj
-            initial = self.obj
-            if iterator is not None:
-                initial = _(ns.array).map(iterator)
+            for idx, x in enumerate(self.obj):
+                computed = iterator(x, idx, self.obj) if iterator else x
+                k = _key(computed)
+                if k not in seen:
+                    seen.add(k)
+                    out.append(x)
+            return self._wrap(out)
 
-            def by(memo, value, index):
-                if ((_.last(memo, 1) != value or not len(memo)) if isSorted
-                        else not _.include(memo, value)):
-                    memo.append(value)
-                    ns.results.append(ns.array[index])
-
-                return memo
-
-            ret = _.reduce(initial, by)
-            return self._wrap(ret)
-
-
-        # seen = set()
-        # seen_add = seen.add
-        # ret = [x for x in seq if x not in seen and not seen_add(x)]
-        # return self._wrap(ret)
     unique = uniq
 
     def uniq_mutate(self, iterator=None):
@@ -1488,13 +1485,10 @@ class underscore(object):
         passed-in arrays.
         """
         try:
-            if type(self.obj[0]) is int:
-                a = self.obj
-            else:
-                a = tuple(self.obj[0])
-            setobj = set(a)
-            for i, v in enumerate(args):
-                setobj = setobj & set(args[i])
+            # Use the full initial collection, not the first element's characters
+            setobj = set(self.obj)
+            for v in args:
+                setobj = setobj & set(v)
             return self._wrap(list(setobj))
         except TypeError:
             result = _values(self.obj)

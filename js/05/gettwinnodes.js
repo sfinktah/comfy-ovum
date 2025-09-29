@@ -63,17 +63,6 @@ app.registerExtension({
             constructor(title) {
                 super(title)
                 // properties is not actually readable at this point, so we could probably avoid this careful non-overwriting stuff
-                if (!this.properties) {
-                    this.properties = {};
-                }
-                this.properties = {
-                    bgcolors: [],
-                    previousNames: Array(this.numberOfWidgets || 2).fill(""),
-                    numberOfWidgets: 2,
-                    showOutputText: GetTwinNodes.defaultVisibility,
-                    failSilently: false,
-                    ...this.properties
-                };
 
                 const node = this;
 
@@ -677,11 +666,32 @@ app.registerExtension({
                 }
             }
 
-            updateTitle() {
+            updateTitle(force) {
                 log({ class: "GetTwinNodes", method: "updateTitle", severity: "trace", tag: "function_entered" }, "[GetTwinNodes] updateTitle");
-                const namesForTitle = extractWidgetNames(this);
-                this.title = computeTwinNodeTitle(namesForTitle, "get", disablePrefix);
-                this.canvas.setDirty(true, true);
+                // can find the event for collapsing a node, so we'll just apply the title shortening all the time
+                // if (collapsed) {
+                //     this.fullTitle = this.title;
+                //     if (this.title.length > 20) {
+                //         this.title = this.title.substring(0, 19) + "…";
+                //     }
+                // }
+                // else {
+                const names = extractWidgetNames(this);
+                const computedTitle = computeTwinNodeTitle(names, "get", disablePrefix);
+
+                // Initialize properties.computedTitle if needed
+                if (!this.properties?.computedTitle) {
+                    this.properties.computedTitle = this.title;
+                }
+
+                // Update title only if it matches the current computedTitle
+                if (force || this.properties.computedTitle === this.title) {
+                    this.title = computedTitle;
+                }
+
+                this.properties.computedTitle = computedTitle;
+                // this.applyAbbreviatedOutputLabels();
+                // this.canvas.setDirty(true, true);
             }
 
 
@@ -798,7 +808,7 @@ app.registerExtension({
                     {
                         content: "Update title",
                         callback: () => {
-                            node.updateTitle();
+                            node.updateTitle(true);
                         },
                     },
                     {

@@ -54,20 +54,8 @@ class SetTwinNodes extends TwinNodes {
      */
     constructor(title) {
         super(title)
-        if (!this.properties) {
-            this.properties = {
-                bgcolors: [],
-                previousNames: Array(this.numberOfWidgets || 2).fill(""),
-            };
-        }
-        this.properties.showOutputText = SetTwinNodes.defaultVisibility;
 
         const node = this;
-
-        // Storage for deferred disconnect handling and relink detection
-        // TODO: remove (unused)... keeping unless we need to search for that functionality to restore it
-        this.__disconnectTimers = this.__disconnectTimers || Object.create(null);
-        this.__pendingRelinkInfo = this.__pendingRelinkInfo || Object.create(null);
 
         // Create an arbitrary number of constants/links
         const initialCount = this.numberOfWidgets || 2;
@@ -141,7 +129,7 @@ class SetTwinNodes extends TwinNodes {
      * Helper to compute and set the combined title from connected widgets' values,
      * and update node color from the first connected typed link
      */
-    updateTitle(collapsed) {
+    updateTitle(force) {
         log({ class: "SetTwinNodes", method: "updateTitle", severity: "trace", tag: "function_entered" }, `collapsed: ${collapsed}`);
         // can find the event for collapsing a node, so we'll just apply the title shortening all the time
         // if (collapsed) {
@@ -151,10 +139,21 @@ class SetTwinNodes extends TwinNodes {
         //     }
         // }
         // else {
-            const names = extractWidgetNames(this);
-            this.title = computeTwinNodeTitle(names, "set", disablePrefix);
-            this.applyAbbreviatedOutputLabels();
-        // }
+        const names = extractWidgetNames(this);
+        const computedTitle = computeTwinNodeTitle(names, "set", disablePrefix);
+
+        // Initialize properties.computedTitle if needed
+        if (!this.properties?.computedTitle) {
+            this.properties.computedTitle = this.title;
+        }
+
+        // Update title only if it matches the current computedTitle
+        if (force || this.properties.computedTitle === this.title) {
+            this.title = computedTitle;
+        }
+
+        this.properties.computedTitle = computedTitle;
+        this.applyAbbreviatedOutputLabels();
     }
 
 
@@ -470,7 +469,7 @@ class SetTwinNodes extends TwinNodes {
             {
                 content: "Update title",
                 callback: () => {
-                    node.updateTitle();
+                    node.updateTitle(true);
                 },
             },
             {

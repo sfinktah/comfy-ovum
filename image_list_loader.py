@@ -353,7 +353,7 @@ class LoadImagesListWithCallback:
                 [str(f) for f in files]
             )
 
-        logger.info("[ovum] file_paths: {}".format(json.dumps(file_paths, indent=0)))
+        # logger.info("[ovum] file_paths: {}".format(json.dumps(file_paths, indent=0)))
         return images, masks, file_paths[:], cb_payloads, prompt_workflow_out, exhausted
 
 

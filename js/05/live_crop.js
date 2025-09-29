@@ -282,6 +282,7 @@ app.registerExtension({
                         if (dragType.includes('top') || dragType.includes('bottom')) {
                             const hWidget = this.widgets.find(w => w.name === `crop_${dragType.includes('top') ? 'top' : 'bottom'}`);
                             this._livecrop_drag.startValueH = hWidget ? hWidget.value : 0;
+                            window.widget1 = hWidget;
                         }
                         if (dragType.includes('left') || dragType.includes('right')) {
                             const vWidget = this.widgets.find(w => w.name === `crop_${dragType.includes('left') ? 'left' : 'right'}`);
@@ -753,6 +754,7 @@ app.registerExtension({
             }, 'Setting up widget change hooks');
 
             const hookWidget = (n) => {
+                const isCrop = /^crop_/.test(n);
                 const w = (this.widgets || []).find(w => w && w.name === n);
                 if (!w) {
                     Logger.log({ 
@@ -776,6 +778,152 @@ app.registerExtension({
                     widgetName: n,
                     hasExistingCallback: !!w.callback
                 });
+
+                // Override display for crop_* widgets to show positive percentages
+                if (isCrop) {
+                    try {
+                        const desc = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(w), "_displayValue");
+                        const originalGetter = desc && desc.get;
+                        Object.defineProperty(w, "_displayValue", {
+                            get: function() {
+                                try {
+                                    if (this.computedDisabled) return "";
+                                    const v = Number(this.value);
+                                    if (!isFinite(v)) return String(this.value);
+                                    const pct = Math.round(-100 * v);
+                                    return `${Math.abs(pct)}%`;
+                                } catch (_) {
+                                    return originalGetter ? originalGetter.call(this) : String(this.value);
+                                }
+                            },
+                            configurable: true
+                        });
+                    } catch (_) { /* ignore */ }
+
+                    // Override drawWidget to ensure our custom _displayValue is used
+                    try {
+                        const origDrawWidget = w.drawWidget?.bind(w);
+                        // Utility clamp since we cannot import from litegraph here
+                        const clamp = (val, min, max) => Math.max(min, Math.min(max, val));
+                        w.drawWidget = function(ctx, { width, showText = true } = {}) {
+                            try {
+                                // Fallbacks for required values from BaseWidget
+                                const margin = (this.constructor && typeof this.constructor.margin === 'number') ? this.constructor.margin : 4;
+                                const { height, y } = this;
+
+                                // Background
+                                ctx.save();
+                                const prev = { fillStyle: ctx.fillStyle, strokeStyle: ctx.strokeStyle, textAlign: ctx.textAlign };
+                                ctx.fillStyle = this.background_color;
+                                const barW = Math.max(0, (width ?? (this.width || 0)) - margin * 2);
+                                ctx.fillRect(margin, y, barW, height);
+
+                                // Slider value portion
+                                const min = (this.options && typeof this.options.min === 'number') ? this.options.min : -1;
+                                const max = (this.options && typeof this.options.max === 'number') ? this.options.max : 0;
+                                const range = (max - min) || 1;
+                                let nvalue = ((Number(this.value) - min) / range);
+                                if (!isFinite(nvalue)) nvalue = 0;
+                                nvalue = clamp(nvalue, 0, 1);
+                                ctx.fillStyle = (this.options && this.options.slider_color) ? this.options.slider_color : '#678';
+                                ctx.fillRect(margin, y, nvalue * barW, height);
+
+                                // Outline when active
+                                if (showText && !this.computedDisabled) {
+                                    ctx.strokeStyle = this.outline_color;
+                                    ctx.strokeRect(margin, y, barW, height);
+                                }
+
+                                // Marker support
+                                if (this.marker != null) {
+                                    let marker_nvalue = ((Number(this.marker) - min) / range);
+                                    if (!isFinite(marker_nvalue)) marker_nvalue = 0;
+                                    marker_nvalue = clamp(marker_nvalue, 0, 1);
+                                    ctx.fillStyle = (this.options && this.options.marker_color) ? this.options.marker_color : '#AA9';
+                                    ctx.fillRect(margin + marker_nvalue * barW, y, 2, height);
+                                }
+
+                                // Text using our overridden _displayValue
+                                if (showText) {
+                                    ctx.textAlign = 'center';
+                                    ctx.fillStyle = this.text_color;
+                                    const text = `${this.label || this.name}  ${this._displayValue}`;
+                                    ctx.fillText(text, (width ?? (this.width || 0)) * 0.5, y + height * 0.7);
+                                }
+
+                                // Restore context
+                                Object.assign(ctx, prev);
+                                ctx.restore();
+                            } catch (e) {
+                                // Fallback to original if our override fails
+                                if (typeof origDrawWidget === 'function') {
+                                    return origDrawWidget(ctx, { width, showText });
+                                }
+                            }
+                        };
+                    } catch (_) { /* ignore */ }
+
+                    // Normalize incoming linked values according to rules
+                    // 1) value = abs(value)
+                    // 2) if value > 100 then error
+                    // 3) if value >= 1 then value /= 100
+                    // 4) value = value * -1
+                    const normalizeLinked = (val) => {
+                        let v = Number(val);
+                        if (!isFinite(v)) return val;
+                        v = Math.abs(v);
+                        if (v > 100) {
+                            console.error(`[LiveCrop] Linked value for ${n} out of range (>100):`, v);
+                            return this.widgets?.find(wi=>wi===w)?.value ?? -0; // no change
+                        }
+                        if (v >= 1) v = v / 100;
+                        v = v * -1;
+                        return v;
+                    };
+
+                    // Intercept changes coming from links by wrapping setValue if present
+                    if (typeof w.setValue === 'function') {
+                        const origSetValue = w.setValue.bind(w);
+                        w.setValue = function(newVal, options) {
+                            // Preserve original signature: (value, { e, node, canvas })
+                            const normalizedVal = normalizeLinked(newVal);
+                            // Note: Original setValue looks like this:
+                            // setValue(
+                            //    value: TWidget['value'],
+                            //    { e, node, canvas }: WidgetEventOptions
+                            //  ): void {
+                            //    const oldValue = this.value
+                            //    if (value === this.value) return
+                            //
+                            //    const v = this.type === 'number' ? Number(value) : value
+                            //    this.value = v
+                            //    if (
+                            //      this.options?.property &&
+                            //      node.properties[this.options.property] !== undefined
+                            //    ) {
+                            //      node.setProperty(this.options.property, v)
+                            //    }
+                            //    const pos = canvas.graph_mouse
+                            //    this.callback?.(this.value, canvas, node, pos, e)
+                            //
+                            //    node.onWidgetChanged?.(this.name ?? '', v, oldValue, this)
+                            //    if (node.graph) node.graph._version++
+                            //  }
+                            return origSetValue(normalizedVal, options || {});
+                        };
+                    }
+
+                    // Also wrap callback so manual edits still trigger redraw and linked inputs get normalized
+                    const priorCb = w.callback;
+                    w.callback = function(val, canvas, node, pos, e) {
+                        // setValue now normalizes incoming values for linked updates when they call into setValue.
+                        // To avoid double-normalizing, only normalize here if value seems raw AND event indicates link.
+                        const sourceIsLink = e && (e.isTransient === true || e.isLink === true);
+                        const maybeNormalized = (typeof val === 'number' && val <= 0 && val >= -1);
+                        const newVal = sourceIsLink && !maybeNormalized ? normalizeLinked(val) : val;
+                        if (typeof priorCb === 'function') priorCb.call(this, newVal, canvas, node, pos, e);
+                    };
+                }
 
                 const hadCb = !!w.callback;
                 chainCallback(w, "callback", function (val, canvas, node, pos, e) {
@@ -807,7 +955,11 @@ app.registerExtension({
                 });
             }
 
-            const widgetsToHook = ["crop_top", "crop_bottom", "crop_left", "crop_right", "divisible_by"];
+            const widgetsToHook = (this.widgets || []).map(w => w?.name).filter(Boolean);
+            for (const n of widgetsToHook) {
+                hookWidget(n);
+            }
+            // const widgetsToHook = ["crop_top", "crop_bottom", "crop_left", "crop_right", "divisible_by"];
             Logger.log({ 
                 class: 'LiveCrop', 
                 method: 'onNodeCreated', 
@@ -815,7 +967,8 @@ app.registerExtension({
                 tag: 'widget_hooks'
             }, 'Hooking widgets', { widgetsToHook });
 
-            widgetsToHook.forEach(hookWidget);
+            // this.widgets.find(w => w.name === `crop_${dragType.includes('left') ? 'left' : 'right'}`);
+            // widgetsToHook.forEach(hookWidget);
 
             this._livecrop_redraw = redraw;
 

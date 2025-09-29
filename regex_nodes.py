@@ -56,14 +56,14 @@ class OvumReFlags:
         # expose major flags; DEBUG is optional but included
         return {
             "required": {
-                "IGNORECASE": (BOOLEAN, {"default": True}),
-                "MULTILINE": (BOOLEAN, {"default": False}),
-                "DOTALL": (BOOLEAN, {"default": False}),
-                "VERBOSE": (BOOLEAN, {"default": False}),
-                "ASCII": (BOOLEAN, {"default": False}),
-                "LOCALE": (BOOLEAN, {"default": False}),
-                "UNICODE": (BOOLEAN, {"default": False}),
-                "DEBUG": (BOOLEAN, {"default": False}),
+                "IGNORECASE": (BOOLEAN, {"default": True, "tooltip": "Perform case-insensitive matching."}),
+                "MULTILINE": (BOOLEAN, {"default": False, "tooltip": "Make `^` and `$` match at the beginning and end of each line."}),
+                "DOTALL": (BOOLEAN, {"default": False, "tooltip": "Make `.` match any character, including a newline."}),
+                "VERBOSE": (BOOLEAN, {"default": False, "tooltip": "Allow whitespace and comments in the pattern."}),
+                "ASCII": (BOOLEAN, {"default": False, "tooltip": "Make `\\w`, `\\W`, `\\b`, `\\B`, `\\s`, `\\S` perform ASCII-only matching."}),
+                "LOCALE": (BOOLEAN, {"default": False, "tooltip": "Make `\\w`, `\\W`, `\\b`, `\\B`, `\\s`, `\\S`, `\\d`, `\\D` dependent on the current locale. (discouraged)"}),
+                "UNICODE": (BOOLEAN, {"default": False, "tooltip": "Make `\\w`, `\\W`, `\\b`, `\\B`, `\\s`, `\\S`, `\\d`, `\\D` dependent on the Unicode character properties database."}),
+                "DEBUG": (BOOLEAN, {"default": False, "tooltip": "Display debug information about compiled expression."}),
             }
         }
 
@@ -91,19 +91,14 @@ class OvumRegexStringBase:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "pattern": (STRING, {"default": "", "multiline": True}),
-                "string": (STRING, {"default": ""}),
+                "pattern": (STRING, {"default": "", "multiline": True, "tooltip": "The regular expression pattern."}),
+                "string": (STRING, {"default": "", "tooltip": "The string to search. Used if `string_in` is not connected."}),
             },
             "optional": {
-                "flags": (RE_FLAGS_T, {"default": re.IGNORECASE}),
-                "string_in": (STRING, {"forceInput": True}),  # can be STRING or LIST; normalization handles both
+                "flags": (RE_FLAGS_T, {"default": re.IGNORECASE, "tooltip": "Regex compilation flags."}),
+                "string_in": (STRING, {"forceInput": True, "tooltip": "Input string or list of strings. Overrides `string` widget if connected."}),  # can be STRING or LIST; normalization handles both
             },
         }
-
-    @staticmethod
-    def _get_strings(string: str, string_in: Optional[Union[str, List[str]]]) -> Tuple[List[str], bool]:
-        return _normalize_strings(string, string_in)
-
 
 class OvumReSearch(OvumRegexStringBase):
     NAME = "re.search (Regex Search)"
@@ -134,19 +129,24 @@ class OvumReSearch(OvumRegexStringBase):
     def run(self, pattern: str, string: str, string_in: Optional[Union[str, List[str]]] = None,
             flags: int = re.IGNORECASE, pos: Optional[int] = None, endpos: Optional[int] = None):
         pat = _compile(pattern, flags)
-        strings, from_list = self._get_strings(string, string_in)
+        strings, from_list = _normalize_strings(string, string_in)
         results: List[Optional[re.Match]] = []
         for s in strings:
             m = pat.search(s, _maybe_int(pos) or 0, _maybe_int(endpos) or len(s))
             results.append(m)
-        return (results,)
+        matches = sum(1 for m in results if m)
+        if len(strings) == 1:
+            status = "Matched" if matches > 0 else "No match"
+        else:
+            status = f"Matched {matches}/{len(strings)}" if matches > 0 else f"No match in {len(strings)} string(s)"
+        return {"result": (results,), "ui": {"status": [status]}}
 
     @classmethod
     def INPUT_TYPES(cls):
         base = super().INPUT_TYPES()
         base["optional"].update({
-            "pos": (INT, {"default": 0, "min": 0}),
-            "endpos": (INT, {"default": 0, "min": 0}),
+            "pos": (INT, {"default": 0, "min": 0, "tooltip": "The starting index for the search."}),
+            "endpos": (INT, {"default": 0, "min": 0, "tooltip": "The ending index for the search. If 0, searches to the end of the string."}),
         })
         return base
 
@@ -177,19 +177,24 @@ class OvumReMatch(OvumRegexStringBase):
     def run(self, pattern: str, string: str, string_in: Optional[Union[str, List[str]]] = None,
             flags: int = re.IGNORECASE, pos: Optional[int] = None, endpos: Optional[int] = None):
         pat = _compile(pattern, flags)
-        strings, from_list = self._get_strings(string, string_in)
+        strings, from_list = _normalize_strings(string, string_in)
         results: List[Optional[re.Match]] = []
         for s in strings:
             m = pat.match(s, _maybe_int(pos) or 0, _maybe_int(endpos) or len(s))
             results.append(m)
-        return (results,)
+        matches = sum(1 for m in results if m)
+        if len(strings) == 1:
+            status = "Matched" if matches > 0 else "No match"
+        else:
+            status = f"Matched {matches}/{len(strings)}" if matches > 0 else f"No match in {len(strings)} string(s)"
+        return {"result": (results,), "ui": {"status": [status]}}
 
     @classmethod
     def INPUT_TYPES(cls):
         base = super().INPUT_TYPES()
         base["optional"].update({
-            "pos": (INT, {"default": 0, "min": 0}),
-            "endpos": (INT, {"default": 0, "min": 0}),
+            "pos": (INT, {"default": 0, "min": 0, "tooltip": "The starting index for the match."}),
+            "endpos": (INT, {"default": 0, "min": 0, "tooltip": "The ending index for the match. If 0, searches to the end of the string."}),
         })
         return base
 
@@ -219,12 +224,17 @@ class OvumReFullMatch(OvumRegexStringBase):
     def run(self, pattern: str, string: str, string_in: Optional[Union[str, List[str]]] = None,
             flags: int = re.IGNORECASE):
         pat = _compile(pattern, flags)
-        strings, from_list = self._get_strings(string, string_in)
+        strings, from_list = _normalize_strings(string, string_in)
         results: List[Optional[re.Match]] = []
         for s in strings:
             m = pat.fullmatch(s)
             results.append(m)
-        return (results,)
+        matches = sum(1 for m in results if m)
+        if len(strings) == 1:
+            status = "Matched" if matches > 0 else "No match"
+        else:
+            status = f"Matched {matches}/{len(strings)}" if matches > 0 else f"No match in {len(strings)} string(s)"
+        return {"result": (results,), "ui": {"status": [status]}}
 
 
 class OvumReSplit(OvumRegexStringBase):
@@ -253,17 +263,24 @@ class OvumReSplit(OvumRegexStringBase):
     @classmethod
     def INPUT_TYPES(cls):
         base = super().INPUT_TYPES()
-        base["optional"]["maxsplit"] = (INT, {"default": 0, "min": 0})
+        base["optional"]["maxsplit"] = (INT, {"default": 0, "min": 0, "tooltip": "Maximum number of splits to perform. 0 means no limit."})
         return base
 
     def run(self, pattern: str, string: str, string_in: Optional[Union[str, List[str]]] = None,
             flags: int = re.IGNORECASE, maxsplit: int = 0):
         pat = _compile(pattern, flags)
-        strings, from_list = self._get_strings(string, string_in)
+        strings, from_list = _normalize_strings(string, string_in)
         outputs: List[List[str]] = []
         for s in strings:
             outputs.append(pat.split(s, maxsplit))
-        return (outputs,)
+
+        if len(strings) == 1:
+            parts = len(outputs[0])
+            status = f"Split into {parts} parts" if parts > 1 else "No split"
+        else:
+            num_split = sum(1 for o in outputs if len(o) > 1)
+            status = f"Split {num_split}/{len(strings)} string(s)" if num_split > 0 else f"No splits in {len(strings)} string(s)"
+        return {"result": (outputs,), "ui": {"status": [status]}}
 
 
 class OvumReFindAll(OvumRegexStringBase):
@@ -292,11 +309,17 @@ class OvumReFindAll(OvumRegexStringBase):
     def run(self, pattern: str, string: str, string_in: Optional[Union[str, List[str]]] = None,
             flags: int = re.IGNORECASE):
         pat = _compile(pattern, flags)
-        strings, from_list = self._get_strings(string, string_in)
+        strings, from_list = _normalize_strings(string, string_in)
         outputs: List[List[Any]] = []
         for s in strings:
             outputs.append(pat.findall(s))
-        return (outputs,)
+        total_matches = sum(len(o) for o in outputs)
+        if len(strings) == 1:
+            status = f"Found {total_matches} match(es)" if total_matches > 0 else "No matches"
+        else:
+            num_with_matches = sum(1 for o in outputs if o)
+            status = f"Found {total_matches} in {num_with_matches}/{len(strings)}" if total_matches > 0 else f"No matches in {len(strings)} string(s)"
+        return {"result": (outputs,), "ui": {"status": [status]}}
 
 
 class OvumReFindIter(OvumRegexStringBase):
@@ -324,11 +347,17 @@ class OvumReFindIter(OvumRegexStringBase):
     def run(self, pattern: str, string: str, string_in: Optional[Union[str, List[str]]] = None,
             flags: int = re.IGNORECASE):
         pat = _compile(pattern, flags)
-        strings, from_list = self._get_strings(string, string_in)
+        strings, from_list = _normalize_strings(string, string_in)
         outputs: List[List[re.Match]] = []
         for s in strings:
             outputs.append(list(pat.finditer(s)))
-        return (outputs,)
+        total_matches = sum(len(o) for o in outputs)
+        if len(strings) == 1:
+            status = f"Found {total_matches} match(es)" if total_matches > 0 else "No matches"
+        else:
+            num_with_matches = sum(1 for o in outputs if o)
+            status = f"Found {total_matches} in {num_with_matches}/{len(strings)}" if total_matches > 0 else f"No matches in {len(strings)} string(s)"
+        return {"result": (outputs,), "ui": {"status": [status]}}
 
 
 class OvumReSubBase(OvumRegexStringBase):
@@ -341,21 +370,27 @@ class OvumReSubBase(OvumRegexStringBase):
     @classmethod
     def INPUT_TYPES(cls):
         base = super().INPUT_TYPES()
-        base["required"]["repl"] = (STRING, {"default": "", "multiline": True})
-        base["optional"]["count"] = (INT, {"default": 0, "min": 0})
+        base["required"]["repl"] = (STRING, {"default": "", "multiline": True, "tooltip": "The replacement string or pattern."})
+        base["optional"]["count"] = (INT, {"default": 0, "min": 0, "tooltip": "Maximum number of pattern occurrences to be replaced. 0 means replace all."})
         return base
 
     def run(self, pattern: str, string: str, repl: str,
             string_in: Optional[Union[str, List[str]]] = None, flags: int = re.IGNORECASE, count: int = 0):
         pat = _compile(pattern, flags)
-        strings, from_list = self._get_strings(string, string_in)
+        strings, from_list = _normalize_strings(string, string_in)
         out_strings: List[str] = []
         counts: List[int] = []
         for s in strings:
             res, n = pat.subn(repl, s, count)
             out_strings.append(res)
             counts.append(n)
-        return (out_strings, counts)
+        total_subs = sum(counts)
+        if len(strings) == 1:
+            status = f"Made {total_subs} sub(s)" if total_subs > 0 else "No substitutions"
+        else:
+            num_strings_changed = sum(1 for c in counts if c > 0)
+            status = f"Made {total_subs} sub(s) in {num_strings_changed}/{len(strings)}" if total_subs > 0 else f"No substitutions in {len(strings)} string(s)"
+        return {"result": (out_strings, counts), "ui": {"status": [status]}}
 
 
 class OvumReSub(OvumReSubBase):
@@ -424,17 +459,20 @@ class OvumReEscape:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "string": (STRING, {"default": ""}),
+                "string": (STRING, {"default": "", "tooltip": "The string with special regex characters to escape. Used if `string_in` is not connected."}),
             },
             "optional": {
-                "string_in": (STRING, {"forceInput": True}),
+                "string_in": (STRING, {"forceInput": True, "tooltip": "Input string or list of strings to escape. Overrides `string` widget if connected."}),
             },
         }
 
     def run(self, string: str, string_in: Optional[Union[str, List[str]]] = None):
         strings, from_list = _normalize_strings(string, string_in)
         results = [re.escape(s) for s in strings]
-        return (results,)
+        status = f"Escaped {len(strings)} string(s)"
+        if len(strings) == 1:
+            status = "Escaped"
+        return {"result": (results,), "ui": {"status": [status]}}
 
 
 # Match processors
@@ -471,7 +509,7 @@ class OvumReMatchInfo:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "match": (RE_MATCH_T, {}),
+                "match": (RE_MATCH_T, {"tooltip": "The match object (or list of match objects) to get information from."}),
             }
         }
 
@@ -497,7 +535,12 @@ class OvumReMatchInfo:
                 flags.append(m.re.flags)
                 lastindex.append(m.lastindex)
                 lastgroup.append(m.lastgroup)
-        return (strings, patterns, flags, lastindex, lastgroup)
+        valid_matches = sum(1 for m in matches if m is not None)
+        if len(matches) == 1:
+            status = "From valid match" if valid_matches > 0 else "From invalid match"
+        else:
+            status = f"From {valid_matches}/{len(matches)} match(es)" if valid_matches > 0 else f"No valid matches in {len(matches)}"
+        return {"result": (strings, patterns, flags, lastindex, lastgroup), "ui": {"status": [status]}}
 
 
 class OvumReMatchGroup:
@@ -525,11 +568,11 @@ class OvumReMatchGroup:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "match": (RE_MATCH_T, {}),
+                "match": (RE_MATCH_T, {"tooltip": "The match object (or list of match objects)."}),
             },
             "optional": {
-                "n": (INT, {"default": 0}),
-                "default": (STRING, {"default": ""}),
+                "n": (INT, {"default": 0, "tooltip": "The group number to retrieve. Group 0 is the entire match."}),
+                "default": (STRING, {"default": "", "tooltip": "The default value to return for `groups()` and `groupdict()` if a group did not participate in the match."}),
             }
         }
 
@@ -552,7 +595,15 @@ class OvumReMatchGroup:
                     out_group.append(None)
                 out_groups.append(m.groups(default=default))
                 out_groupdict.append(m.groupdict(default=default))
-        return (out_group, out_groups, out_groupdict)
+        found_groups = sum(1 for g in out_group if g is not None)
+        if len(matches) == 1:
+            status = f"Got group {n}" if found_groups > 0 else f"Group {n} not in match"
+        else:
+            valid_matches = sum(1 for m in matches if m is not None)
+            status = f"Got group {n} from {found_groups}/{valid_matches} valid"
+            if valid_matches == 0:
+                status = f"No valid matches in {len(matches)}"
+        return {"result": (out_group, out_groups, out_groupdict), "ui": {"status": [status]}}
 
 
 class OvumReMatchSpan:
@@ -580,10 +631,10 @@ class OvumReMatchSpan:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "match": (RE_MATCH_T, {}),
+                "match": (RE_MATCH_T, {"tooltip": "The match object (or list of match objects)."}),
             },
             "optional": {
-                "n": (INT, {"default": 0}),
+                "n": (INT, {"default": 0, "tooltip": "The group number for which to get the span. Group 0 is the entire match."}),
             }
         }
 
@@ -600,10 +651,23 @@ class OvumReMatchSpan:
                 starts.append(None)
                 ends.append(None)
             else:
-                spans.append(m.span(n))
-                starts.append(m.start(n))
-                ends.append(m.end(n))
-        return (spans, starts, ends)
+                try:
+                    spans.append(m.span(n))
+                    starts.append(m.start(n))
+                    ends.append(m.end(n))
+                except IndexError:
+                    spans.append(None)
+                    starts.append(None)
+                    ends.append(None)
+        found_spans = sum(1 for s in spans if s is not None and s != (-1, -1))
+        if len(matches) == 1:
+            status = f"Got span for group {n}" if found_spans > 0 else f"Group {n} not in match"
+        else:
+            valid_matches = sum(1 for m in matches if m is not None)
+            status = f"Got span for group {n} from {found_spans}/{valid_matches} valid"
+            if valid_matches == 0:
+                status = f"No valid matches in {len(matches)}"
+        return {"result": (spans, starts, ends), "ui": {"status": [status]}}
 
 
 # ^(?P<root>(?P<base>.*?/)(?P<output>output/|input/)(?P<subdirs>.*/)?)?(?P<fnbase>(?:.*?)(?:_\d{5})?)(?P<post>(?P<seq>(?:_+[1-9][0-9]{0,4}_)+)?(?P<tailseq>(?:_+0\d{4})+_?)?)(?P<ext>\.[a-z][a-z0-9]{2,5})(?P<whitespace>\s*)$
@@ -635,8 +699,8 @@ class OvumReMatchExpand:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "match": (RE_MATCH_T, {}),
-                "template": (STRING, {"default": ""}),
+                "match": (RE_MATCH_T, {"tooltip": "The match object (or list of match objects)."}),
+                "template": (STRING, {"default": "", "tooltip": "The template string for expansion, with backreferences like `\\1` or `\\g<name>`."}),
             }
         }
 
@@ -650,7 +714,12 @@ class OvumReMatchExpand:
                 outs.append("")
             else:
                 outs.append(m.expand(template))
-        return (outs,)
+        valid_matches = sum(1 for m in matches if m is not None)
+        if len(matches) == 1:
+            status = "Expanded" if valid_matches > 0 else "Not a valid match"
+        else:
+            status = f"Expanded {valid_matches}/{len(matches)} match(es)" if valid_matches > 0 else f"No valid matches in {len(matches)}"
+        return {"result": (outs,), "ui": {"status": [status]}}
 
 
 class OvumReMatchSelect:
@@ -676,8 +745,8 @@ class OvumReMatchSelect:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "matches": (RE_MATCH_T, {}),
-                "index": (INT, {"default": 0, "min": 0}),
+                "matches": (RE_MATCH_T, {"tooltip": "The list of match objects."}),
+                "index": (INT, {"default": 0, "min": 0, "tooltip": "The index of the match to select from the list."}),
             }
         }
 
@@ -685,11 +754,15 @@ class OvumReMatchSelect:
 
     def run(self, matches: List[Optional[re.Match]], index: int = 0):
         if not isinstance(matches, list):
-            return ([matches],)
+            return {"result": ([matches],), "ui": {"status": ["Input not a list, passing through"]}}
         if not matches:
-            return ([None],)
+            return {"result": ([None],), "ui": {"status": ["Empty list"]}}
         idx = max(0, min(index, len(matches) - 1))
-        return ([matches[idx]],)
+        selected = matches[idx]
+        status = f"Selected #{idx + 1}/{len(matches)}"
+        if selected is None:
+            status += " (is None)"
+        return {"result": ([selected],), "ui": {"status": [status]}}
 
 
 class OvumReMatchView:
@@ -716,7 +789,7 @@ class OvumReMatchView:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "match": (RE_MATCH_T, {}),
+                "match": (RE_MATCH_T, {"tooltip": "The match object (or list of match objects) to view."}),
             }
         }
 
@@ -725,14 +798,19 @@ class OvumReMatchView:
     def run(self, match: Union[re.Match, List[Optional[re.Match]]]):
         matches, _ = _ensure_list_matches(match)
         lines: List[str] = []
+        valid_matches = 0
         for i, m in enumerate(matches):
             if m is None:
                 lines.append(f"[{i}] None")
             else:
+                valid_matches += 1
                 grps = m.groups()
                 gd = m.groupdict()
                 lines.append(f"[{i}] pattern={m.re.pattern!r} flags={m.re.flags} span={m.span()} group0={m.group(0)!r} groups={grps!r} groupdict={gd!r}")
-        return ("\n".join(lines),)
+        status = f"Displaying {valid_matches}/{len(matches)} match(es)"
+        if len(matches) == 1:
+            status = "Displaying match" if valid_matches > 0 else "Displaying None"
+        return {"result": ("\n".join(lines),), "ui": {"status": [status]}}
 
 
 CLAZZES = [
@@ -753,3 +831,7 @@ CLAZZES = [
     OvumReMatchSelect,
     OvumReMatchView,
 ]
+
+WEB_DIRECTORY = "js"
+NODE_CLASS_MAPPINGS = {c.NAME: c for c in CLAZZES}
+NODE_DISPLAY_NAME_MAPPINGS = {c.NAME: c.NAME.split(" (")[0] for c in CLAZZES}

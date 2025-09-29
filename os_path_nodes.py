@@ -7,7 +7,8 @@ STRING = "STRING"
 BOOLEAN = "BOOLEAN"
 
 # Define PATHLIKE type marker for ComfyUI
-PATHLIKE = "PATHLIKE"
+# PATHLIKE = "PATHLIKE"
+PATHLIKE = "PATHLIKE,STRING"
 
 # Allow multi-type inputs like VideoHelperSuite's MultiInput
 class MultiInput(str):
@@ -16,11 +17,13 @@ class MultiInput(str):
         res.allowed_types = allowed_types
         return res
     def __ne__(self, other):
+        return False
+
         if getattr(self, 'allowed_types', "*") == "*" or other == "*":
             return False
         return other not in getattr(self, 'allowed_types', [])
 
-PATH_OR_STRING = MultiInput(PATHLIKE, [PATHLIKE, STRING])
+PATH_OR_STRING = PATHLIKE
 
 # Utilities
 

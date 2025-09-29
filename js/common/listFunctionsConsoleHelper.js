@@ -288,6 +288,8 @@ function listFunctions(obj, objName) {
     return members;
 }
 
+window.listFunctions = listFunctions;
+
 // Usage examples:
 // listFunctions(document);
 // listFunctions(console);
