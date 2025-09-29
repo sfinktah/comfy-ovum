@@ -38,6 +38,7 @@ import {
 import {TwinNodes} from "../common/twinNodes.js";
 import {log} from "../common/logger.js";
 import {chainCallback} from "../01/utility.js";
+import {drawTextWithBg, getWidgetBounds} from "../01/canvasHelpers.js";
 
 // mostly written by GPT-5
 // based on KJ's SetGet: https://github.com/kj-comfy/ComfyUI-extensions which was
@@ -96,6 +97,10 @@ app.registerExtension({
 
                 this.ensureGetterWidgetCount(this.numberOfWidgets);
                 ensureSlotCounts(this);
+
+                setTimeout(() => {
+                    node.checkConnections();
+                }, 5000);
 
                 // Ensure the number of outputs matches count
 
@@ -569,6 +574,12 @@ app.registerExtension({
                 validateNodeLinks(this);
             }
 
+            checkConnections() {
+                this.currentSetter = findSetter(this);
+                this.canvas.setDirty(true, true);
+                log({ class: "GetTwinNodes", method: "checkConnections", severity: "debug", tag: "status" }, "checkConnections", this.currentSetter);
+            }
+
             // Return the previous name recorded for the widget at widgetIndex 'idx'
             getPreviousName(idx) {
                 return getPreviousWidgetName(this, idx);
@@ -797,6 +808,12 @@ app.registerExtension({
                         },
                     },
                     {
+                        content: "Check connections",
+                        callback: () => {
+                            node.checkConnections();
+                        },
+                    },
+                    {
                         content: menuEntry,
                         callback: () => {
                             node.currentSetter = findSetter(node);
@@ -827,6 +844,38 @@ app.registerExtension({
             onDrawForeground(ctx, lGraphCanvas) {
                 if (this.drawConnection) {
                     this._drawVirtualLink(lGraphCanvas, ctx);
+                }
+
+                // Show overlay for any selected constants that do not have a matching SetTwinNodes
+                const missingSetters = (this.widgets || [])
+                    .map((w, k) => ({ w, k }))
+                    .filter(o => !!safeStringTrim(o.w?.value))
+                    .filter(o => !findSetter(this, safeStringTrim(o.w.value)))
+                    .map(o => o.k);
+
+                // If minimized (collapsed) and there are missing setters, show a single message and skip the loop
+                const isCollapsed = !!(this.flags && this.flags.collapsed);
+                if (isCollapsed && missingSetters.length > 0) {
+                    const titleH = (LiteGraph && LiteGraph.NODE_TITLE_HEIGHT) ? LiteGraph.NODE_TITLE_HEIGHT : 30;
+                    const textX = this.size[0] + 10; // to the right of the minimized node
+                    const textY = Math.round(titleH * -0.3); // vertically aligned within the title bar
+                    const text = "← Missing SetTwinNode(s)";
+                    drawTextWithBg(ctx, text, textX, textY);
+                } else {
+                    for (const widgetIndex of missingSetters) {
+                        const targetWidget = this.widgets?.[widgetIndex];
+                        if (!targetWidget) continue;
+
+                        const bounds = getWidgetBounds(this, targetWidget);
+
+                        if (bounds) {
+                            // Position text to the right of the widget
+                            const textX = bounds.x + bounds.width + 10; // 10px gap
+                            const textY = bounds.y + bounds.height / 2 + 4; // Vertically centered (+4 for text baseline)
+
+                            drawTextWithBg(ctx, "← No SetTwinNode", textX, textY);
+                        }
+                    }
                 }
             }
             // onDrawCollapsed(ctx, lGraphCanvas) {
