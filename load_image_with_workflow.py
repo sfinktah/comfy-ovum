@@ -18,12 +18,12 @@ from metadata.metadata_file_extractor import MetadataFileExtractor
 
 class LoadImageWithWorkflowOvum(LoadImage):
     CATEGORY = "ovum/image"
-    DESCRIPTION = "Load an image from the input folder and additionally output file path and extracted prompt/workflow metadata."
+    DESCRIPTION = "Load an image from the input folder and additionally output filepath and extracted prompt/workflow metadata."
 
     # Extend the outputs of LoadImage (IMAGE, MASK)
-    # Add: FILE PATH (STRING), PROMPT&WORKFLOW (DICT), IMAGE_EX (DICT)
+    # Add: FILEPATH (STRING), PROMPT&WORKFLOW (DICT), IMAGE_EX (DICT)
     RETURN_TYPES = ("IMAGE", "MASK", "STRING", "DICT", "DICT")
-    RETURN_NAMES = ("IMAGE", "MASK", "FILE PATH", "PROMPT&WORKFLOW", "IMAGE_EX")
+    RETURN_NAMES = ("IMAGE", "MASK", "FILEPATH", "PROMPT&WORKFLOW", "IMAGE_EX")
     FUNCTION = "load_image_ex"
 
     @classmethod
@@ -92,7 +92,7 @@ class LoadImageFromOutputWithWorkflowOvum(LoadImageWithWorkflowOvum):
     EXPERIMENTAL = True
 
     @classmethod
-    def INPUT_TYPES(s):
+    def INPUT_TYPES(cls):
         # Mirror nodes.LoadImageOutput INPUT_TYPES but we still want to keep LoadImage behavior
         return {
             "required": {
@@ -109,75 +109,92 @@ class LoadImageFromOutputWithWorkflowOvum(LoadImageWithWorkflowOvum):
         }
 
 
-class DemuxImageExOvum:
-    NAME = "Demux IMAGE_EX"
+# The concept is that the context (in our case, the IMAGE_EX muxed data) is allowed to input
+# and output from any instance of a context node, with the separate input links taking precedence
+# over the context (which is passed in and out as the first input/output)
+_all_context_input_output_data = ["image", "mask", "filepath", "prompt", "workflow"]
+
+
+def new_context(base_ctx, **kwargs):
+    """Creates a new context from the provided data, with an optional base ctx to start."""
+    context = base_ctx if base_ctx is not None else None
+    new_ctx = {}
+    for key in _all_context_input_output_data:
+        if key == "base_ctx":
+            continue
+        v = kwargs[key] if key in kwargs else None
+        new_ctx[key] = v if v is not None else context[
+            key] if context is not None and key in context else None
+    return new_ctx
+
+
+def get_context_return_tuple(ctx):
+    return (
+        ctx,
+        ctx.get("image"),
+        ctx.get("mask"),
+        ctx.get("filepath") or "",
+        ctx.get("prompt") or {},
+        ctx.get("workflow") or {},
+    )
+
+
+ALL_CTX_OPTIONAL_INPUTS = {
+    # The first (optional) input is the context pass-through.
+    "image_ex": ("DICT",),
+    # The rest are overrides.
+    "image": ("IMAGE",),
+    "mask": ("MASK",),
+    "filepath": ("STRING", {"multiline": False}),
+    "prompt": ("DICT",),
+    "workflow": ("DICT",),
+}
+ALL_CTX_RETURN_TYPES = ("DICT", "IMAGE", "MASK", "STRING", "DICT", "DICT")
+ALL_CTX_RETURN_NAMES = ("IMAGE_EX", "IMAGE", "MASK", "FILEPATH", "PROMPT", "WORKFLOW")
+
+
+class ImageExContextOvum:
+    NAME = "IMAGE_EX Context"
     CATEGORY = "ovum/image"
-    FUNCTION = "demux"
+    DESCRIPTION = """A context node for IMAGE_EX data. It passes through
+IMAGE_EX data, allowing individual fields to be overridden by
+explicit inputs. This can be used to modify parts of an
+IMAGE_EX data structure without needing to demux and remux it
+completely."""
 
     @classmethod
-    def INPUT_TYPES(cls):
-        return {"required": {"image_ex": ("DICT",)}}
-
-    RETURN_TYPES = ("IMAGE", "MASK", "STRING", "DICT", "DICT")
-    RETURN_NAMES = ("IMAGE", "MASK", "FILE PATH", "PROMPT", "WORKFLOW")
-
-    def demux(self, image_ex: Dict[str, Any]):
-        image = image_ex.get("image")
-        mask = image_ex.get("mask")
-        filepath = image_ex.get("filepath") or ""
-        prompt = image_ex.get("prompt") or {}
-        workflow = image_ex.get("workflow") or {}
-        return image, mask, str(filepath), prompt, workflow
-
-
-class MuxImageExOvum:
-    NAME = "Mux IMAGE_EX"
-    CATEGORY = "ovum/image"
-    FUNCTION = "mux"
-
-    @classmethod
-    def INPUT_TYPES(cls):
+    def INPUT_TYPES(cls):  # pylint: disable = invalid-name,missing-function-docstring
         return {
-            "required": {
-                "image": ("IMAGE",),
-                "mask": ("MASK",),
-                "filepath": ("STRING",),
-                "prompt": ("DICT",),
-                "workflow": ("DICT",),
-            }
+            "required": {},
+            "optional": ALL_CTX_OPTIONAL_INPUTS,
+            "hidden": {},
         }
 
-    RETURN_TYPES = ("DICT",)
-    RETURN_NAMES = ("IMAGE_EX",)
+    RETURN_TYPES = ALL_CTX_RETURN_TYPES
+    RETURN_NAMES = ALL_CTX_RETURN_NAMES
+    FUNCTION = "convert"
 
-    def mux(self, image, mask, filepath: str, prompt: Dict[str, Any], workflow: Dict[str, Any]):
-        return ({
-            "image": image,
-            "mask": mask,
-            "filepath": str(filepath),
-            "prompt": prompt or {},
-            "workflow": workflow or {},
-        },)
+    @classmethod
+    def convert(cls, image_ex=None, **kwargs):  # pylint: disable = missing-function-docstring
+        ctx = new_context(image_ex, **kwargs)
+        return get_context_return_tuple(ctx)
 
 
 NODE_CLASS_MAPPINGS = {
     "LoadImageWithWorkflowOvum": LoadImageWithWorkflowOvum,
     "LoadImageFromOutputWithWorkflowOvum": LoadImageFromOutputWithWorkflowOvum,
-    "DemuxImageExOvum": DemuxImageExOvum,
-    "MuxImageExOvum": MuxImageExOvum,
+    "ImageExContextOvum": ImageExContextOvum,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "LoadImageWithWorkflowOvum": "Load Image with Workflow",
     "LoadImageFromOutputWithWorkflowOvum": "Load Image from Output with Workflow",
-    "DemuxImageExOvum": "Demux IMAGE_EX",
-    "MuxImageExOvum": "Mux IMAGE_EX",
+    "ImageExContextOvum": "IMAGE_EX Context",
 }
 
 # For ovum's __init__ auto-discovery
 CLAZZES = [
     LoadImageWithWorkflowOvum,
     LoadImageFromOutputWithWorkflowOvum,
-    DemuxImageExOvum,
-    MuxImageExOvum,
+    ImageExContextOvum,
 ]

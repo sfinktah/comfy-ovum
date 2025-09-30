@@ -130,7 +130,7 @@ class SetTwinNodes extends TwinNodes {
      * and update node color from the first connected typed link
      */
     updateTitle(force) {
-        log({ class: "SetTwinNodes", method: "updateTitle", severity: "trace", tag: "function_entered" }, `collapsed: ${collapsed}`);
+        log({ class: "SetTwinNodes", method: "updateTitle", severity: "trace", tag: "function_entered" }, `force: ${force}`);
         // can find the event for collapsing a node, so we'll just apply the title shortening all the time
         // if (collapsed) {
         //     this.fullTitle = this.title;

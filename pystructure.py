@@ -620,7 +620,7 @@ class PassthruOvum:
         }
 
     @classmethod
-    def passthru(cls, any_in=None):
+    def passthru(cls, any_in=None, **kwargs):
         logging.info(f"{cls.custom_name}: ({type(any_in)}) {any_in}")
         return (any_in,)
 

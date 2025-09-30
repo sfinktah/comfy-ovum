@@ -48,6 +48,24 @@ app.registerExtension({
         nodeType.prototype.onAdded = function () {
             onAdded?.apply(this, arguments);
             this.ovumUpdateWidgetState();
+
+            if (this.type === "re.Match.__repr__ (Regex Match View)") {
+                if (!this.widgets?.find(w => w.name === "text")) {
+                    this.addWidget("STRING", "text", "", () => {}, { multiline: true });
+                    // Make the widget read-only.
+                    const widget = this.widgets[this.widgets.length - 1];
+                    if (widget.inputEl) {
+                        widget.inputEl.readOnly = true;
+                    } else {
+                        // inputEl not created yet, patch draw to set it later.
+                        const origDraw = widget.draw;
+                        widget.draw = function(...args) {
+                            if (this.inputEl) this.inputEl.readOnly = true;
+                            return origDraw.apply(this, args);
+                        }
+                    }
+                }
+            }
         };
 
         // 2. Display status text from python `ui` return
@@ -61,6 +79,14 @@ app.registerExtension({
                 severity: 'trace',
             }, {message});
             this.status = message?.status ? message.status.join("\n") : undefined;
+
+            if (this.type === "re.Match.__repr__ (Regex Match View)" && message?.text) {
+                const widget = this.widgets.find(w => w.name === "text");
+                if (widget) {
+                    widget.value = message.text.join("\n");
+                }
+            }
+
             /** @this {LGraphNode} */
             this.setDirtyCanvas(true, true);
         };

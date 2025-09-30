@@ -810,7 +810,8 @@ class OvumReMatchView:
         status = f"Displaying {valid_matches}/{len(matches)} match(es)"
         if len(matches) == 1:
             status = "Displaying match" if valid_matches > 0 else "Displaying None"
-        return {"result": ("\n".join(lines),), "ui": {"status": [status]}}
+        text = "\n".join(lines)
+        return {"result": (text,), "ui": {"status": [status], "text": [text]}}
 
 
 CLAZZES = [
