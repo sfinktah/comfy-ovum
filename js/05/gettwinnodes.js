@@ -27,7 +27,7 @@ import {computeTwinNodeTitle, extractWidgetNames, safeStringTrim} from "../01/st
 import {
     ensureSlotCounts,
     ensureWidgetCount,
-    findSetter,
+    findSetter, findSetters,
     getPreviousWidgetName,
     makeUnlinkedName,
     normalizeWidgetLabels, setWidgetValue,
@@ -52,7 +52,10 @@ app.registerExtension({
     name: "GetTwinNodes",
     registerCustomNodes() {
         class GetTwinNodes extends TwinNodes {
+            /** @type {{node: SetTwinNodes, widget: IWidget, widgetIndex: number} | null} */
             currentSetter = null;
+            /** @type {Array<{node: SetTwinNodes, widget: IWidget, widgetIndex: number}>} Each outer array element corresponds to a slot index, containing an array of matching setter nodes for that slot */
+            currentSetters = [];
             numberOfInputSlots = 0;
 
             /**
@@ -286,22 +289,14 @@ app.registerExtension({
                     }
 
                     // Attempt to auto-pair remaining constants from a matched setter
+                    // TODO: make this properly dual+ aware
                     const matched = findSetter(this);
                     if (matched) {
-                        const needed = matched.widgets?.length || 0;
-                        if (numberOfWidgets === undefined) {
-                            log({
-                                class: "GetTwinNodes",
-                                method: "onConnectionsChange",
-                                severity: "warn",
-                                tag: "properties"
-                            }, "No 'numberOfWidgets' property found in node properties. Aborting rather than using a default value of 2.");
-                            return;
-                        }
+                        const needed = matched.node.widgets?.length || 0;
                         this.ensureGetterWidgetCount(Math.max(numberOfWidgets, needed));
                         for (let i = 0; i < needed; i++) {
-                            if (!this.widgets?.[i]?.value && matched.widgets?.[i]?.value) {
-                                setWidgetValue(this, i, matched.widgets[i].value);
+                            if (!safeStringTrim(this.widgets?.[i]?.value) && safeStringTrim(matched.node.widgets?.[i]?.value)) {
+                                setWidgetValue(this, i, safeStringTrim(matched.node.widgets[i].value));
                             }
                         }
                     }
@@ -565,6 +560,7 @@ app.registerExtension({
 
             checkConnections() {
                 this.currentSetter = findSetter(this);
+                this.currentSetters = findSetters(this);
                 this.canvas.setDirty(true, true);
                 log({ class: "GetTwinNodes", method: "checkConnections", severity: "debug", tag: "status" }, "checkConnections", this.currentSetter);
             }
@@ -821,11 +817,14 @@ app.registerExtension({
                         content: "Check connections",
                         callback: () => {
                             node.checkConnections();
+                            console.log('connections', this.currentSetters)
                         },
                     },
                     {
                         content: menuEntry,
                         callback: () => {
+                            node.checkConnections();
+                            // legacy code below here here
                             node.currentSetter = findSetter(node);
                             log({ class: "GetTwinNodes", method: "getExtraMenuOptions", severity: "info", tag: "context_menu" }, "[GetTwinNodes] context menu, found setters", node.currentSetter);
                             if (!node.currentSetter) return;
@@ -894,35 +893,55 @@ app.registerExtension({
             // 	}
             // }
             _drawVirtualLink(lGraphCanvas, ctx) {
-                if (!this.currentSetter) return;
+                if (!this.currentSetters?.length) return;
+                this.currentSetters.forEach((setters, slotIndex) => {
+                    // Add error handling for getConnectionPos
+                    if (typeof this.getConnectionPos !== 'function') return;
 
-                // Provide a default link object with necessary properties, to avoid errors as link can't be null anymore
-                const defaultLink = { type: 'default', color: this.slotColor };
+                    const absStart = this.getConnectionPos(false, slotIndex);
+                    if (!absStart || !this.pos) return;
 
-                // Choose first typed input on setter as anchor (fallback to slot 0)
-                let inIdx = 0;
-                if (Array.isArray(this.currentSetter.node.inputs)) {
-                    const fin = this.currentSetter.node.inputs.findIndex(i => i && i.type && i.type !== '*');
-                    if (fin >= 0) inIdx = fin;
-                }
-                const absStart = this.currentSetter.node.getConnectionPos(false, inIdx);
-                const start_node_slotpos = [
-                    absStart[0] - this.pos[0],
-                    absStart[1] - this.pos[1],
-                ];
+                    const start_node_slotpos = [
+                        absStart[0] - this.pos[0],
+                        absStart[1] - this.pos[1],
+                    ];
 
-                // End near our header (consistent with prior behavior)
-                const end_node_slotpos = [0, -LiteGraph.NODE_TITLE_HEIGHT * 0.5];
+                    // Provide a default link object with necessary properties
+                    const defaultLink = {type: 'default', color: slotIndex === 0 ? '#4bbf50' : '#7d7dff'};
 
-                lGraphCanvas.renderLink(
-                    ctx,
-                    start_node_slotpos,
-                    end_node_slotpos,
-                    defaultLink,
-                    false,
-                    null,
-                    this.slotColor
-                );
+                    const setter = setters.node;
+                        // Add validation for setter
+                        // if (!setter || typeof setter.getConnectionPos !== 'function') continue;
+
+                        // Determine a sensible end anchor on the setter: first typed input, else input 0
+                        let setterWidgetIndex = 0;
+                        if (Array.isArray(setter.inputs)) {
+                            const found = setter.widgets.findIndex(inputWidget => inputWidget && safeStringTrim(inputWidget?.value) === safeStringTrim(this.widgets[slotIndex]?.value));
+                            if (~found) setterWidgetIndex = found;
+                        }
+
+                        const absEndLeft = setter.getConnectionPos(true, setterWidgetIndex);
+                        const absEndRight = setter.getConnectionPos(false, setterWidgetIndex);
+                        const absEnd = absEndRight;
+                        // absEnd[0] = absEndLeft[0];
+
+                        const end_node_slotpos = [
+                            absEnd[0] - this.pos[0],
+                            absEnd[1] - this.pos[1],
+                        ];
+
+                        lGraphCanvas.renderLink(
+                            ctx,
+                            end_node_slotpos,
+                            start_node_slotpos,
+                            defaultLink,
+                            false,
+                            null,
+                            this.slotColor,
+                            LiteGraph.RIGHT,
+                            LiteGraph.LEFT
+                        );
+                });
             }
         }
 

@@ -115,12 +115,17 @@ export function setColorAndBgColor(types) {
         'NUMBER':       { color: '#1b4669', bgcolor: '#29699c'   }, // custom, kjnodes
 
         'ARGS':         { color: '#434',    bgcolor: '#646',     }, // indigo2
+        'CONTROL':      { color: '#434',    bgcolor: '#646',     }, // indigo2
+        'CHAIN':        { color: '#434',    bgcolor: '#646',     }, // indigo2
         'EMBED':        { color: '#532',    bgcolor: '#743',     }, // orange
         'BOOLEAN':      { color: '#334',    bgcolor: '#446',     }, // indigo1
         'STRING':       { color: '#332',    bgcolor: '#553',     }, // olive
         'TEXT':         { color: '#332',    bgcolor: '#553',     }, // olive
         'SEED':         { color: '#1b4669', bgcolor: '#29699c'   }, // custom, kjnodes
         'INT':          { color: '#1b4669', bgcolor: '#29699c'   }, // custom, kjnodes
+        'LIST':         { color: '#244',    bgcolor: '#366'      }, // teal
+        'DICT':         { color: '#244',    bgcolor: '#366'      }, // teal
+
     };
 
     const list = Array.isArray(types) ? types : (types != null ? [types] : []);

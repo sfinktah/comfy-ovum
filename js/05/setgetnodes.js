@@ -13,6 +13,7 @@
 /** @typedef {import("@comfyorg/comfyui-frontend-types").ContextMenuItem} ContextMenuItem */
 /** @typedef {import("@comfyorg/comfyui-frontend-types").ComfyNode} ComfyNode */
 /** @typedef {import("@comfyorg/comfyui-frontend-types").Subgraph} Subgraph */
+/** @typedef {import("@comfyorg/comfyui-frontend-types").Point} Point */
 // 1. **Removed potentially invalid types**: `NodeInputSlot`, `NodeOutputSlot`, and `Subgraph` - these don't appear to be standard exports from the comfyui-frontend-types package
 /** @typedef {import("../common/graphHelpersForTwinNodes.js").GraphHelpers} GraphHelpers */
 
@@ -627,20 +628,23 @@ class SetTwinNodes extends TwinNodes {
             ];
 
             // Provide a default link object with necessary properties
-            const defaultLink = {type: 'default', color: slotIndex === 0 ? '#8a8' : '#335'};
+            const defaultLink = {type: 'default', color: slotIndex === 0 ? '#4bbf50' : '#7d7dff'};
 
             for (const getter of getters) {
                 // Add validation for getter
                 if (!getter || typeof getter.getConnectionPos !== 'function') continue;
 
                 // Determine a sensible end anchor on the getter: first typed input, else input 0
-                let inIdx = 0;
+                let getterWidgetIndex = 0;
                 if (Array.isArray(getter.inputs)) {
-                    const fin = getter.inputs.findIndex(input => input && input.type && input.type !== '*');
-                    if (fin >= 0) inIdx = fin;
+                    const found = getter.widgets.findIndex(inputWidget => inputWidget && safeStringTrim(inputWidget?.value) === safeStringTrim(this.widgets[slotIndex]?.value));
+                    if (~found) getterWidgetIndex = found;
                 }
 
-                const absEnd = getter.getConnectionPos(true, inIdx);
+                const absEndLeft = getter.getConnectionPos(true, getterWidgetIndex);
+                const absEndRight = getter.getConnectionPos(false, getterWidgetIndex);
+                const absEnd = absEndRight;
+                absEnd[0] = absEndLeft[0];
                 if (!absEnd) continue;
 
                 const end_node_slotpos = [
