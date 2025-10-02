@@ -1,6 +1,6 @@
 import base64
 import io
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Any, Dict, List, Type
 
 import numpy as np
 import torch
@@ -119,8 +119,69 @@ def _flatten_mask_like(mask):
     else:
         raise ValueError("Unsupported MASK type; expected torch.Tensor or list/tuple.")
 
+# --- LiveCrop Edit classes (JSON-representable) ---
+class _LiveCropEdit:
+    type_name: str = ""
+    def to_json(self) -> Dict[str, Any]:
+        return {"type": self.type_name}
+    @classmethod
+    def from_json(cls, data: Dict[str, Any]) -> "_LiveCropEdit":
+        t = data.get("type")
+        mapping: Dict[str, Type[_LiveCropEdit]] = {
+            "LiveCropRotate": LiveCropRotate if 'LiveCropRotate' in globals() else None,
+            "LiveCropBoundBoxPercent": LiveCropBoundBoxPercent if 'LiveCropBoundBoxPercent' in globals() else None,
+            "LiveCropImageEffect": LiveCropImageEffect if 'LiveCropImageEffect' in globals() else None,
+            "LiveCropTemporaryCopy": LiveCropTemporaryCopy if 'LiveCropTemporaryCopy' in globals() else None,
+        }
+        cls2 = mapping.get(t)
+        if cls2 is None:
+            return _LiveCropEdit()
+        return cls2.from_json(data)  # type: ignore
+
+class LiveCropRotate(_LiveCropEdit):
+    type_name = "LiveCropRotate"
+    def __init__(self, degrees: int = 0):
+        self.degrees = int(degrees)
+    def to_json(self) -> Dict[str, Any]:
+        return {"type": self.type_name, "degrees": int(self.degrees)}
+    @classmethod
+    def from_json(cls, data: Dict[str, Any]) -> "LiveCropRotate":
+        return cls(int(data.get("degrees", 0)))
+
+class LiveCropBoundBoxPercent(_LiveCropEdit):
+    type_name = "LiveCropBoundBoxPercent"
+    def __init__(self, left: float, top: float, width: float, height: float):
+        self.left = float(left); self.top = float(top)
+        self.width = float(width); self.height = float(height)
+    def to_json(self) -> Dict[str, Any]:
+        return {"type": self.type_name, "left": self.left, "top": self.top, "width": self.width, "height": self.height}
+    @classmethod
+    def from_json(cls, data: Dict[str, Any]) -> "LiveCropBoundBoxPercent":
+        return cls(float(data.get("left", 0.0)), float(data.get("top", 0.0)), float(data.get("width", 1.0)), float(data.get("height", 1.0)))
+
+class LiveCropImageEffect(_LiveCropEdit):
+    type_name = "LiveCropImageEffect"
+    def __init__(self):
+        pass
+    def to_json(self) -> Dict[str, Any]:
+        return {"type": self.type_name}
+    @classmethod
+    def from_json(cls, data: Dict[str, Any]) -> "LiveCropImageEffect":
+        return cls()
+
+class LiveCropTemporaryCopy(_LiveCropEdit):
+    type_name = "LiveCropTemporaryCopy"
+    def __init__(self, path: str):
+        self.path = path
+    def to_json(self) -> Dict[str, Any]:
+        return {"type": self.type_name, "path": self.path}
+    @classmethod
+    def from_json(cls, data: Dict[str, Any]) -> "LiveCropTemporaryCopy":
+        return cls(str(data.get("path", "")))
+
+
 class LiveCrop:
-    NAME = "Live Crop"
+    NAME = "LiveCrop"
     DESCRIPTION = (
         "Visually crop an image with interactive guides.\n\n"
         "Use sliders or drag the red guides in the node UI to set crop amounts.\n"
@@ -134,8 +195,9 @@ class LiveCrop:
     )
 
     CATEGORY = "ovum"
-    RETURN_TYPES = ("IMAGE", "MASK")
-    RETURN_NAMES = ("image", "mask")
+    # IMAGE, MASK, IMAGE_EX, BBOX, BBOX%
+    RETURN_TYPES = ("IMAGE", "MASK", "DICT", "LIST", "LIST")
+    RETURN_NAMES = ("image", "mask", "IMAGE_EX", "BBOX", "BBOX%")
     FUNCTION = "apply"
 
     @classmethod
@@ -146,15 +208,17 @@ class LiveCrop:
                 "crop_bottom": ("FLOAT", {"default": 0.0, "min": -1.0, "max": 0.0, "step": 0.01, "display": "slider", "tooltip": "Negative values crop from bottom."}),
                 "crop_left": ("FLOAT", {"default": 0.0, "min": -1.0, "max": 0.0, "step": 0.01, "display": "slider", "tooltip": "Negative values crop from left."}),
                 "crop_right": ("FLOAT", {"default": 0.0, "min": -1.0, "max": 0.0, "step": 0.01, "display": "slider", "tooltip": "Negative values crop from right."}),
+                "rotate_degrees": ("INT", {"default": 0, "min": -180, "max": 180, "step": 90, "tooltip": "Rotate by multiples of 90 degrees."}),
             },
             "optional": {
                 "image": ("IMAGE",),
                 "mask": ("MASK",),
+                "image_ex": ("DICT",),
             }
         }
 
     @staticmethod
-    def _crop_expand_rotate(img: Image.Image, crop_top: float, crop_bottom: float, crop_left: float, crop_right: float, is_mask: bool = False) -> Image.Image:
+    def _crop_expand_rotate(img: Image.Image, crop_top: float, crop_bottom: float, crop_left: float, crop_right: float, is_mask: bool = False, rotate_degrees: int = 0) -> Image.Image:
         width, height = img.size
         # Only cropping (negative values only)
         left = int(width * abs(crop_left)) if crop_left < 0 else 0
@@ -163,10 +227,14 @@ class LiveCrop:
         bottom = height - int(height * abs(crop_bottom)) if crop_bottom < 0 else height
         img = img.crop((left, top, right, bottom))
 
-        # No padding or rotation applied
+        # Rotation in 90 degree increments
+        r = rotate_degrees % 360
+        if r != 0:
+            # PIL rotates counter-clockwise; expand is implied for 90-k multiples
+            img = img.rotate(-r, expand=True)  # negative for right-rotation visual consistency
         return img
 
-    def apply(self, crop_top, crop_bottom, crop_left, crop_right, image=None, mask=None):
+    def apply(self, crop_top, crop_bottom, crop_left, crop_right, rotate_degrees, image=None, mask=None, image_ex=None):
         previews = []
 
         def add_preview_from_tensor(img_t):
@@ -179,11 +247,24 @@ class LiveCrop:
                 pass
 
         def process_image_tensor(t: torch.Tensor):
+            nonlocal bbox_px, bbox_pct
             # Single image (H, W, C)
             if t.dim() == 3:
                 add_preview_from_tensor(t)
                 pil = _tensor_image_to_pil(t)
-                pil2 = self._crop_expand_rotate(pil, crop_top, crop_bottom, crop_left, crop_right, is_mask=False)
+                # Compute bbox against original orientation
+                W, H = pil.size
+                l_px = int(W * abs(crop_left)) if crop_left < 0 else 0
+                r_px = int(W * abs(crop_right)) if crop_right < 0 else 0
+                t_px = int(H * abs(crop_top)) if crop_top < 0 else 0
+                b_px = int(H * abs(crop_bottom)) if crop_bottom < 0 else 0
+                x = l_px
+                y = t_px
+                w = max(0, W - l_px - r_px)
+                h = max(0, H - t_px - b_px)
+                bbox_px = [x, y, w, h]
+                bbox_pct = [x / W if W else 0.0, y / H if H else 0.0, (w / W) if W else 0.0, (h / H) if H else 0.0]
+                pil2 = self._crop_expand_rotate(pil, crop_top, crop_bottom, crop_left, crop_right, is_mask=False, rotate_degrees=rotate_degrees)
                 return _pil_to_tensor_image(pil2)
             # Batch (N, H, W, C)
             if t.dim() == 4:
@@ -191,7 +272,18 @@ class LiveCrop:
                 for i in range(t.shape[0]):
                     add_preview_from_tensor(t[i])
                     pil = _tensor_image_to_pil(t[i])
-                    pil2 = self._crop_expand_rotate(pil, crop_top, crop_bottom, crop_left, crop_right, is_mask=False)
+                    if i == 0:
+                        W, H = pil.size
+                        l_px = int(W * abs(crop_left)) if crop_left < 0 else 0
+                        r_px = int(W * abs(crop_right)) if crop_right < 0 else 0
+                        t_px = int(H * abs(crop_top)) if crop_top < 0 else 0
+                        b_px = int(H * abs(crop_bottom)) if crop_bottom < 0 else 0
+                        x = l_px; y = t_px
+                        w = max(0, W - l_px - r_px)
+                        h = max(0, H - t_px - b_px)
+                        bbox_px = [x, y, w, h]
+                        bbox_pct = [x / W if W else 0.0, y / H if H else 0.0, (w / W) if W else 0.0, (h / H) if H else 0.0]
+                    pil2 = self._crop_expand_rotate(pil, crop_top, crop_bottom, crop_left, crop_right, is_mask=False, rotate_degrees=rotate_degrees)
                     parts.append(_pil_to_tensor_image(pil2))
                 return torch.stack(parts, dim=0) if parts else t
             raise ValueError("Unsupported IMAGE tensor dims (expected 3D or 4D).")
@@ -211,27 +303,27 @@ class LiveCrop:
             # 2D mask (H, W)
             if t.dim() == 2:
                 mpil = _tensor_mask_to_pil(t)
-                mpil2 = self._crop_expand_rotate(mpil, crop_top, crop_bottom, crop_left, crop_right, is_mask=True)
+                mpil2 = self._crop_expand_rotate(mpil, crop_top, crop_bottom, crop_left, crop_right, is_mask=True, rotate_degrees=rotate_degrees)
                 return _pil_to_tensor_mask(mpil2)
             # 3D cases
             if t.dim() == 3:
                 # (H, W, 1)
                 if t.shape[-1] == 1:
                     mpil = _tensor_mask_to_pil(t)
-                    mpil2 = self._crop_expand_rotate(mpil, crop_top, crop_bottom, crop_left, crop_right, is_mask=True)
+                    mpil2 = self._crop_expand_rotate(mpil, crop_top, crop_bottom, crop_left, crop_right, is_mask=True, rotate_degrees=rotate_degrees)
                     out2d = _pil_to_tensor_mask(mpil2)
                     return out2d.unsqueeze(-1)
                 # (1, H, W)
                 if t.shape[0] == 1:
                     mpil = _tensor_mask_to_pil(t)
-                    mpil2 = self._crop_expand_rotate(mpil, crop_top, crop_bottom, crop_left, crop_right, is_mask=True)
+                    mpil2 = self._crop_expand_rotate(mpil, crop_top, crop_bottom, crop_left, crop_right, is_mask=True, rotate_degrees=rotate_degrees)
                     out2d = _pil_to_tensor_mask(mpil2)
                     return out2d.unsqueeze(0)
                 # (N, H, W) batch
                 parts = []
                 for i in range(t.shape[0]):
                     mpil = _tensor_mask_to_pil(t[i])
-                    mpil2 = self._crop_expand_rotate(mpil, crop_top, crop_bottom, crop_left, crop_right, is_mask=True)
+                    mpil2 = self._crop_expand_rotate(mpil, crop_top, crop_bottom, crop_left, crop_right, is_mask=True, rotate_degrees=rotate_degrees)
                     parts.append(_pil_to_tensor_mask(mpil2))
                 return torch.stack(parts, dim=0) if parts else t
             # 4D masks: (N, H, W, C), preserve C
@@ -240,7 +332,7 @@ class LiveCrop:
                 parts = []
                 for i in range(t.shape[0]):
                     mpil = _tensor_mask_to_pil(t[i])
-                    mpil2 = self._crop_expand_rotate(mpil, crop_top, crop_bottom, crop_left, crop_right, is_mask=True)
+                    mpil2 = self._crop_expand_rotate(mpil, crop_top, crop_bottom, crop_left, crop_right, is_mask=True, rotate_degrees=rotate_degrees)
                     m2d = _pil_to_tensor_mask(mpil2)  # (H, W)
                     if last_c == 1:
                         m3d = m2d.unsqueeze(-1)  # (H, W, 1)
@@ -261,8 +353,62 @@ class LiveCrop:
                 return type(x)(out_seq)
             raise ValueError("Unsupported MASK type; expected torch.Tensor or list/tuple.")
 
+        # If IMAGE_EX provided, prefer its image/mask when explicit not provided
+        if image is None and isinstance(image_ex, dict):
+            image = image_ex.get("image", None)
+        if mask is None and isinstance(image_ex, dict):
+            mask = image_ex.get("mask", None)
+
+        bbox_px: List[int] = [0, 0, 0, 0]
+        bbox_pct: List[float] = [0.0, 0.0, 0.0, 0.0]
+
         image_out = process_image_like(image) if image is not None else None
         mask_out = process_mask_like(mask) if mask is not None else None
+
+        # Build IMAGE_EX passthrough with edits
+        img_ex_out: Dict[str, Any] = {}
+        if isinstance(image_ex, dict):
+            # shallow copy passthrough of known and unknown fields
+            img_ex_out.update(image_ex)
+        # overwrite with new image/mask and add image_edits
+        img_ex_out["image"] = image_out
+        img_ex_out["mask"] = mask_out
+        edits: List[Dict[str, Any]] = []
+        # Rotation edit
+        edits.append(LiveCropRotate(int(rotate_degrees or 0)).to_json())
+        # BBOX% edit
+        edits.append(LiveCropBoundBoxPercent(float(bbox_pct[0]), float(bbox_pct[1]), float(bbox_pct[2]), float(bbox_pct[3])).to_json())
+        # Placeholder ImageEffect
+        edits.append(LiveCropImageEffect().to_json())
+
+        # Save temporary copy
+        temp_path = None
+        try:
+            # Save first preview of image_out if possible
+            first_tensor = None
+            def find_first_tensor(x):
+                if isinstance(x, torch.Tensor):
+                    return x
+                if isinstance(x, (list, tuple)):
+                    for e in x:
+                        r = find_first_tensor(e)
+                        if r is not None:
+                            return r
+                return None
+            first_tensor = find_first_tensor(image_out)
+            if first_tensor is not None:
+                pil = _tensor_image_to_pil(first_tensor if first_tensor.dim() == 3 else first_tensor[0])
+                import os
+                out_dir = os.path.join("output", "livecrop")
+                os.makedirs(out_dir, exist_ok=True)
+                temp_path = os.path.join(out_dir, "livecrop_temp.png")
+                pil.save(temp_path)
+        except Exception:
+            temp_path = None
+        if temp_path:
+            edits.append(LiveCropTemporaryCopy(temp_path.replace('\\', '/')).to_json())
+
+        img_ex_out["image_edits"] = edits
 
         ui = None
         try:
@@ -293,9 +439,9 @@ class LiveCrop:
 
         if ui:
             print("[LiveCrop] outputting UI\n")
-            return {"ui": ui, "result": (image_out, mask_out)}
+            return {"ui": ui, "result": (image_out, mask_out, img_ex_out, bbox_px, bbox_pct)}
         print("[LiveCrop] not outputting UI\n")
-        return image_out, mask_out
+        return image_out, mask_out, img_ex_out, bbox_px, bbox_pct
 
 
 CLAZZES = [LiveCrop]

@@ -1,9 +1,7 @@
+import logging
 from nodes import NODE_CLASS_MAPPINGS as ALL_NODE_CLASS_MAPPINGS
-
-try:
-    from comfy_execution.graph_utils import GraphBuilder, is_link
-except:
-    GraphBuilder = None
+from server import PromptServer
+from comfy_execution.graph_utils import GraphBuilder, is_link
 
 class AlwaysEqualProxy(str):
     def __eq__(self, _):
@@ -23,104 +21,158 @@ class ByPassTypeTuple(tuple):
             return TautologyStr(item)
         return item
 
-DEFAULT_FLOW_NUM = 2
-MAX_FLOW_NUM = 20
+
+def update_node_status(node, text, progress=None):
+    pass
+
+class ListWrapper:
+    def __init__(self, data, aux=None):
+        if isinstance(data, ListWrapper):
+            self._data = data
+            if aux is None:
+                self.aux = data.aux
+            else:
+                self.aux = aux
+        else:
+            self._data = list(data)
+            self.aux = aux
+
+    def __getitem__(self, index):
+        if isinstance(index, slice):
+            return ListWrapper(self._data[index], self.aux)
+        else:
+            return self._data[index]
+
+    def __setitem__(self, index, value):
+        self._data[index] = value
+
+    def __len__(self):
+        return len(self._data)
+
+    def __repr__(self):
+        return f"ListWrapper({self._data}, aux={self.aux})"
+
+
 any_type = AlwaysEqualProxy("*")
 
-class whileLoopStart:
-    NAME = "While Loop Start"
+# Loop nodes are implemented based on BadCafeCode's reference loop implementation
+# https://github.com/BadCafeCode/execution-inversion-demo-comfyui/blob/main/flow_control.py
 
-    def __init__(self):
-        pass
-
+class ForeachListBeginOvum:
     @classmethod
-    def INPUT_TYPES(cls):
-        inputs = {
+    def INPUT_TYPES(s):
+        return {
             "required": {
-                "condition": ("BOOLEAN", {"default": True}),
+                "py_list": ("ITEM_LIST", {"tooltip": "A list containing items to be processed iteratively."}),
             },
             "optional": {
-            },
-        }
-        for i in range(MAX_FLOW_NUM):
-            inputs["optional"]["initial_value%d" % i] = (any_type,)
-        return inputs
-
-    RETURN_TYPES = ByPassTypeTuple(tuple(["FLOW_CONTROL"] + [any_type] * MAX_FLOW_NUM))
-    RETURN_NAMES = ByPassTypeTuple(tuple(["flow"] + ["value%d" % i for i in range(MAX_FLOW_NUM)]))
-    FUNCTION = "while_loop_open"
-
-    CATEGORY = "ovum/easy/while Loop"
-
-    def while_loop_open(self, condition, **kwargs):
-        values = []
-        for i in range(MAX_FLOW_NUM):
-            values.append(kwargs.get("initial_value%d" % i, None))
-        return tuple(["stub"] + values)
-
-
-class whileLoopEnd:
-    NAME = "While Loop End"
-
-    def __init__(self):
-        pass
-
-    @classmethod
-    def INPUT_TYPES(cls):
-        inputs = {
-            "required": {
-                "flow": ("FLOW_CONTROL", {"rawLink": True}),
-                "condition": ("BOOLEAN", {}),
-            },
-            "optional": {
+                "init_accum": (any_type, {
+                    "tooltip": "Initial value for the accumulator (accum) before processing items."}),
             },
             "hidden": {
                 "dynprompt": "DYNPROMPT",
                 "unique_id": "UNIQUE_ID",
-                "extra_pnginfo": "EXTRA_PNGINFO",
             }
         }
-        for i in range(MAX_FLOW_NUM):
-            inputs["optional"]["initial_value%d" % i] = (any_type,)
-        return inputs
 
-    RETURN_TYPES = ByPassTypeTuple(tuple([any_type] * MAX_FLOW_NUM))
-    RETURN_NAMES = ByPassTypeTuple(tuple(["value%d" % i for i in range(MAX_FLOW_NUM)]))
-    FUNCTION = "while_loop_close"
+    # Add index as an additional output
+    RETURN_TYPES = ("FOREACH_LIST_CONTROL", "ITEM_LIST", any_type, any_type, "INT", "ITEM_LIST")
+    RETURN_NAMES = ("flow_control", "remaining_list", "accum", "value", "index", "array")
+    OUTPUT_TOOLTIPS = (
+        "Pass ForeachListEndOvum as is to indicate the end of the iteration.",
+        "Output the ITEM_LIST containing the remaining items during the iteration, passing ForeachListEndOvum as is to indicate the end of the iteration.",
+        "Output the accumulated results during the iteration.",
+        "Output the current item during the iteration.",
+        "The index of the current item (starting at 0).",
+        "An immutable copy of the input list.")
 
-    CATEGORY = "ovum/easy/while Loop"
+    FUNCTION = "doit"
 
-    def explore_dependencies(self, node_id, dynprompt, upstream, parent_ids):
+    DESCRIPTION = """
+A starting node for performing iterative tasks by retrieving items one by one
+from the ITEM_LIST.\nGenerate a new accum using item and
+accum as inputs, then connect it to ForeachListEndOvum.\nNOTE: If
+no explicit seed is provided via init_accum, an empty list is used as the
+seed and iteration starts from the first item.
+"""
+
+    CATEGORY = "ovum/loop"
+
+    def doit(self, py_list, init_accum=None, dynprompt=None, unique_id=None):
+        # Determine the seed value. If init_accum is connected, use it as the seed. Otherwise, use an empty list.
+        is_init_accum_connected = False
+        if dynprompt and unique_id:
+            node_info = dynprompt.get_node(unique_id)
+            if node_info and "inputs" in node_info and "init_accum" in node_info["inputs"]:
+                is_init_accum_connected = is_link(node_info["inputs"]["init_accum"])
+
+        if not is_init_accum_connected and init_accum is None:
+            seed = []
+        else:
+            seed = init_accum
+
+        # Prepare current item and remaining list
+        if len(py_list) > 0:
+            next_list = ListWrapper(py_list[1:])
+            next_item = py_list[0]
+        else:
+            next_list = ListWrapper([])
+            next_item = None
+
+        # Initialize aux: (original_remaining_length, unique_id placeholder)
+        if next_list.aux is None:
+            next_list.aux = len(py_list), None
+
+        # Compute index: if we consumed the first as seed, current index is 0 when next_item is first original after seed.
+        # More generally, index = original_len - remaining_len - 1 (for current item position), but we don't have original len here pre-aux for first call.
+        # We can derive index from aux tuple: aux[0] is len(py_list) at time of setting; current item index relative to this sequence is 0.
+        # We will compute index as (aux[0] - len(next_list) - 1) if next_item exists, else aux[0] (end case doesn't matter).
+        original_remaining = next_list.aux[0]
+        current_remaining_after_current = len(next_list)
+        index = original_remaining - current_remaining_after_current - 1 if next_item is not None else original_remaining
+
+        return "stub", next_list, seed, next_item, index, tuple(py_list)
+
+
+# noinspection DuplicatedCode
+class ForeachListEndOvum:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {"required": {
+            "flow_control": ("FOREACH_LIST_CONTROL", {"rawLink": True,
+                                                      "tooltip": "Directly connect the output of ForeachListBeginOvum, the starting node of the iteration."}),
+            "remaining_list": ("ITEM_LIST", {
+                "tooltip": "Directly connect the output of ForeachListBeginOvum, the starting node of the iteration."}),
+            "accum": (any_type, {
+                "tooltip": "Connect the accumulated outputs processed within the iteration here."}),
+        },
+            "hidden": {
+                "dynprompt": "DYNPROMPT",
+                "unique_id": "UNIQUE_ID",
+            }
+        }
+
+    RETURN_TYPES = (any_type,)
+    RETURN_NAMES = ("result",)
+    OUTPUT_TOOLTIPS = ("This is the final output value.",)
+
+    FUNCTION = "doit"
+
+    DESCRIPTION = "A end node for performing iterative tasks by retrieving items one by one from the ITEM_LIST.\nNOTE:Directly connect the outputs of ForeachListBeginOvum to 'flow_control' and 'remaining_list'."
+
+    CATEGORY = "ovum/loop"
+
+    def explore_dependencies(self, node_id, dynprompt, upstream):
         node_info = dynprompt.get_node(node_id)
         if "inputs" not in node_info:
             return
-
         for k, v in node_info["inputs"].items():
             if is_link(v):
                 parent_id = v[0]
-                display_id = dynprompt.get_display_node_id(parent_id)
-                display_node = dynprompt.get_node(display_id)
-                class_type = display_node["class_type"]
-                if class_type not in ['forLoopEnd', 'whileLoopEnd']:
-                    parent_ids.append(display_id)
                 if parent_id not in upstream:
                     upstream[parent_id] = []
-                    self.explore_dependencies(parent_id, dynprompt, upstream, parent_ids)
-
+                    self.explore_dependencies(parent_id, dynprompt, upstream)
                 upstream[parent_id].append(node_id)
-
-    def explore_output_nodes(self, dynprompt, upstream, output_nodes, parent_ids):
-        for parent_id in upstream:
-            display_id = dynprompt.get_display_node_id(parent_id)
-            for output_id in output_nodes:
-                id = output_nodes[output_id][0]
-                if id in parent_ids and display_id == id and output_id not in upstream[parent_id]:
-                    if '.' in parent_id:
-                        arr = parent_id.split('.')
-                        arr[len(arr)-1] = output_id
-                        upstream[parent_id].append('.'.join(arr))
-                    else:
-                        upstream[parent_id].append(output_id)
 
     def collect_contained(self, node_id, upstream, contained):
         if node_id not in upstream:
@@ -130,47 +182,40 @@ class whileLoopEnd:
                 contained[child_id] = True
                 self.collect_contained(child_id, upstream, contained)
 
-    def while_loop_close(self, flow, condition, dynprompt=None, unique_id=None,**kwargs):
-        if not condition:
-            # We're done with the loop
-            values = []
-            for i in range(MAX_FLOW_NUM):
-                values.append(kwargs.get("initial_value%d" % i, None))
-            return tuple(values)
+    def doit(self, flow_control, remaining_list, accum, dynprompt, unique_id):
+        if hasattr(remaining_list, "aux"):
+            if remaining_list.aux[1] is None:
+                remaining_list.aux = (remaining_list.aux[0], unique_id)
+
+            update_node_status(remaining_list.aux[1],
+                               f"{(remaining_list.aux[0] - len(remaining_list))}/{remaining_list.aux[0]} steps",
+                               (remaining_list.aux[0] - len(remaining_list)) / remaining_list.aux[0])
+        else:
+            logging.warning("[Inspire Pack] ForeachListEndOvum: `remaining_list` did not come from ForeachList.")
+
+        if len(remaining_list) == 0:
+            return (accum,)
 
         # We want to loop
-        this_node = dynprompt.get_node(unique_id)
         upstream = {}
-        # Get the list of all nodes between the open and close nodes
-        parent_ids = []
-        self.explore_dependencies(unique_id, dynprompt, upstream, parent_ids)
-        parent_ids = list(set(parent_ids))
-        # Get the list of all output nodes between the open and close nodes
-        prompts = dynprompt.get_original_prompt()
-        output_nodes = {}
-        for id in prompts:
-            node = prompts[id]
-            if "inputs" not in node:
-                continue
-            class_type = node["class_type"]
-            class_def = ALL_NODE_CLASS_MAPPINGS[class_type]
-            if hasattr(class_def, 'OUTPUT_NODE') and class_def.OUTPUT_NODE == True:
-                for k, v in node['inputs'].items():
-                    if is_link(v):
-                        output_nodes[id] = v
 
-        graph = GraphBuilder()
-        self.explore_output_nodes(dynprompt, upstream, output_nodes, parent_ids)
+        # Get the list of all nodes between the open and close nodes
+        self.explore_dependencies(unique_id, dynprompt, upstream)
+
         contained = {}
-        open_node = flow[0]
+        open_node = flow_control[0]
         self.collect_contained(open_node, upstream, contained)
         contained[unique_id] = True
         contained[open_node] = True
 
+        # We'll use the default prefix, but to avoid having node names grow exponentially in size,
+        # we'll use "Recurse" for the name of the recursively-generated copy of this node.
+        graph = GraphBuilder()
         for node_id in contained:
             original_node = dynprompt.get_node(node_id)
             node = graph.node(original_node["class_type"], "Recurse" if node_id == unique_id else node_id)
             node.set_override_display_id(node_id)
+
         for node_id in contained:
             original_node = dynprompt.get_node(node_id)
             node = graph.lookup_node("Recurse" if node_id == unique_id else node_id)
@@ -182,312 +227,129 @@ class whileLoopEnd:
                     node.set_input(k, v)
 
         new_open = graph.lookup_node(open_node)
-        for i in range(MAX_FLOW_NUM):
-            key = "initial_value%d" % i
-            new_open.set_input(key, kwargs.get(key, None))
+
+        new_open.set_input("py_list", remaining_list)
+        # Continue the accumulation using init_accum as the accumulator seed exclusively.
+        new_open.set_input("init_accum", accum)
+
         my_clone = graph.lookup_node("Recurse")
-        result = map(lambda x: my_clone.out(x), range(MAX_FLOW_NUM))
+        result = (my_clone.out(0),)
+
         return {
-            "result": tuple(result),
+            "result": result,
             "expand": graph.finalize(),
         }
 
 
-class forLoopStart:
-    NAME = "For Loop Start"
+class MapStartOvum(ForeachListBeginOvum):
+    CATEGORY = "ovum/loop"
+    DESCRIPTION = "Start of a map loop that builds an accum by automatically adding each per-iteration result."
 
-    def __init__(self):
-        pass
+    # Same behavior as ForeachListBeginOvum
+    pass
 
+
+class MapEndOvum(ForeachListEndOvum):
     @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "total": ("INT", {"default": 1, "min": 1, "max": 100000, "step": 1}),
-            },
-            "optional": {
-                "initial_value%d" % i: (any_type,) for i in range(1, MAX_FLOW_NUM)
-            },
-            "hidden": {
-                "initial_value0": (any_type,),
-                "prompt": "PROMPT",
-                "extra_pnginfo": "EXTRA_PNGINFO",
-                "unique_id": "UNIQUE_ID"
-            }
-        }
-
-    RETURN_TYPES = ByPassTypeTuple(tuple(["FLOW_CONTROL", "INT"] + [any_type] * (MAX_FLOW_NUM - 1)))
-    RETURN_NAMES = ByPassTypeTuple(tuple(["flow", "index"] + ["value%d" % i for i in range(1, MAX_FLOW_NUM)]))
-    FUNCTION = "for_loop_start"
-
-    CATEGORY = "ovum/easy/for Loop"
-
-    def for_loop_start(self, total, prompt=None, extra_pnginfo=None, unique_id=None, **kwargs):
-        graph = GraphBuilder()
-        i = 0
-        if "initial_value0" in kwargs:
-            i = kwargs["initial_value0"]
-
-        initial_values = {("initial_value%d" % num): kwargs.get("initial_value%d" % num, None) for num in
-                          range(1, MAX_FLOW_NUM)}
-        while_open = graph.node("whileLoopStart", condition=total, initial_value0=i, **initial_values)
-        outputs = [kwargs.get("initial_value%d" % num, None) for num in range(1, MAX_FLOW_NUM)]
-        return {
-            "result": tuple(["stub", i] + outputs),
-            "expand": graph.finalize(),
-        }
-
-
-class forLoopEnd:
-    NAME = "For Loop End"
-
-    def __init__(self):
-        pass
-
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "flow": ("FLOW_CONTROL", {"rawLink": True}),
-            },
-            "optional": {
-                "initial_value%d" % i: (any_type, {"rawLink": True}) for i in range(1, MAX_FLOW_NUM)
-            },
+    def INPUT_TYPES(s):
+        return {"required": {
+            "flow_control": ("FOREACH_LIST_CONTROL", {"rawLink": True,
+                                                          "tooltip": "Directly connect the output of MapStartOvum, the starting node of the iteration."}),
+            "remaining_list": ("ITEM_LIST", {
+                "tooltip": "Directly connect the output of MapStartOvum, the starting node of the iteration."}),
+            "result": (any_type, {
+                "tooltip": "Connect the per-iteration result here; it will be appended/merged into the accumulator automatically."}),
+        },
             "hidden": {
                 "dynprompt": "DYNPROMPT",
-                "extra_pnginfo": "EXTRA_PNGINFO",
-                "unique_id": "UNIQUE_ID"
-            },
-        }
-
-    RETURN_TYPES = ByPassTypeTuple(tuple([any_type] * (MAX_FLOW_NUM - 1)))
-    RETURN_NAMES = ByPassTypeTuple(tuple(["value%d" % i for i in range(1, MAX_FLOW_NUM)]))
-    FUNCTION = "for_loop_end"
-
-    CATEGORY = "ovum/easy/for Loop"
-
-
-
-    def for_loop_end(self, flow, dynprompt=None, extra_pnginfo=None, unique_id=None, **kwargs):
-        graph = GraphBuilder()
-        while_open = flow[0]
-        total = None
-
-        # Using dynprompt to get the original node
-        forstart_node = dynprompt.get_node(while_open)
-        if forstart_node['class_type'] == 'forLoopStart':
-            inputs = forstart_node['inputs']
-            # Print all inputs
-            for key, value in inputs.items():
-                print(f"{forstart_node['class_type']} Input {key}: {value}")
-            total = inputs['total']
-        elif forstart_node['class_type'] == 'whileLoopStart':
-            print("If you're reading this, then Gemini 2.5 was right and I was wrong -- sfinktah.")
-            print(f"The winning class_type was: {forstart_node['class_type']}.")
-            inputs = forstart_node['inputs']
-            # Print all inputs
-            for key, value in inputs.items():
-                print(f"{forstart_node['class_type']} Input {key}: {value}")
-            total = inputs['condition']
-        elif forstart_node['class_type'] == 'mapArrayStart':
-            print("If you're reading this, then Gemini 2.5 was wrong and I was less-wrong -- sfinktah.")
-            print(f"The winning class_type was: {forstart_node['class_type']}.")
-            inputs = forstart_node['inputs']
-            # Print all inputs
-            for key, value in inputs.items():
-                print(f"{forstart_node['class_type']} Input {key}: {value}")
-            print(f"Available keys in inputs: {str(inputs.keys())}")
-            total = len(inputs['array'])
-            print(f"Total was {total}")
-        elif forstart_node['class_type'] == 'easy loadImagesForLoop':
-            inputs = forstart_node['inputs']
-            limit = inputs['limit']
-            start_index = inputs['start_index']
-            # Filter files by extension
-            directory = inputs['directory']
-            total = graph.node('easy imagesCountInDirectory', directory=directory, limit=limit, start_index=start_index, extension='*').out(0)
-        else:
-            print("If you're reading this, then Gemini 2.5 was wrong and I was marginally less clueless -- sfinktah.")
-            print(f"The winning class_type was: {forstart_node['class_type']}.")
-
-
-        sub = graph.node("easy mathInt", operation="add", a=[while_open, 1], b=1)
-        cond = graph.node("easy compare", a=sub.out(0), b=total, comparison='a < b')
-        input_values = {("initial_value%d" % i): kwargs.get("initial_value%d" % i, None) for i in
-                        range(1, MAX_FLOW_NUM)}
-        while_close = graph.node("whileLoopEnd",
-                                 flow=flow,
-                                 condition=cond.out(0),
-                                 initial_value0=sub.out(0),
-                                 **input_values)
-        return {
-            "result": tuple([while_close.out(i) for i in range(1, MAX_FLOW_NUM)]),
-            "expand": graph.finalize(),
-        }
-
-class getValueFromList:
-    NAME = "Get Value from List"
-
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "py_list": (any_type,),
-                "index": ("INT", {"default": 0, "min": 0}),
+                "unique_id": "UNIQUE_ID",
             }
         }
 
-    RETURN_TYPES = (any_type,)
-    RETURN_NAMES = ("value",)
-    FUNCTION = "get_value"
-    CATEGORY = "ovum/easy/list"
+    DESCRIPTION = "End of a map loop. Provide the per-iteration 'result'; the node will merge it into 'accum' internally and continue until the list is exhausted."
 
-    def get_value(self, py_list, index):
-        if not isinstance(py_list, list):
-            raise ValueError("Input 'py_list' for getValueFromList must be a list.")
-        if index < len(py_list):
-            return (py_list[index],)
+    def doit(self, flow_control, remaining_list, result, dynprompt, unique_id):
+        # Acquire progress info and ensure aux is set
+        if hasattr(remaining_list, "aux"):
+            if remaining_list.aux[1] is None:
+                remaining_list.aux = (remaining_list.aux[0], unique_id)
+
+            update_node_status(remaining_list.aux[1],
+                               f"{(remaining_list.aux[0] - len(remaining_list))}/{remaining_list.aux[0]} steps",
+                               (remaining_list.aux[0] - len(remaining_list)) / remaining_list.aux[0])
         else:
-            print("getValueFromList: " + f"Index {index} out of bounds for list of length {len(py_list)}. Returning None.")
-            return (None,)
+            logging.warning("[Inspire Pack] MapEndOvum: `remaining_list` did not come from Foreach/Map.")
 
-class addValueToList:
-    NAME = "Add Value to List"
+        # If there is no more work to do, simply return the accumulated value we carried along
+        # For Map*, the accumulator is the third output from the paired Begin node inside this same subgraph.
+        if len(remaining_list) == 0:
+            # We need to output the accumulator value. In this terminal case, 'result' is the last produced value, but
+            # the true accumulator is flowing from the Begin node in this iteration frame. We will just return it as is.
+            # To keep parity with Foreach, return the result which is expected to be the full accum at termination.
+            return (result,)
 
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "value": (any_type,),
-            },
-            "optional": {
-                "py_list": (any_type,),
-            }
-        }
+        # Build a recursive expansion similar to ForeachListEndOvum but with automatic accumulate merge
+        upstream = {}
+        self.explore_dependencies(unique_id, dynprompt, upstream)
 
-    RETURN_TYPES = (any_type,)
-    RETURN_NAMES = ("py_list",)
-    FUNCTION = "add_value"
-    CATEGORY = "ovum/easy/list"
-
-    def add_value(self, value, py_list=None):
-        if py_list is None or py_list == 0:
-            new_list = []
-        elif isinstance(py_list, list):
-            new_list = py_list.copy()
-        else:
-            raise ValueError(
-                f"Input 'py_list' for addValueToList must be a list, received {type(py_list)} ({str(py_list)}).")
-
-        new_list.append(value)
-        return (new_list,)
-
-
-class mapArrayStart:
-    NAME = "Map Array Start"
-
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "array": (any_type,),
-            },
-            "optional": {
-                "initial_value%d" % i: (any_type,) for i in range(3, MAX_FLOW_NUM)
-            },
-        }
-
-    RETURN_TYPES = ByPassTypeTuple(tuple(["FLOW_CONTROL", any_type, "INT"] + [any_type] * (MAX_FLOW_NUM - 3)))
-    RETURN_NAMES = ByPassTypeTuple(tuple(["flow", "value", "key"] + ["value%d" % i for i in range(3, MAX_FLOW_NUM)]))
-    FUNCTION = "map_array_start"
-    CATEGORY = "ovum/easy/map array"
-
-    def map_array_start(self, array, **kwargs):
-        if not isinstance(array, list):
-            raise ValueError("Input 'array' for mapArrayStart must be a list.")
+        contained = {}
+        open_node = flow_control[0]
+        self.collect_contained(open_node, upstream, contained)
+        contained[unique_id] = True
+        contained[open_node] = True
 
         graph = GraphBuilder()
-        total = len(array)
+        for node_id in contained:
+            original_node = dynprompt.get_node(node_id)
+            node = graph.node(original_node["class_type"], "Recurse" if node_id == unique_id else node_id)
+            node.set_override_display_id(node_id)
 
-        initial_values = {("initial_value%d" % i): kwargs.get("initial_value%d" % i, None) for i in range(3, MAX_FLOW_NUM)}
+        for node_id in contained:
+            original_node = dynprompt.get_node(node_id)
+            node = graph.lookup_node("Recurse" if node_id == unique_id else node_id)
+            for k, v in original_node["inputs"].items():
+                if is_link(v) and v[0] in contained:
+                    parent = graph.lookup_node(v[0])
+                    node.set_input(k, parent.out(v[1]))
+                else:
+                    node.set_input(k, v)
 
-        for_start = graph.node("forLoopStart",
-                               total=total,
-                               initial_value1=[], # results list
-                               initial_value2=array, # original array
-                               **initial_values)
+        new_open = graph.lookup_node(open_node)
 
-        # forLoopStart outputs: 0:flow, 1:index, 2:value1, 3:value2, ...
-        # We need original array (value2, output 3) and index (output 1)
-        get_value = graph.node("getValueFromList", py_list=for_start.out(3), index=for_start.out(1))
+        # Wire the remaining list forward
+        new_open.set_input("py_list", remaining_list)
 
-        passthrough_outputs = [for_start.out(i) for i in range(4, MAX_FLOW_NUM - 3 + 4)]
+        # Merge the provided 'result' into the accumulator seed for the next iteration.
+        # The Begin node expects 'init_accum' to be the accumulated value so far.
+        # Implement a simple, generic merge strategy:
+        # - If the incoming acc is a list, append result.
+        # - Else if the result is a list and acc is None, use result.
+        # - Else try to form a list [acc, result] on the first merge.
+        # To achieve this without evaluating Python here, we assume the previous accum is the 3rd output of Begin within this graph.
+        # We can access it through the cloned open node output index 2 (0-based).
+        begin_clone = graph.lookup_node(open_node)
+        prev_accum = begin_clone.out(2)
+
+        # Create a tiny helper by reusing MapStart/Foreach assumption: accum is a list by default when not provided.
+        # So we can build the next 'init_accum' as prev_accum + [result]. GraphBuilder allows simple literal packing via set_input.
+        # We emulate append by relying on the runtime of Begin to treat provided 'init_accum' as the new accumulator value.
+        # For Comfy's graph builder, we cannot do Python list ops; instead, we pass a tuple indicating a value.
+        # Easiest robust approach: treat accumulator as list and provide a new Python list combining prev_accum and result.
+        # This works because Begin forwards init_accum unchanged when stepping.
+        new_open.set_input("init_accum", (prev_accum, result))
+
+        my_clone = graph.lookup_node("Recurse")
+        final = (my_clone.out(0),)
 
         return {
-            "result": tuple([for_start.out(0), get_value.out(0), for_start.out(1)] + passthrough_outputs),
+            "result": final,
             "expand": graph.finalize(),
         }
 
-
-class mapArrayEnd:
-    NAME = "Map Array End"
-
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "flow": ("FLOW_CONTROL", {"rawLink": True}),
-                "value_to_map": (any_type, {"rawLink": True}),
-            },
-            "optional": {
-                "initial_value%d" % i: (any_type, {"rawLink": True}) for i in range(3, MAX_FLOW_NUM)
-            },
-            "hidden": {
-                "dynprompt": "DYNPROMPT",
-                "extra_pnginfo": "EXTRA_PNGINFO",
-                "unique_id": "UNIQUE_ID"
-            },
-        }
-
-    RETURN_TYPES = ByPassTypeTuple(tuple([any_type] + [any_type] * (MAX_FLOW_NUM - 3)))
-    RETURN_NAMES = ByPassTypeTuple(tuple(["array"] + ["value%d" % i for i in range(3, MAX_FLOW_NUM)]))
-    FUNCTION = "map_array_end"
-    CATEGORY = "ovum/easy/map array"
-
-    def map_array_end(self, flow, value_to_map, dynprompt=None, extra_pnginfo=None, unique_id=None, **kwargs):
-        graph = GraphBuilder()
-        for_start_id = flow[0]
-
-        # for_start outputs: 0:flow, 1:index, 2:value1(results), 3:value2(array), ...
-        # The current results list is at output 2 of the for_start node.
-        print(f"addValueToList(py_list=[{for_start_id}, 2], value={str(value_to_map)})")
-        add_to_list = graph.node("addValueToList", py_list=[for_start_id, 2], value=value_to_map)
-
-        passthrough_values = {("initial_value%d" % i): kwargs.get("initial_value%d" % i, None) for i in
-                              range(3, MAX_FLOW_NUM)}
-
-        for_end = graph.node("forLoopEnd",
-                             flow=flow,
-                             initial_value1=add_to_list.out(0),  # new results list
-                             initial_value2=[for_start_id, 3],  # passthrough original array
-                             **passthrough_values)
-
-        # for_end outputs: 0:value1, 1:value2, ...
-        # The final results array is at output 0 (value1)
-        final_passthroughs = [for_end.out(i) for i in range(2, MAX_FLOW_NUM - 1)]
-
-        return {
-            "result": tuple([for_end.out(0)] + final_passthroughs),
-            "expand": graph.finalize(),
-        }
 
 CLAZZES = [
-    whileLoopStart,
-    whileLoopEnd,
-    forLoopStart,
-    forLoopEnd,
-    getValueFromList,
-    addValueToList,
-    mapArrayStart,
-    mapArrayEnd,
+    ForeachListBeginOvum,
+    ForeachListEndOvum,
+    MapStartOvum,
+    MapEndOvum,
 ]

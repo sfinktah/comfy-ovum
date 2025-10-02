@@ -193,6 +193,57 @@ app.registerExtension({
                 overlay.height = 1;
                 container.appendChild(overlay);
 
+                // Rotation controls (top-middle): rotate left, rotate right
+                const rotateBar = document.createElement('div');
+                rotateBar.style.position = 'absolute';
+                rotateBar.style.top = '4px';
+                rotateBar.style.left = '50%';
+                rotateBar.style.transform = 'translateX(-50%)';
+                rotateBar.style.display = 'flex';
+                rotateBar.style.gap = '6px';
+                rotateBar.style.zIndex = '10';
+                // Buttons
+                const btnStyle = (el)=>{
+                    el.style.width = '24px';
+                    el.style.height = '24px';
+                    el.style.borderRadius = '12px';
+                    el.style.border = '1px solid rgba(255,255,255,0.6)';
+                    el.style.background = 'rgba(0,0,0,0.45)';
+                    el.style.color = 'white';
+                    el.style.display = 'flex';
+                    el.style.alignItems = 'center';
+                    el.style.justifyContent = 'center';
+                    el.style.cursor = 'pointer';
+                    el.style.userSelect = 'none';
+                };
+                const btnLeft = document.createElement('div');
+                btnStyle(btnLeft);
+                btnLeft.title = 'Rotate Left (−90°)';
+                btnLeft.textContent = '⟲';
+                const btnRight = document.createElement('div');
+                btnStyle(btnRight);
+                btnRight.title = 'Rotate Right (+90°)';
+                btnRight.textContent = '⟳';
+                rotateBar.appendChild(btnLeft);
+                rotateBar.appendChild(btnRight);
+                container.appendChild(rotateBar);
+
+                const getWidget = (name) => (this.widgets || []).find(w => w && w.name === name);
+                const applyRotateDelta = (delta)=>{
+                    const w = getWidget('rotate_degrees');
+                    if (!w) return;
+                    let v = (typeof w.value === 'number') ? w.value : 0;
+                    v = Math.round(v / 90) * 90 + delta;
+                    // clamp to -180..180 for now
+                    if (v > 180) v = -180 + (v - 180 - 90) % 360; // wrap
+                    if (v < -180) v = 180 - (-180 - v - 90) % 360;
+                    w.setValue?.(v, { e: { isTransient: true }, node: this, canvas: app.canvas });
+                    w.callback?.(w.value, app.canvas, this, null, { isTransient: true });
+                    this._livecrop_redraw?.();
+                };
+                btnLeft.addEventListener('click', ()=> applyRotateDelta(-90));
+                btnRight.addEventListener('click', ()=> applyRotateDelta(+90));
+
                 // Mute/Bypass: update container classes on initial render and on changes
                 this._updateMuteBypassClasses = () => {
                     try {
@@ -513,7 +564,21 @@ app.registerExtension({
                         const dx = Math.floor((W - dw) / 2);
                         const dy = y;
 
-                        ctx.drawImage(bg, dx, dy, dw, dh);
+                        // Read current rotation
+                        const rotW = (this.widgets || []).find(w => w.name === 'rotate_degrees');
+                        const degrees = rotW ? (Number(rotW.value)||0) : 0;
+
+                        // Draw image with immediate rotation feedback
+                        if (degrees % 360 !== 0) {
+                            ctx.save();
+                            // rotate around the center of this image tile
+                            ctx.translate(dx + dw/2, dy + dh/2);
+                            ctx.rotate((-degrees * Math.PI) / 180);
+                            ctx.drawImage(bg, -dw/2, -dh/2, dw, dh);
+                            ctx.restore();
+                        } else {
+                            ctx.drawImage(bg, dx, dy, dw, dh);
+                        }
 
                         // Guides for this tile
                         ctx.save();
@@ -521,7 +586,17 @@ app.registerExtension({
                         drawGuides(ctx, dw, dh, { top, bottom, left, right });
                         const originalW = this._livecrop.originalWidth || iw;
                         const originalH = this._livecrop.originalHeight || ih;
-                        drawImageInfo(ctx, dw, dh, { top, bottom, left, right }, originalW, originalH, aspectRatioDivisor, gcd);
+                        // Apply rotation visually by rotating the guides and image info according to rotate_degrees widget
+                        if (degrees % 360 !== 0) {
+                            ctx.save();
+                            ctx.translate(dw/2, dh/2);
+                            ctx.rotate((-degrees * Math.PI) / 180);
+                            ctx.translate(-dw/2, -dh/2);
+                            drawImageInfo(ctx, dw, dh, { top, bottom, left, right }, originalW, originalH, aspectRatioDivisor, gcd);
+                            ctx.restore();
+                        } else {
+                            drawImageInfo(ctx, dw, dh, { top, bottom, left, right }, originalW, originalH, aspectRatioDivisor, gcd);
+                        }
                         ctx.restore();
 
                         // Store this image's area for hit testing
