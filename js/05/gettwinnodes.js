@@ -70,7 +70,7 @@ app.registerExtension({
                 const node = this;
 
 
-                GetTwinNodes.prototype.onPropertyChanged = function(name, value, previousValue) {
+                GetTwinNodes.prototype.onPropertyChanged= function(name, value, previousValue) {
                     log({ class: "GetTwinNodes", method: "onPropertyChanged", severity: "trace", tag: "function_entered" }, `onPropertyChanged ${name} = ${value}`);
                     if (name === "numberOfWidgets") {
                         // console.log(`onPropertyChanged ${name} = ${value}`, this, node);
@@ -835,7 +835,7 @@ app.registerExtension({
                                 if (fin) linkType = fin.type;
                             }
                             node.drawConnection = !node.drawConnection;
-                            node.slotColor = node.canvas.default_connection_color_byType[linkType]
+                            // node.slotColor = node.canvas.default_connection_color_byType[linkType]
                             menuEntry = node.drawConnection ? "Hide connections" : "Show connections";
                             node.canvas.setDirty(true, true);
                         },
@@ -937,7 +937,8 @@ app.registerExtension({
                             defaultLink,
                             false,
                             null,
-                            this.slotColor,
+                            // this.slotColor,
+                            null,
                             LiteGraph.RIGHT,
                             LiteGraph.LEFT
                         );

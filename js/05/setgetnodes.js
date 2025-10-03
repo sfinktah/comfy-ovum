@@ -45,51 +45,6 @@ const LGraphNode = LiteGraph.LGraphNode
 
 // TwinNodes base moved to ../common/twinNodes.js and imported above
 class SetTwinNodes extends TwinNodes {
-    onPropertyChanged(name, value, previousValue) {
-        log({ class: "SetTwinNodes", method: "onPropertyChanged", severity: "trace", tag: "function_entered" }, `onPropertyChanged ${name} = ${value}`);
-        try {
-            // Only react to title changes explicitly made by the user
-            if (name !== "title") return;
-            const oldTitle = typeof previousValue === 'string' ? previousValue.trim() : '';
-            const newTitle = typeof value === 'string' ? value.trim() : '';
-            if (!newTitle) return;
-            // Regex: anything_from_<digits>_to_<digits> at end
-            const re = /.*_from_\d+_to_\d+$/;
-            if (!oldTitle || !re.test(oldTitle)) return;
-            // Must have widgets
-            if (!Array.isArray(this.widgets) || this.widgets.length === 0) return;
-            // Count non-empty widget values
-            const nonEmptyIdx = [];
-            for (let i = 0; i < this.widgets.length; i++) {
-                const v = this.widgets[i]?.value;
-                if (typeof v === 'string' && v.trim()) nonEmptyIdx.push(i);
-            }
-            // Only one widget with a value, and it must be the first (index 0)
-            if (nonEmptyIdx.length !== 1 || nonEmptyIdx[0] !== 0) return;
-            const firstVal = (this.widgets[0]?.value ?? '').trim();
-            // Old title must equal the first widget's value
-            if (firstVal !== oldTitle) return;
-            // Validate originality. Only proceed if validator returns the same value (no change)
-            const suggested = suggestValidWidgetValue(this, 0, newTitle);
-            if (suggested !== newTitle) return;
-            // Apply the rename to the widget, and propagate change similarly to manual edit
-            const widget = this.widgets[0];
-            const oldWidgetValue = widget?.value;
-            if (widget) {
-                // Directly set since we already validated uniqueness matches exactly
-                widget.value = newTitle;
-                // Keep node title as the user set it. Update computed state, colors, and connections.
-                this.updateTitle(false); // do not force override user title
-                this.updateColors?.();
-                this.checkConnections?.();
-                this.update?.();
-                // Broadcast rename so getters can update
-                this.onWidgetChanged(widget?.name, newTitle, oldWidgetValue, widget);
-            }
-        } catch (err) {
-            try { log({ class: "SetTwinNodes", method: "onPropertyChanged", severity: "error", tag: "exception" }, String(err)); } catch (_) {}
-        }
-    }
     currentGetters = null;
     menuEntry = "Show connections";
 
@@ -704,7 +659,8 @@ class SetTwinNodes extends TwinNodes {
                     defaultLink,
                     false,
                     null,
-                    this.slotColor,
+                    // this.slotColor,
+                    null,
                     LiteGraph.RIGHT,
                     LiteGraph.LEFT
                 );
