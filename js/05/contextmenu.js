@@ -17,6 +17,7 @@
 
 import {app} from "../../../scripts/app.js";
 import {GraphHelpers} from "../common/graphHelpersForTwinNodes.js";
+import {LinkUtils} from "../common/linkUtils.js";
 // import {setWidgetValue, setWidgetValueWithValidation} from "../01/twinnodeHelpers.js";
 
 // Stolen from Kijai
@@ -115,6 +116,18 @@ app.registerExtension({
             }, "Adding context menu entries to universal nodes: ", universalNodesToAddToOutput);
         }
 
+        if (nodeData.output) {
+            addContextMenuHandler(nodeType, function (_, options) {
+                options.unshift(
+                    {
+                        content: "Add PassthruOvums to outputs",
+                        callback: () => {
+                            insertPassthruBetweenOutputs(this);
+                        }
+                    },
+                    );
+            });
+        }
         // if (nodeData.input && nodeData.input.required) {
         //     addContextMenuHandler(nodeType, function (_, options) {
         //         options.unshift(
@@ -209,7 +222,7 @@ app.registerExtension({
         const getLinkById = (id, links = getLinks()) => links[id];
         const getAllNodes = () => graph._nodes ?? [];
         // const formatVariables = (text) => text.toLowerCase().replace(/_./g, m => m.replace("_", "").toUpperCase());
-        const formatVariables = (text) => text.toLowerCase().replace(/[^a-z0-9_]+/g, '_');
+        const formatVariables = (text) => LinkUtils.formatVariables(text);
         const isGetTwinNode = (node) => node.type === "GetTwinNodes";
         const isSetTwinNode = (node) => node.type === "SetTwinNodes";
         const isGetSetTwinNode = (node) => isGetTwinNode(node) || isSetTwinNode(node);
@@ -316,6 +329,8 @@ app.registerExtension({
          * @param {Object} link - The link object representing the connection between two nodes.
          * @param {boolean} excludeIfAlreadyGetSet - Optional. A flag indicating whether nodes that are
          *     already "Get" or "Set" types should be skipped during conversion. Defaults to `false`.
+         * @param excludeAnyType - Optional. A flag indicating whether links of "anytype" (*) should be skipped
+         *     during conversion. Defaults to `false`.
          * @returns {boolean|undefined} Returns `false` if the conversion fails for any reason, or `undefined` otherwise.
          *
          * The function performs the following operations:
@@ -332,9 +347,9 @@ app.registerExtension({
          * - Creates a corresponding "Get" node linked to the target node input slot.
          * - Sets appropriate widget values, node positions, and flags for the newly created nodes.
          */
-        const convertLinkToGetSetNode = (link, excludeIfAlreadyGetSet = false) => {
+        const convertLinkToGetSetNode = (link, excludeIfAlreadyGetSet = false, excludeAnyType = false) => {
             const { type } = link;
-            if (type === "*") return;
+            if (excludeAnyType && type === "*") return;
 
             let { origin_id: originId, target_id: targetId, origin_slot: originSlot, target_slot: targetSlot } = link;
 
@@ -345,7 +360,7 @@ app.registerExtension({
             // Resolve Reroute at origin
             if (originNode.type === "Reroute") {
                 let resolvedSlot;
-                [originNode, resolvedSlot] = traverseInputReroute(originNode);
+                [originNode, resolvedSlot] = LinkUtils.traverseInputReroute(graph, originNode);
                 originId = originNode?.id;
                 originSlot = resolvedSlot;
                 if (originSlot === undefined || originSlot === -1) originSlot = 0;
@@ -353,7 +368,7 @@ app.registerExtension({
 
             // Resolve Reroute at target
             if (targetNode.type === "Reroute") {
-                targetNode = traverseOutputReroute(targetNode);
+                targetNode = LinkUtils.traverseOutputReroute(graph, targetNode);
                 targetId = targetNode?.id;
                 targetSlot = targetNode?.inputs.findIndex(inp => inp.type === type);
                 if (targetSlot === undefined || targetSlot === -1) targetSlot = 0;
@@ -540,6 +555,112 @@ app.registerExtension({
             getNode.setSize(getNode.computeSize());
             getNode.connect(0, targetNode, targetSlot);
         };
+
+        /**
+         * Inserts a PassthruOvum node between every outgoing link of a given node and its target,
+         * unless the target node's type starts with "Passthru".
+         * The created node's title is unique and, for each output index x, is based on widget[x].value if
+         * it is a scalar or a non-empty, non-space-only string; otherwise it uses `${node.title}_${x}`.
+         * @param {LGraphNode} sourceNode
+         */
+        const insertPassthruBetweenOutputs = (sourceNode) => {
+            if (!sourceNode) return;
+
+            const graph = app.graph;
+            const allLinks = graph.links ?? {};
+
+            const getWidgetValue = (node, index = 0) => {
+                if (!node) return undefined;
+                const w = node.widgets?.[index];
+                if (w && w.value !== undefined) return w.value;
+                if (Array.isArray(node.widgets_values)) return node.widgets_values[index];
+                return undefined;
+            };
+
+            const isValidTitleValue = (val) => {
+                const t = typeof val;
+                if (t === 'number' || t === 'boolean') return true;
+                if (t === 'string') return val.trim().length > 0; // must contain non-spacing chars
+                return false;
+            };
+
+            // Iterate outputs and their links
+            for (let outIdx = 0; outIdx < (sourceNode.outputs?.length ?? 0); outIdx++) {
+                const links = sourceNode.outputs?.[outIdx]?.links;
+                if (!Array.isArray(links) || links.length === 0) continue;
+
+                // Determine the base title once per output index
+                let baseTitle;
+                const widgetVal = getWidgetValue(sourceNode, outIdx);
+                if (isValidTitleValue(widgetVal)) {
+                    baseTitle = String(widgetVal);
+                } else {
+                    baseTitle = `${sourceNode.title}_${outIdx}`;
+                }
+
+                for (const linkId of [...links]) { // clone as we will mutate links
+                    /** @type {LLink} */
+                    const link = allLinks[linkId];
+                    if (!link) continue;
+
+                    // Resolve origin/target and reroutes similar to convertLinkToGetSetNode
+                    let { origin_id: originId, target_id: targetId, origin_slot: originSlot, target_slot: targetSlot, type } = link;
+                    let originNode = getNodeById(originId);
+                    let targetNode = getNodeById(targetId);
+                    if (!originNode || !targetNode) continue;
+
+                    if (originNode.type === 'Reroute') {
+                        let resolvedSlot;
+                        [originNode, resolvedSlot] = LinkUtils.traverseInputReroute(graph, originNode);
+                        originId = originNode?.id;
+                        originSlot = resolvedSlot ?? 0;
+                        if (originSlot === undefined || originSlot === -1) originSlot = 0;
+                    }
+
+                    if (targetNode.type === 'Reroute') {
+                        targetNode = LinkUtils.traverseOutputReroute(graph, targetNode);
+                        targetId = targetNode?.id;
+                        // best effort to find matching input slot by type
+                        const idxByType = targetNode?.inputs?.findIndex(inp => inp.type === type);
+                        targetSlot = (idxByType == null || idxByType === -1) ? (targetSlot ?? 0) : idxByType;
+                    }
+
+                    if (!originNode || !targetNode) continue;
+
+                    // Skip if target already a Passthru*
+                    if (typeof targetNode.type === 'string' && targetNode.type.startsWith('Passthru')) {
+                        continue;
+                    }
+
+                    // Remove the original link first
+                    try {
+                        GraphHelpers.removeLink(graph, linkId);
+                    } catch (_) {}
+
+                    // Create passthru and insert
+                    const passthru = LiteGraph.createNode('PassthruOvum');
+                    const [ox, oy] = originNode.getConnectionPos(false, originSlot);
+                    const [tx, ty] = targetNode.getConnectionPos(true, targetSlot);
+                    // Position midway with slight offset
+                    const px = Math.round((ox + tx) / 2) - 40;
+                    const py = Math.round((oy + ty) / 2) - 10;
+                    passthru.pos = [px, py];
+
+                    // Assign unique title
+                    const safeBase = LinkUtils.formatVariables(String(baseTitle));
+                    passthru.title = LinkUtils.uniqueTitle(graph, safeBase);
+
+                    graph.add(passthru);
+
+                    // Connect origin -> passthru (input 0), passthru -> target
+                    try { originNode.connect(originSlot, passthru, 0); } catch (_) {}
+                    try { passthru.connect(0, targetNode, targetSlot); } catch (_) {}
+                }
+            }
+        };
+
+        // Expose for external usage (e.g., console)
+        window.insertPassthruBetweenOutputs = insertPassthruBetweenOutputs;
 
         const originalHandler = LGraphCanvas.prototype.showLinkMenu;
 

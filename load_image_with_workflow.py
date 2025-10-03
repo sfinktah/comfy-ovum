@@ -136,6 +136,7 @@ def get_context_return_tuple(ctx):
         ctx.get("filepath") or "",
         ctx.get("prompt") or {},
         ctx.get("workflow") or {},
+        ctx.get("edits") or [],
     )
 
 
@@ -145,12 +146,13 @@ ALL_CTX_OPTIONAL_INPUTS = {
     # The rest are overrides.
     "image": ("IMAGE",),
     "mask": ("MASK",),
-    "filepath": ("STRING", {"multiline": False}),
+    "filepath": ("STRING", {"multiline": False, "forceInput": True}),
     "prompt": ("DICT",),
     "workflow": ("DICT",),
+    "edit_list": ("LIST",),
 }
-ALL_CTX_RETURN_TYPES = ("DICT", "IMAGE", "MASK", "STRING", "DICT", "DICT")
-ALL_CTX_RETURN_NAMES = ("IMAGE_EX", "IMAGE", "MASK", "FILEPATH", "PROMPT", "WORKFLOW")
+ALL_CTX_RETURN_TYPES = ("DICT",     "IMAGE", "MASK", "STRING",   "DICT",   "DICT",     "LIST")
+ALL_CTX_RETURN_NAMES = ("IMAGE_EX", "IMAGE", "MASK", "FILEPATH", "PROMPT", "WORKFLOW", "EDIT_LIST")
 
 
 class ImageExContextOvum:

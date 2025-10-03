@@ -26,7 +26,7 @@ class ListSlice(NewPointer):
     """
     FUNCTION = "list_slice"
     RETURN_TYPES = (ANYTYPE,)
-    INPUT_IS_LIST = (True, False, False,)
+    INPUT_IS_LIST = True
     OUTPUT_IS_LIST = (True,)
     CATEGORY = "Data"
     custom_name = "Pyobjects/List Slice"
@@ -616,12 +616,27 @@ class PassthruOvum:
         return {
             "optional": {
                 "any_in": (ANYTYPE,),
+            },
+            "hidden": {
+                "prompt": "PROMPT",
+                "my_unique_id": "UNIQUE_ID"
             }
         }
 
+    # noinspection PyShadowingBuiltins
     @classmethod
-    def passthru(cls, any_in=None, **kwargs):
-        logging.info(f"{cls.custom_name}: ({type(any_in)}) {any_in}")
+    def passthru(cls, any_in=None, prompt=None, my_unique_id=None, **kwargs):
+        # Only needed if INPUT_IS_LIST is True
+        # prompt = prompt[0]
+        # Only needed if INPUT_IS_LIST is True
+        # my_unique_id = my_unique_id[0]
+        my_unique_id = my_unique_id.rpartition(".")[-1]
+        id, slot = prompt[my_unique_id]['inputs']['any']
+        class_type = prompt[id]['class_type']
+        node_class = ALL_NODE_CLASS_MAPPINGS[class_type]
+        node_title = prompt[my_unique_id]['_meta']['title']
+        output_is_list = node_class.OUTPUT_IS_LIST[slot] if hasattr(node_class, 'OUTPUT_IS_LIST') else False
+        logger.info(f"[ovum] {cls.custom_name}({my_unique_id}): {node_title} ({type(any_in)}) {any_in}, output_is_list: {output_is_list}, id: {id}, slot: {slot}, class_type: {class_type}, node_class: {node_class}")
         return (any_in,)
 
 class PassthruInputIsListOvum:

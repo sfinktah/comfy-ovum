@@ -324,7 +324,7 @@ class OvumWildcardProcessor:
     NAME = "Escapable Wildcard Processor 🥚"
     RETURN_TYPES = ("STRING",)
     FUNCTION = "process"
-    CATEGORY = "Ovum/Text"
+    CATEGORY = "ovum/text"
 
     @classmethod
     def INPUT_TYPES(cls):
