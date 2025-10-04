@@ -17,6 +17,7 @@ from server import PromptServer
 # Base directory for serving
 MODULE_DIR = Path(__file__).resolve().parent
 WEB_DIR = MODULE_DIR / "web"
+NODE_MODULES_DIR = (MODULE_DIR / "node_modules").resolve()
 
 # Ensure mimetypes has some common types on Windows
 mimetypes.add_type("text/markdown", ".md")
@@ -79,16 +80,24 @@ def _directory_listing(base_url: str, directory: Path, rel: Path) -> web.Respons
     return web.Response(text=body, content_type="text/html")
 
 
-@PromptServer.instance.routes.get('/ovum/web/{tail:.*}')
-async def ovum_web(request: web.Request):
-    # tail may be empty or a path under web
-    tail = request.match_info.get('tail', '')
+def _serve_static_files(tail: str, base_dir: Path, base_url: str) -> web.Response:
+    """
+    Generic static file server for serving files from a base directory.
+
+    Args:
+        tail: The requested path (may be empty)
+        base_dir: The base directory to serve files from
+        base_url: The URL prefix for this route (e.g., '/ovum/web')
+
+    Returns:
+        A web.Response object
+    """
     # Normalize to Path using POSIX-style incoming paths; prevent traversal
     safe_tail = Path(*(p for p in Path(tail).parts if p not in ("..","") ))
-    target = (WEB_DIR / safe_tail).resolve()
+    target = (base_dir / safe_tail).resolve()
 
-    # Enforce sandbox under WEB_DIR
-    if not _is_subpath(target, WEB_DIR):
+    # Enforce sandbox under base_dir
+    if not _is_subpath(target, base_dir):
         return web.Response(status=403, text="Forbidden")
 
     # If target is directory, attempt index.html or readme.md
@@ -107,8 +116,7 @@ async def ovum_web(request: web.Request):
             html_doc = _markdown_to_html(text)
             return web.Response(text=html_doc, content_type='text/html')
         # else show directory listing
-        base_url = '/ovum/web'
-        rel = target.relative_to(WEB_DIR)
+        rel = target.relative_to(base_dir)
         return _directory_listing(base_url, target, rel)
 
     # If file, serve file or 404
@@ -116,12 +124,24 @@ async def ovum_web(request: web.Request):
         # FileResponse sets content-type using mimetypes
         return web.FileResponse(path=target)
 
-    # If path didn't exist but tail is empty (i.e., root), treat as directory listing of WEB_DIR
+    # If path didn't exist but tail is empty (i.e., root), treat as directory listing
     if tail.strip() == "":
-        base_url = '/ovum/web'
-        return _directory_listing(base_url, WEB_DIR, Path('.'))
+        return _directory_listing(base_url, base_dir, Path('.'))
 
     return web.Response(status=404, text="Not Found")
+
+
+@PromptServer.instance.routes.get('/ovum/web/{tail:.*}')
+async def ovum_web(request: web.Request):
+    tail = request.match_info.get('tail', '')
+    return _serve_static_files(tail, WEB_DIR, '/ovum/web')
+
+
+@PromptServer.instance.routes.get('/ovum/node_modules/{tail:.*}')
+async def ovum_node_modules(request: web.Request):
+    tail = request.match_info.get('tail', '')
+    return _serve_static_files(tail, NODE_MODULES_DIR, '/ovum/node_modules')
+
 
 
 # No additional API endpoints needed - using .ui mechanism now

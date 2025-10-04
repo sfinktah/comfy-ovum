@@ -5,112 +5,8 @@ import { chainCallback } from "../01/utility.js";
 import { Logger } from "../common/logger.js";
 
 
-function drawGuides(ctx, w, h, params) {
-    const { top, bottom, left, right } = params;
-    ctx.save();
-    ctx.strokeStyle = "rgba(255,0,0,0.85)";
-    ctx.lineWidth = 2;
-
-    // Only draw lines for negative (crop) values
-    ctx.beginPath();
-
-    // Horizontal lines (top & bottom crop boundaries)
-    if (top < 0) {
-        const topY = Math.round(Math.abs(top) * h);
-        ctx.moveTo(0, topY);
-        ctx.lineTo(w, topY);
-    }
-    if (bottom < 0) {
-        const bottomY = Math.round(h - Math.abs(bottom) * h);
-        ctx.moveTo(0, bottomY);
-        ctx.lineTo(w, bottomY);
-    }
-
-    // Vertical lines (left & right crop boundaries)
-    if (left < 0) {
-        const leftX = Math.round(Math.abs(left) * w);
-        ctx.moveTo(leftX, 0);
-        ctx.lineTo(leftX, h);
-    }
-    if (right < 0) {
-        const rightX = Math.round(w - Math.abs(right) * w);
-        ctx.moveTo(rightX, 0);
-        ctx.lineTo(rightX, h);
-    }
-
-    ctx.stroke();
-    ctx.restore();
-}
-
-function drawImageInfo(ctx, w, h, params, originalW, originalH, divisor, gcd) {
-    const { top, bottom, left, right } = params;
-
-    // Calculate post-crop dimensions using original image size
-    const cropTop = top < 0 ? Math.abs(top) : 0;
-    const cropBottom = bottom < 0 ? Math.abs(bottom) : 0;
-    const cropLeft = left < 0 ? Math.abs(left) : 0;
-    const cropRight = right < 0 ? Math.abs(right) : 0;
-
-    // Calculate crop offsets in pixels based on original image size
-    const cropOffsetX = Math.round(originalW * cropLeft);
-    const cropOffsetY = Math.round(originalH * cropTop);
-
-    // Calculate cropped dimensions in original image space
-    const croppedW = originalW * (1 - cropLeft - cropRight);
-    const croppedH = originalH * (1 - cropTop - cropBottom);
-
-    // Calculate final cropped dimensions
-    const finalCroppedW = Math.round(croppedW);
-    const finalCroppedH = Math.round(croppedH);
-
-    // Calculate width-height ratio as float with 4 decimal precision
-    const aspectRatioFloat = (croppedW / croppedH).toFixed(4);
-
-    // Divide by divisor and round to get integer values for aspect ratio calculation
-    const aspectW = Math.round(croppedW / divisor);
-    const aspectH = Math.round(croppedH / divisor);
-
-    // Calculate GCD to reduce to lowest integers
-    const gcdValue = gcd(aspectW, aspectH);
-    const ratioW = Math.max(1, aspectW / gcdValue);
-    const ratioH = Math.max(1, aspectH / gcdValue);
-
-    const aspectRatioText = `${ratioW}:${ratioH}`;
-
-    ctx.save();
-    ctx.font = "12px Arial";
-
-    // Helper function to draw text with outline
-    const drawTextWithOutline = (text, x, y, align = "left", baseline = "top") => {
-        ctx.textAlign = align;
-        ctx.textBaseline = baseline;
-
-        // Draw black outline
-        ctx.strokeStyle = "rgba(0,0,0,0.5)";
-        ctx.lineWidth = 3;
-        ctx.strokeText(text, x, y);
-
-        // Draw white text
-        ctx.fillStyle = "white";
-        ctx.fillText(text, x, y);
-    };
-
-    // Top left: Crop offset (in original image pixels)
-    const offsetText = `${cropOffsetX}, ${cropOffsetY}`;
-    drawTextWithOutline(offsetText, 8, 8, "left", "top");
-
-    // Top right: Cropped size (in original image pixels)
-    const sizeText = `${finalCroppedW}×${finalCroppedH}`;
-    drawTextWithOutline(sizeText, w - 8, 8, "right", "top");
-
-    // Bottom right: Aspect ratio as integer ratio (based on original image)
-    drawTextWithOutline(aspectRatioText, w - 8, h - 8, "right", "bottom");
-
-    // Bottom left: Width-height ratio as float (based on original image)
-    drawTextWithOutline(aspectRatioFloat, 8, h - 8, "left", "bottom");
-
-    ctx.restore();
-}
+import { drawGuides, drawImageInfo, gcd as gcdHelper } from "./live_crop_helpers.js";
+import { hookWidget } from "./live_crop_widget_hooks.js";
 
 app.registerExtension({
     name: "ovum.live-crop",
@@ -130,17 +26,8 @@ app.registerExtension({
         /** @type {ComfyNode} */
         const node = nodeType;
 
-        // Helper function to calculate greatest common divisor for aspect ratio reduction
-        const gcd = (a, b) => {
-            a = Math.abs(Math.round(a));
-            b = Math.abs(Math.round(b));
-            while (b !== 0) {
-                const temp = b;
-                b = a % b;
-                a = temp;
-            }
-            return a || 1;
-        };
+        // Greatest common divisor imported from helper module
+        const gcd = gcdHelper;
 
         chainCallback(nodeType.prototype, "onNodeCreated", function () {
             Logger.log({
@@ -230,13 +117,30 @@ app.registerExtension({
 
                 const getWidget = (name) => (this.widgets || []).find(w => w && w.name === name);
                 const applyRotateDelta = (delta)=>{
+                    const normalize = (deg)=>{
+                        // Map to canonical set without -180: ...,-90,0,90,180,-90,0,...
+                        let d = Math.round(Number(deg)||0);
+                        d = Math.round(d/90)*90;
+                        // Wrap any 270 to -90; any -270 to 90
+                        if (d === 270) d = -90;
+                        if (d === -270) d = 90;
+                        // Collapse 360/-360 to 0
+                        if (d === 360 || d === -360) d = 0;
+                        // Keep only -90, 0, 90, 180
+                        if (![ -90, 0, 90, 180 ].includes(d)) {
+                            d = ((d%360)+360)%360; // 0..359
+                            if (d === 270) d = -90;
+                            else if (d === 0) d = 0;
+                            else if (d === 90) d = 90;
+                            else if (d === 180) d = 180;
+                            else d = 0;
+                        }
+                        return d;
+                    };
                     const w = getWidget('rotate_degrees');
                     if (!w) return;
                     let v = (typeof w.value === 'number') ? w.value : 0;
-                    v = Math.round(v / 90) * 90 + delta;
-                    // clamp to -180..180 for now
-                    if (v > 180) v = -180 + (v - 180 - 90) % 360; // wrap
-                    if (v < -180) v = 180 - (-180 - v - 90) % 360;
+                    v = normalize(v + delta);
                     w.setValue?.(v, { e: { isTransient: true }, node: this, canvas: app.canvas });
                     w.callback?.(w.value, app.canvas, this, null, { isTransient: true });
                     this._livecrop_redraw?.();
@@ -586,17 +490,8 @@ app.registerExtension({
                         drawGuides(ctx, dw, dh, { top, bottom, left, right });
                         const originalW = this._livecrop.originalWidth || iw;
                         const originalH = this._livecrop.originalHeight || ih;
-                        // Apply rotation visually by rotating the guides and image info according to rotate_degrees widget
-                        if (degrees % 360 !== 0) {
-                            ctx.save();
-                            ctx.translate(dw/2, dh/2);
-                            ctx.rotate((-degrees * Math.PI) / 180);
-                            ctx.translate(-dw/2, -dh/2);
-                            drawImageInfo(ctx, dw, dh, { top, bottom, left, right }, originalW, originalH, aspectRatioDivisor, gcd);
-                            ctx.restore();
-                        } else {
-                            drawImageInfo(ctx, dw, dh, { top, bottom, left, right }, originalW, originalH, aspectRatioDivisor, gcd);
-                        }
+                        // Draw guides and info unrotated so they are readable and aligned to displayed image box
+                        drawImageInfo(ctx, dw, dh, { top, bottom, left, right }, originalW, originalH, aspectRatioDivisor, gcd);
                         ctx.restore();
 
                         // Store this image's area for hit testing
@@ -806,7 +701,49 @@ app.registerExtension({
 
             const oldComputeSize = this.computeSize;
             this.computeSize = function () {
-                const s = oldComputeSize?.apply(this, arguments) || this.size;
+                // Get base size from original method if it exists
+                const baseSize = oldComputeSize?.apply(this, arguments) || this.size || [200, 100];
+
+                // LiteGraph constants for size calculation
+                const NODE_TITLE_HEIGHT = 30;
+                const NODE_SLOT_HEIGHT = 20;
+                const NODE_WIDGET_HEIGHT = 20;
+                const MARGIN = 15;
+
+                // Start with base width
+                let width = baseSize[0];
+                let height = NODE_TITLE_HEIGHT;
+
+                // Add height for inputs
+                const numInputs = this.inputs ? this.inputs.length : 0;
+                const inputsHeight = numInputs * NODE_SLOT_HEIGHT;
+
+                // Add height for outputs
+                const numOutputs = this.outputs ? this.outputs.length : 0;
+                const outputsHeight = numOutputs * NODE_SLOT_HEIGHT;
+
+                // Add height for widgets (only count visible widgets)
+                let widgetsHeight = 0;
+                if (this.widgets) {
+                    for (const widget of this.widgets) {
+                        if (!widget.hidden) {
+                            // Use widget's computed height if available, otherwise use default
+                            const wHeight = widget.computedHeight || widget.height || NODE_WIDGET_HEIGHT;
+                            widgetsHeight += wHeight;
+                        }
+                    }
+                }
+
+                // Take the maximum of inputs/outputs height and widgets height
+                const contentHeight = Math.max(inputsHeight, outputsHeight) + widgetsHeight;
+                height += contentHeight + MARGIN;
+
+                // Ensure minimum size
+                height = Math.max(height, baseSize[1]);
+                width = Math.max(width, 200);
+
+                const s = [width, height];
+
                 Logger.log({ 
                     class: 'LiveCrop', 
                     method: 'computeSize', 
@@ -814,225 +751,30 @@ app.registerExtension({
                     tag: 'size_change'
                 }, 'Size computation triggered', { 
                     newSize: s,
-                    oldComputeSizeExists: !!oldComputeSize
+                    oldComputeSizeExists: !!oldComputeSize,
+                    numInputs,
+                    numOutputs,
+                    numWidgets: this.widgets ? this.widgets.filter(w => !w.hidden).length : 0,
+                    inputsHeight,
+                    outputsHeight,
+                    widgetsHeight
                 });
+
                 setTimeout(redraw, 0);
                 return s;
             }
 
             // Track widget changes to redraw
-            Logger.log({ 
-                class: 'LiveCrop', 
-                method: 'onNodeCreated', 
+            Logger.log({
+                class: 'LiveCrop',
+                method: 'onNodeCreated',
                 severity: 'debug',
                 tag: 'widget_hooks'
             }, 'Setting up widget change hooks');
 
-            const hookWidget = (n) => {
-                const isCrop = /^crop_/.test(n);
-                const w = (this.widgets || []).find(w => w && w.name === n);
-                if (!w) {
-                    Logger.log({ 
-                        class: 'LiveCrop', 
-                        method: 'hookWidget', 
-                        severity: 'warn',
-                        tag: 'widget_not_found'
-                    }, `Widget not found: ${n}`, { 
-                        widgetName: n,
-                        availableWidgets: (this.widgets || []).map(w => w?.name).filter(Boolean)
-                    });
-                    return;
-                }
-
-                Logger.log({ 
-                    class: 'LiveCrop', 
-                    method: 'hookWidget', 
-                    severity: 'debug',
-                    tag: 'widget_hook_setup'
-                }, `Setting up hook for widget: ${n}`, { 
-                    widgetName: n,
-                    hasExistingCallback: !!w.callback
-                });
-
-                // Override display for crop_* widgets to show positive percentages
-                if (isCrop) {
-                    try {
-                        const desc = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(w), "_displayValue");
-                        const originalGetter = desc && desc.get;
-                        Object.defineProperty(w, "_displayValue", {
-                            get: function() {
-                                try {
-                                    if (this.computedDisabled) return "";
-                                    const v = Number(this.value);
-                                    if (!isFinite(v)) return String(this.value);
-                                    const pct = Math.round(-100 * v);
-                                    return `${Math.abs(pct)}%`;
-                                } catch (_) {
-                                    return originalGetter ? originalGetter.call(this) : String(this.value);
-                                }
-                            },
-                            configurable: true
-                        });
-                    } catch (_) { /* ignore */ }
-
-                    // Override drawWidget to ensure our custom _displayValue is used
-                    try {
-                        const origDrawWidget = w.drawWidget?.bind(w);
-                        // Utility clamp since we cannot import from litegraph here
-                        const clamp = (val, min, max) => Math.max(min, Math.min(max, val));
-                        w.drawWidget = function(ctx, { width, showText = true } = {}) {
-                            try {
-                                // Fallbacks for required values from BaseWidget
-                                const margin = (this.constructor && typeof this.constructor.margin === 'number') ? this.constructor.margin : 4;
-                                const { height, y } = this;
-
-                                // Background
-                                ctx.save();
-                                const prev = { fillStyle: ctx.fillStyle, strokeStyle: ctx.strokeStyle, textAlign: ctx.textAlign };
-                                ctx.fillStyle = this.background_color;
-                                const barW = Math.max(0, (width ?? (this.width || 0)) - margin * 2);
-                                ctx.fillRect(margin, y, barW, height);
-
-                                // Slider value portion
-                                const min = (this.options && typeof this.options.min === 'number') ? this.options.min : -1;
-                                const max = (this.options && typeof this.options.max === 'number') ? this.options.max : 0;
-                                const range = (max - min) || 1;
-                                let nvalue = ((Number(this.value) - min) / range);
-                                if (!isFinite(nvalue)) nvalue = 0;
-                                nvalue = clamp(nvalue, 0, 1);
-                                ctx.fillStyle = (this.options && this.options.slider_color) ? this.options.slider_color : '#678';
-                                ctx.fillRect(margin, y, nvalue * barW, height);
-
-                                // Outline when active
-                                if (showText && !this.computedDisabled) {
-                                    ctx.strokeStyle = this.outline_color;
-                                    ctx.strokeRect(margin, y, barW, height);
-                                }
-
-                                // Marker support
-                                if (this.marker != null) {
-                                    let marker_nvalue = ((Number(this.marker) - min) / range);
-                                    if (!isFinite(marker_nvalue)) marker_nvalue = 0;
-                                    marker_nvalue = clamp(marker_nvalue, 0, 1);
-                                    ctx.fillStyle = (this.options && this.options.marker_color) ? this.options.marker_color : '#AA9';
-                                    ctx.fillRect(margin + marker_nvalue * barW, y, 2, height);
-                                }
-
-                                // Text using our overridden _displayValue
-                                if (showText) {
-                                    ctx.textAlign = 'center';
-                                    ctx.fillStyle = this.text_color;
-                                    const text = `${this.label || this.name}  ${this._displayValue}`;
-                                    ctx.fillText(text, (width ?? (this.width || 0)) * 0.5, y + height * 0.7);
-                                }
-
-                                // Restore context
-                                Object.assign(ctx, prev);
-                                ctx.restore();
-                            } catch (e) {
-                                // Fallback to original if our override fails
-                                if (typeof origDrawWidget === 'function') {
-                                    return origDrawWidget(ctx, { width, showText });
-                                }
-                            }
-                        };
-                    } catch (_) { /* ignore */ }
-
-                    // Normalize incoming linked values according to rules
-                    // 1) value = abs(value)
-                    // 2) if value > 100 then error
-                    // 3) if value >= 1 then value /= 100
-                    // 4) value = value * -1
-                    const normalizeLinked = (val) => {
-                        let v = Number(val);
-                        if (!isFinite(v)) return val;
-                        v = Math.abs(v);
-                        if (v > 100) {
-                            console.error(`[LiveCrop] Linked value for ${n} out of range (>100):`, v);
-                            return this.widgets?.find(wi=>wi===w)?.value ?? -0; // no change
-                        }
-                        if (v >= 1) v = v / 100;
-                        v = v * -1;
-                        return v;
-                    };
-
-                    // Intercept changes coming from links by wrapping setValue if present
-                    if (typeof w.setValue === 'function') {
-                        const origSetValue = w.setValue.bind(w);
-                        w.setValue = function(newVal, options) {
-                            // Preserve original signature: (value, { e, node, canvas })
-                            const normalizedVal = normalizeLinked(newVal);
-                            // Note: Original setValue looks like this:
-                            // setValue(
-                            //    value: TWidget['value'],
-                            //    { e, node, canvas }: WidgetEventOptions
-                            //  ): void {
-                            //    const oldValue = this.value
-                            //    if (value === this.value) return
-                            //
-                            //    const v = this.type === 'number' ? Number(value) : value
-                            //    this.value = v
-                            //    if (
-                            //      this.options?.property &&
-                            //      node.properties[this.options.property] !== undefined
-                            //    ) {
-                            //      node.setProperty(this.options.property, v)
-                            //    }
-                            //    const pos = canvas.graph_mouse
-                            //    this.callback?.(this.value, canvas, node, pos, e)
-                            //
-                            //    node.onWidgetChanged?.(this.name ?? '', v, oldValue, this)
-                            //    if (node.graph) node.graph._version++
-                            //  }
-                            return origSetValue(normalizedVal, options || {});
-                        };
-                    }
-
-                    // Also wrap callback so manual edits still trigger redraw and linked inputs get normalized
-                    const priorCb = w.callback;
-                    w.callback = function(val, canvas, node, pos, e) {
-                        // setValue now normalizes incoming values for linked updates when they call into setValue.
-                        // To avoid double-normalizing, only normalize here if value seems raw AND event indicates link.
-                        const sourceIsLink = e && (e.isTransient === true || e.isLink === true);
-                        const maybeNormalized = (typeof val === 'number' && val <= 0 && val >= -1);
-                        const newVal = sourceIsLink && !maybeNormalized ? normalizeLinked(val) : val;
-                        if (typeof priorCb === 'function') priorCb.call(this, newVal, canvas, node, pos, e);
-                    };
-                }
-
-                const hadCb = !!w.callback;
-                chainCallback(w, "callback", function (val, canvas, node, pos, e) {
-                    Logger.log({ 
-                        class: 'LiveCrop', 
-                        method: 'widgetCallback', 
-                        severity: 'trace',
-                        tag: 'widget_change'
-                    }, `Widget changed: ${n}`, { 
-                        widgetName: n,
-                        newValue: val,
-                        hasOriginalCallback: hadCb
-                    });
-
-                    try { 
-                        redraw(); 
-                    } catch(e) {
-                        Logger.log({ 
-                            class: 'LiveCrop', 
-                            method: 'widgetCallback', 
-                            severity: 'error',
-                            tag: 'widget_redraw_error'
-                        }, `Error during widget redraw: ${n}`, { 
-                            widgetName: n,
-                            error: e.message,
-                            stack: e.stack
-                        });
-                    }
-                });
-            }
-
             const widgetsToHook = (this.widgets || []).map(w => w?.name).filter(Boolean);
             for (const n of widgetsToHook) {
-                hookWidget(n);
+                hookWidget(this, n, redraw, Logger, chainCallback);
             }
             // const widgetsToHook = ["crop_top", "crop_bottom", "crop_left", "crop_right", "divisible_by"];
             Logger.log({ 

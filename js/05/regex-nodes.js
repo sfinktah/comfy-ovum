@@ -114,3 +114,51 @@ app.registerExtension({
         };
     },
 });
+
+const ovumCategory = "^ovum";
+app.registerExtension({
+    name: "ovum.ui",
+    async beforeRegisterNodeDef(nodeType, nodeData, app) {
+        if (!nodeData.category.match(ovumCategory) && !nodeData.name.startsWith("Ovum") && !nodeData.name.endsWith("Ovum")) {
+            return;
+        }
+
+        // 2. Display status text from python `ui` return
+        const onExecuted = nodeType.prototype.onExecuted;
+        nodeType.prototype.onExecuted = function (message) {
+            onExecuted?.apply(this, arguments);
+
+            Logger.log({
+                class: 'ovum.*',
+                method: 'onExecuted',
+                severity: 'trace',
+            }, {message});
+            if ((this.status = message?.status ? message.status.join("\n") : undefined)) {
+                /** @this {LGraphNode} */
+                this.setDirtyCanvas(true, true);
+            }
+        };
+
+        const onDrawForeground = nodeType.prototype.onDrawForeground;
+        nodeType.prototype.onDrawForeground = function(ctx) {
+            onDrawForeground?.apply(this, arguments);
+
+            /** @this {LGraphNode} */
+            if (this.status) {
+                const fontSize = 12;
+                ctx.font = `${fontSize}px Arial`;
+                ctx.fillStyle = "#888";
+                ctx.textAlign = "center";
+                if (STATUS_BELOW_NODE) {
+                    const V_OFFSET_BELOW = 14;
+                    ctx.fillText(this.status, this.size[0] / 2, this.size[1] + V_OFFSET_BELOW);
+                } else {
+                    if (this.flags?.collapsed) {
+                        return;
+                    }
+                    ctx.fillText(this.status, this.size[0] / 2, this.size[1] - fontSize / 2 - 2);
+                }
+            }
+        };
+    },
+});

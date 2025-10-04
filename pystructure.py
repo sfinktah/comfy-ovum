@@ -637,7 +637,10 @@ class PassthruOvum:
         node_title = prompt[my_unique_id]['_meta']['title']
         output_is_list = node_class.OUTPUT_IS_LIST[slot] if hasattr(node_class, 'OUTPUT_IS_LIST') else False
         logger.info(f"[ovum] {cls.custom_name}({my_unique_id}): {node_title} ({type(any_in)}) {any_in}, output_is_list: {output_is_list}, id: {id}, slot: {slot}, class_type: {class_type}, node_class: {node_class}")
-        return (any_in,)
+        return {
+            "ui": {"status": f"{str(any_in)[:-16]}"},
+            "result": (any_in,)
+        }
 
 class PassthruInputIsListOvum:
     """

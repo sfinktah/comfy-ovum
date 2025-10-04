@@ -33,6 +33,7 @@ export class TwinNodes extends LGraphNode {
             numberOfWidgets: 2,
             showOutputText: this.defaultVisibility,
             failSilently: false,
+            showResults: false,
             computedTitle: "",
             ...this.properties
         };

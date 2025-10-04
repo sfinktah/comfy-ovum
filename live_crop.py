@@ -5,9 +5,138 @@ from typing import Optional, Tuple, Any, Dict, List, Type
 import numpy as np
 import torch
 from PIL import Image, ImageOps
+import os
 
 # Ensure PIL can handle large images
 Image.MAX_IMAGE_PIXELS = None
+
+# --- Cached directory listing for rotating temp files ---
+_LIVE_CROP_TEMP_CACHE: Dict[str, Dict[str, Any]] = {}
+
+def _parse_temp_index_from_name(name: str, prefix: str = "livecrop_temp_", suffix: str = ".png") -> Optional[int]:
+    if name.startswith(prefix) and name.endswith(suffix):
+        mid = name[len(prefix):-len(suffix)]
+        if len(mid) == 3 and mid.isdigit():
+            idx = int(mid)
+            if 0 <= idx <= 999:
+                return idx
+    return None
+
+def _scan_temp_dir(out_dir: str) -> Dict[str, Any]:
+    existing_indices: set[int] = set()
+    mtime_by_index: Dict[int, float] = {}
+    oldest_index: Optional[int] = None
+    oldest_mtime: Optional[float] = None
+    oldest_path: Optional[str] = None
+    try:
+        with os.scandir(out_dir) as it:
+            for entry in it:
+                try:
+                    if not entry.is_file():
+                        continue
+                    idx = _parse_temp_index_from_name(entry.name)
+                    if idx is None:
+                        continue
+                    try:
+                        mtime = entry.stat().st_mtime
+                    except Exception:
+                        # Prefer overwriting files we can't stat by treating them as very old
+                        mtime = float("-inf")
+                    existing_indices.add(idx)
+                    mtime_by_index[idx] = mtime
+                    if oldest_mtime is None or mtime < oldest_mtime:
+                        oldest_mtime = mtime
+                        oldest_index = idx
+                        oldest_path = entry.path
+                except Exception:
+                    # Ignore individual entry errors
+                    continue
+    except Exception:
+        # Ignore scan errors; return whatever we have
+        pass
+    return {
+        "existing_indices": existing_indices,
+        "mtime_by_index": mtime_by_index,
+        "oldest_index": oldest_index,
+        "oldest_mtime": oldest_mtime,
+        "oldest_path": oldest_path,
+        "prefix": "livecrop_temp_",
+        "suffix": ".png",
+    }
+
+def _get_temp_dir_cache(out_dir: str) -> Dict[str, Any]:
+    cache = _LIVE_CROP_TEMP_CACHE.get(out_dir)
+    if cache is None:
+        cache = _scan_temp_dir(out_dir)
+        _LIVE_CROP_TEMP_CACHE[out_dir] = cache
+    return cache
+
+def _refresh_temp_dir_cache(out_dir: str) -> Dict[str, Any]:
+    cache = _scan_temp_dir(out_dir)
+    _LIVE_CROP_TEMP_CACHE[out_dir] = cache
+    return cache
+
+def _select_temp_path_from_cache(out_dir: str) -> Tuple[str, Optional[float]]:
+    cache = _get_temp_dir_cache(out_dir)
+    existing_indices: set[int] = cache["existing_indices"]
+    prefix: str = cache["prefix"]
+    suffix: str = cache["suffix"]
+    if len(existing_indices) < 1000:
+        for i in range(1000):
+            if i not in existing_indices:
+                return os.path.join(out_dir, f"{prefix}{i:03d}{suffix}"), None
+    # All slots present; choose oldest
+    oldest_path: Optional[str] = cache.get("oldest_path")
+    oldest_mtime: Optional[float] = cache.get("oldest_mtime")
+    if oldest_path is None:
+        # Fallback
+        oldest_path = os.path.join(out_dir, f"{prefix}000{suffix}")
+        oldest_mtime = None
+    return oldest_path, oldest_mtime
+
+def _validate_selection_against_cache(path: str, expected_mtime: Optional[float]) -> bool:
+    try:
+        if expected_mtime is None:
+            # Expected free slot; ensure it still does not exist
+            return not os.path.exists(path)
+        # Expected existing file; ensure mtime matches cached value
+        st = os.stat(path)
+        return getattr(st, "st_mtime", None) == expected_mtime
+    except Exception:
+        # On error, treat as invalid selection so we refresh
+        return False
+
+def _update_cache_after_write(out_dir: str, path: str) -> None:
+    cache = _get_temp_dir_cache(out_dir)
+    name = os.path.basename(path)
+    idx = _parse_temp_index_from_name(name, cache["prefix"], cache["suffix"])
+    try:
+        mtime = os.path.getmtime(path)
+    except Exception:
+        mtime = None
+    if idx is not None:
+        cache["existing_indices"].add(idx)
+        if mtime is not None:
+            cache["mtime_by_index"][idx] = mtime
+    # Recompute oldest if we have all slots; else clear oldest fields
+    if len(cache["existing_indices"]) >= 1000 and cache["mtime_by_index"]:
+        min_idx: Optional[int] = None
+        min_mtime: Optional[float] = None
+        for i, mt in cache["mtime_by_index"].items():
+            if mt is None:
+                continue
+            if min_mtime is None or mt < min_mtime:
+                min_mtime = mt
+                min_idx = i
+        if min_idx is not None:
+            cache["oldest_index"] = min_idx
+            cache["oldest_mtime"] = min_mtime
+            cache["oldest_path"] = os.path.join(out_dir, f"{cache['prefix']}{min_idx:03d}{cache['suffix']}")
+    else:
+        cache["oldest_index"] = None
+        cache["oldest_mtime"] = None
+        cache["oldest_path"] = None
+    _LIVE_CROP_TEMP_CACHE[out_dir] = cache
 
 
 def _tensor_image_to_pil(img_tensor: torch.Tensor) -> Image.Image:
@@ -196,24 +325,24 @@ class LiveCrop:
 
     CATEGORY = "ovum"
     # IMAGE, MASK, IMAGE_EX, BBOX, BBOX%
-    RETURN_TYPES = ("IMAGE", "MASK", "DICT", "LIST", "LIST")
-    RETURN_NAMES = ("image", "mask", "IMAGE_EX", "BBOX", "BBOX%")
+    RETURN_TYPES = ("DICT",     "IMAGE", "MASK", "LIST", "LIST")
+    RETURN_NAMES = ("IMAGE_EX", "image", "mask", "BBOX", "BBOX%")
     FUNCTION = "apply"
 
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "crop_top": ("FLOAT", {"default": 0.0, "min": -1.0, "max": 0.0, "step": 0.01, "display": "slider", "tooltip": "Negative values crop from top."}),
-                "crop_bottom": ("FLOAT", {"default": 0.0, "min": -1.0, "max": 0.0, "step": 0.01, "display": "slider", "tooltip": "Negative values crop from bottom."}),
-                "crop_left": ("FLOAT", {"default": 0.0, "min": -1.0, "max": 0.0, "step": 0.01, "display": "slider", "tooltip": "Negative values crop from left."}),
-                "crop_right": ("FLOAT", {"default": 0.0, "min": -1.0, "max": 0.0, "step": 0.01, "display": "slider", "tooltip": "Negative values crop from right."}),
+                "crop_top": ("FLOAT", {"default": 0.0, "min": -1.0, "max": 0.0, "step": 0.001, "display": "slider", "tooltip": "Negative values crop from top."}),
+                "crop_bottom": ("FLOAT", {"default": 0.0, "min": -1.0, "max": 0.0, "step": 0.001, "display": "slider", "tooltip": "Negative values crop from bottom."}),
+                "crop_left": ("FLOAT", {"default": 0.0, "min": -1.0, "max": 0.0, "step": 0.001, "display": "slider", "tooltip": "Negative values crop from left."}),
+                "crop_right": ("FLOAT", {"default": 0.0, "min": -1.0, "max": 0.0, "step": 0.001, "display": "slider", "tooltip": "Negative values crop from right."}),
                 "rotate_degrees": ("INT", {"default": 0, "min": -180, "max": 180, "step": 90, "tooltip": "Rotate by multiples of 90 degrees."}),
             },
             "optional": {
+                "image_ex": ("DICT",),
                 "image": ("IMAGE",),
                 "mask": ("MASK",),
-                "image_ex": ("DICT",),
             }
         }
 
@@ -228,7 +357,7 @@ class LiveCrop:
         img = img.crop((left, top, right, bottom))
 
         # Rotation in 90 degree increments
-        r = rotate_degrees % 360
+        r = int(rotate_degrees) % 360
         if r != 0:
             # PIL rotates counter-clockwise; expand is implied for 90-k multiples
             img = img.rotate(-r, expand=True)  # negative for right-rotation visual consistency
@@ -401,8 +530,18 @@ class LiveCrop:
                 import os
                 out_dir = os.path.join("output", "livecrop")
                 os.makedirs(out_dir, exist_ok=True)
-                temp_path = os.path.join(out_dir, "livecrop_temp.png")
+
+                # Use cached directory listing; validate selected path and refresh if needed
+                selected_path, expected_mtime = _select_temp_path_from_cache(out_dir)
+                if not _validate_selection_against_cache(selected_path, expected_mtime):
+                    _refresh_temp_dir_cache(out_dir)
+                    selected_path, expected_mtime = _select_temp_path_from_cache(out_dir)
+
+                temp_path = selected_path
                 pil.save(temp_path)
+
+                # Update cache after write to keep it current
+                _update_cache_after_write(out_dir, temp_path)
         except Exception:
             temp_path = None
         if temp_path:
@@ -439,9 +578,9 @@ class LiveCrop:
 
         if ui:
             print("[LiveCrop] outputting UI\n")
-            return {"ui": ui, "result": (image_out, mask_out, img_ex_out, bbox_px, bbox_pct)}
+            return {"ui": ui, "result": (img_ex_out, image_out, mask_out, bbox_px, bbox_pct)}
         print("[LiveCrop] not outputting UI\n")
-        return image_out, mask_out, img_ex_out, bbox_px, bbox_pct
+        return img_ex_out, image_out, mask_out, bbox_px, bbox_pct
 
 
 CLAZZES = [LiveCrop]

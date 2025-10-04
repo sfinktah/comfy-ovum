@@ -1,19 +1,33 @@
 {
   "name": "ovum",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+  "private": false,
+  "description": "comfyui nodes",
+  "keywords": [
+    "pluck-a-duck"
+  ],
+  "homepage": "https://github.com/sfinktah/comfy-ovum#readme",
+  "bugs": {
+    "url": "https://github.com/sfinktah/comfy-ovum/issues"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/sfinktah/comfy-ovum"
+    "url": "git+https://github.com/sfinktah/comfy-ovum.git"
   },
-  "private": false,
+  "license": "MIT",
+  "author": "me",
+  "type": "idk",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
   "devDependencies": {
     "@comfyorg/comfyui-frontend-types": "^1.25.10",
     "@comfyorg/litegraph": "^0.8.100",
+    "fzf": "^0.5.2",
     "typescript": "^5.9.2"
   }
 }
