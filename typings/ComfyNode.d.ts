@@ -8,6 +8,7 @@ import type { LGraphNode } from "@comfyorg/litegraph/dist/LGraphNode";
  */
 export interface ComfyNode extends LGraphNode {
   // Extra utilities / deprecations
+  prototype: any;
   /** @deprecated */
   convertWidgetToInput(): boolean;
   /** @deprecated */

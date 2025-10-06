@@ -1,12 +1,90 @@
 /** @typedef {import("../../typings/ComfyNode").ComfyNode} ComfyNode */
 // noinspection JSFileReferences
-import { app } from "../../../scripts/app.js";
-import { chainCallback } from "../01/utility.js";
-import { Logger } from "../common/logger.js";
+import {app} from "../../../scripts/app.js";
+import {chainCallback} from "../01/utility.js";
+import {Logger} from "../common/logger.js";
 
 
-import { drawGuides, drawImageInfo, gcd as gcdHelper } from "./live_crop_helpers.js";
-import { hookWidget } from "./live_crop_widget_hooks.js";
+import {drawGuides, drawImageInfo, gcd as gcdHelper} from "./live_crop_helpers.js";
+import {hookWidget} from "./live_crop_widget_hooks.js";
+
+const MAX_SIDE = 510;
+
+function computeNodeSize(baseSize) {
+    // LiteGraph constants for size calculation
+    const NODE_TITLE_HEIGHT = 30;
+    const NODE_SLOT_HEIGHT = 20;
+    const NODE_WIDGET_HEIGHT = 20;
+    const MARGIN = 15;
+
+    // Start with base width
+    let width = baseSize[0];
+    let height = NODE_TITLE_HEIGHT;
+
+    // Add height for inputs
+    const numInputs = this.inputs ? this.inputs.length : 0;
+    const inputsHeight = numInputs * NODE_SLOT_HEIGHT;
+
+    // Add height for outputs
+    const numOutputs = this.outputs ? this.outputs.length : 0;
+    const outputsHeight = numOutputs * NODE_SLOT_HEIGHT;
+
+    // Add height for widgets (only count visible widgets)
+    let widgetsHeight = 0;
+    if (this.widgets) {
+        for (const widget of this.widgets) {
+            if (!widget.hidden && widget.type !== 'LiveCropPreview') {
+                // Use widget's computed height if available, otherwise use default
+                const wHeight = widget.computedHeight || widget.height || NODE_WIDGET_HEIGHT;
+                widgetsHeight += wHeight;
+            }
+        }
+    }
+
+    // Take the maximum of inputs/outputs height and widgets height
+    const contentHeight = Math.max(inputsHeight, outputsHeight) + widgetsHeight;
+    height += contentHeight + MARGIN;
+
+    // Ensure minimum size
+    height = Math.max(height, baseSize[1]);
+    width = Math.max(width, 200);
+    const s = [width, height];
+
+    Logger.log({
+        class: 'LiveCrop',
+        method: 'computeSize',
+        severity: 'trace',
+        tag: 'size_change'
+    }, 'Size computation triggered', {
+        newSize: s,
+        numInputs,
+        numOutputs,
+        numWidgets: this.widgets ? this.widgets.filter(w => !w.hidden).length : 0,
+        inputsHeight,
+        outputsHeight,
+        widgetsHeight
+    });
+
+    return s;
+}
+
+function translateCoordToOverlay(overlay, e) {
+    const rect = overlay.getBoundingClientRect();
+    const scale = app.canvas.ds?.scale || 1;
+    const comp = (typeof window !== "undefined" ? (window.LifeCropDragComp || 0) : 0);
+    const x = (e.clientX - rect.left + comp) / scale;
+    const y = (e.clientY - rect.top) / scale;
+    return {x, y};
+}
+
+function getCursorForDragType(dragType) {
+    let cursor;
+    if (dragType === 'top' || dragType === 'bottom') cursor = 'ns-resize';
+    else if (dragType === 'left' || dragType === 'right') cursor = 'ew-resize';
+    else if (dragType === 'topleft' || dragType === 'bottomright') cursor = 'nw-resize';
+    else if (dragType === 'topright' || dragType === 'bottomleft') cursor = 'ne-resize';
+    return cursor;
+}
 
 app.registerExtension({
     name: "ovum.live-crop",
@@ -219,11 +297,7 @@ app.registerExtension({
                 // Add mouse event handlers for dragging
                 overlay.addEventListener('mousedown', (e) => {
                     e.preventDefault();
-                    const rect = overlay.getBoundingClientRect();
-                    const scale = app.canvas.ds?.scale || 1;
-                    const comp = (typeof window !== "undefined" ? (window.LifeCropDragComp || 0) : 0);
-                    const x = (e.clientX - rect.left + comp) / scale;
-                    const y = (e.clientY - rect.top) / scale;
+                    const {x, y} = translateCoordToOverlay(overlay, e);
 
                     // Check if we clicked on a crop line
                     const dragType = this._livecrop_hitTest(x, y);
@@ -254,12 +328,7 @@ app.registerExtension({
                         }
 
                         // Set appropriate cursor
-                        let cursor;
-                        if (dragType === 'top' || dragType === 'bottom') cursor = 'ns-resize';
-                        else if (dragType === 'left' || dragType === 'right') cursor = 'ew-resize';
-                        else if (dragType === 'topleft' || dragType === 'bottomright') cursor = 'nw-resize';
-                        else if (dragType === 'topright' || dragType === 'bottomleft') cursor = 'ne-resize';
-                        overlay.style.cursor = cursor;
+                        overlay.style.cursor = getCursorForDragType(dragType);
 
                         document.addEventListener('mousemove', this._livecrop_onMouseMove);
                         document.addEventListener('mouseup', this._livecrop_onMouseUp);
@@ -268,20 +337,9 @@ app.registerExtension({
 
                 overlay.addEventListener('mousemove', (e) => {
                     if (!this._livecrop_drag.isDragging) {
-                        const rect = overlay.getBoundingClientRect();
-                        const scale = app.canvas.ds?.scale || 1;
-                        const comp = (typeof window !== "undefined" ? (window.LifeCropDragComp || 0) : 0);
-                        const x = (e.clientX - rect.left + comp) / scale;
-                        const y = (e.clientY - rect.top) / scale;
+                        const {x, y} = translateCoordToOverlay(overlay, e);
                         const dragType = this._livecrop_hitTest(x, y);
-                        let cursor = 'default';
-                        if (dragType) {
-                            if (dragType === 'top' || dragType === 'bottom') cursor = 'ns-resize';
-                            else if (dragType === 'left' || dragType === 'right') cursor = 'ew-resize';
-                            else if (dragType === 'topleft' || dragType === 'bottomright') cursor = 'nw-resize';
-                            else if (dragType === 'topright' || dragType === 'bottomleft') cursor = 'ne-resize';
-                        }
-                        overlay.style.cursor = cursor;
+                        overlay.style.cursor = getCursorForDragType(dragType) || 'default';
                     }
                 });
 
@@ -332,7 +390,7 @@ app.registerExtension({
                 });
                 this.previewWidget.parentEl = container;
                 // Support multiple images in UI
-                this._livecrop = { container, overlay, img: null, imgW: 0, imgH: 0, images: [] };
+                this._livecrop = { container, overlay, images: [] };
 
                 // Keep the canvas sized to the actual DOM container and redraw when it changes
                 try {
@@ -355,14 +413,14 @@ app.registerExtension({
                     livecropInitialized: !!this._livecrop
                 });
 
-                this.setSize([512, 512]);
+                this.setSize([510, 640]);
                 this.resizable = true;
 
                 // Add aspect ratio divisor widget
                 if (!this.widgets.find(w => w.name === "divisible_by")) {
                     const divisorWidget = this.addWidget("number", "divisible_by", 32, function(v) {
                         if (this.redraw) this.redraw();
-                    }, { min: 1, max: 512, step: 10, precision: 0 });
+                    }, { min: 1, max: 256, step: 10, precision: 0 });
                     divisorWidget.value = 32;
                 }
 
@@ -426,15 +484,12 @@ app.registerExtension({
                         cleared: true
                     });
 
-                    // Prepare images list: prefer multiple images if available, fallback to single
-                    const imgs = (this._livecrop?.images?.length
-                        ? this._livecrop.images
-                        : (this._livecrop?.img ? [{ img: this._livecrop.img, w: this._livecrop.imgW, h: this._livecrop.imgH }] : []));
-
+                    // Get images from the array
+                    const imgs = this._livecrop?.images || [];
                     if (!imgs.length) {
-                        Logger.log({ class: 'LiveCrop', method: 'redraw', severity: 'debug', tag: 'no_image' }, 'No image(s) available for drawing', {
+                        Logger.log({ class: 'LiveCrop', method: 'redraw', severity: 'warn', tag: 'no_image' }, 'No image(s) available for drawing', {
                             hasLivecrop: !!this._livecrop,
-                            imgProperty: this._livecrop?.img
+                            imagesProperty: this._livecrop?.images
                         });
                         return;
                     }
@@ -452,7 +507,7 @@ app.registerExtension({
 
                     // Layout: stack vertically up to 3 images with spacing, each maintaining aspect ratio
                     const SPACING = 6;
-                    const maxDisplayWidth = Math.min(W, 512); // Cap display width
+                    const maxDisplayWidth = Math.min(W, MAX_SIDE); // Cap display width
                     let y = 0;
                     const imageAreas = []; // Store all image areas for hit testing
 
@@ -488,8 +543,9 @@ app.registerExtension({
                         ctx.save();
                         ctx.translate(dx, dy);
                         drawGuides(ctx, dw, dh, { top, bottom, left, right });
-                        const originalW = this._livecrop.originalWidth || iw;
-                        const originalH = this._livecrop.originalHeight || ih;
+                        const originalDims = this._livecrop.originalDimensions?.[i];
+                        const originalW = originalDims ? originalDims[0] : iw;
+                        const originalH = originalDims ? originalDims[1] : ih;
                         // Draw guides and info unrotated so they are readable and aligned to displayed image box
                         drawImageInfo(ctx, dw, dh, { top, bottom, left, right }, originalW, originalH, aspectRatioDivisor, gcd);
                         ctx.restore();
@@ -652,7 +708,7 @@ app.registerExtension({
 
                     const widget = this.widgets.find(w => w.name === `crop_${cropType}`);
                     if (widget && widget.value !== newValue) {
-                        widget.value = Math.round(newValue * 100) / 100;
+                        widget.value = Math.round(newValue * 10000) / 10000;
                         if (widget.callback) {
                             widget.callback(widget.value, null, this);
                         }
@@ -702,63 +758,12 @@ app.registerExtension({
             const oldComputeSize = this.computeSize;
             this.computeSize = function () {
                 // Get base size from original method if it exists
-                const baseSize = oldComputeSize?.apply(this, arguments) || this.size || [200, 100];
+                const baseSize = [300, 400];
+                // if (oldComputeSize) {
+                //     baseSize[1] = oldComputeSize.apply(this, arguments);
+                // }
+                const s = computeNodeSize.call(this, baseSize);
 
-                // LiteGraph constants for size calculation
-                const NODE_TITLE_HEIGHT = 30;
-                const NODE_SLOT_HEIGHT = 20;
-                const NODE_WIDGET_HEIGHT = 20;
-                const MARGIN = 15;
-
-                // Start with base width
-                let width = baseSize[0];
-                let height = NODE_TITLE_HEIGHT;
-
-                // Add height for inputs
-                const numInputs = this.inputs ? this.inputs.length : 0;
-                const inputsHeight = numInputs * NODE_SLOT_HEIGHT;
-
-                // Add height for outputs
-                const numOutputs = this.outputs ? this.outputs.length : 0;
-                const outputsHeight = numOutputs * NODE_SLOT_HEIGHT;
-
-                // Add height for widgets (only count visible widgets)
-                let widgetsHeight = 0;
-                if (this.widgets) {
-                    for (const widget of this.widgets) {
-                        if (!widget.hidden) {
-                            // Use widget's computed height if available, otherwise use default
-                            const wHeight = widget.computedHeight || widget.height || NODE_WIDGET_HEIGHT;
-                            widgetsHeight += wHeight;
-                        }
-                    }
-                }
-
-                // Take the maximum of inputs/outputs height and widgets height
-                const contentHeight = Math.max(inputsHeight, outputsHeight) + widgetsHeight;
-                height += contentHeight + MARGIN;
-
-                // Ensure minimum size
-                height = Math.max(height, baseSize[1]);
-                width = Math.max(width, 200);
-
-                const s = [width, height];
-
-                Logger.log({ 
-                    class: 'LiveCrop', 
-                    method: 'computeSize', 
-                    severity: 'trace',
-                    tag: 'size_change'
-                }, 'Size computation triggered', { 
-                    newSize: s,
-                    oldComputeSizeExists: !!oldComputeSize,
-                    numInputs,
-                    numOutputs,
-                    numWidgets: this.widgets ? this.widgets.filter(w => !w.hidden).length : 0,
-                    inputsHeight,
-                    outputsHeight,
-                    widgetsHeight
-                });
 
                 setTimeout(redraw, 0);
                 return s;
@@ -789,18 +794,16 @@ app.registerExtension({
 
             this._livecrop_redraw = redraw;
 
-            // If no image yet, load a default placeholder so the user sees something immediately
-            if (!this._livecrop?.img) {
+            // If no images yet, load a default placeholder so the user sees something immediately
+            if (!this._livecrop?.images?.length) {
                 try {
                     const placeholder = new Image();
                     placeholder.onload = () => {
                         if (!this._livecrop) return;
-                        this._livecrop.img = placeholder;
-                        this._livecrop.imgW = placeholder.width;
-                        this._livecrop.imgH = placeholder.height;
+                        this._livecrop.images = [{ img: placeholder, w: placeholder.width, h: placeholder.height }];
 
-                        // Resize node to placeholder size (cap to 512)
-                        const maxSide = 512;
+                        // Resize node to placeholder size (cap to MAX_SIDE)
+                        const maxSide = MAX_SIDE;
                         const scale = Math.min(maxSide / placeholder.width, maxSide / placeholder.height, 1);
                         const w = Math.round(placeholder.width * scale);
                         const h = Math.round(placeholder.height * scale);
@@ -855,6 +858,17 @@ app.registerExtension({
                 const lc = message?.live_crop;
                 // lc is expected to be an array of base64 strings (max 3), but support single too
                 const b64s = Array.isArray(lc) ? lc.filter(Boolean).slice(0, 3) : (lc ? [lc] : []);
+                Logger.log({
+                    class: 'LiveCrop',
+                    method: 'onExecuted',
+                    severity: 'trace',
+                    tag: 'execution_message_b64s'
+                }, `Execution message received. b64s count: ${b64s.length}`, {
+                    nodeId: this.id,
+                    message: message,
+                    live_crop: message?.live_crop,
+                    hasMessage: !!message,
+                })
                 if (!b64s.length) {
                     Logger.log({ class: 'LiveCrop', method: 'onExecuted', severity: 'warn', tag: 'no_image_data' }, 'No base64 image data found in execution message');
                     return;
@@ -868,23 +882,15 @@ app.registerExtension({
 
                     // Save multiple images
                     this._livecrop.images = imgs.map(i => ({ img: i, w: i.width, h: i.height }));
-                    // Also keep single fields for backward-compat
-                    const first = this._livecrop.images[0];
-                    if (first) {
-                        this._livecrop.img = first.img;
-                        this._livecrop.imgW = first.w;
-                        this._livecrop.imgH = first.h;
-                    }
 
                     // Store original image dimensions from metadata if available
                     const originalDimensions = message?.original_dimensions;
                     if (originalDimensions) {
-                        this._livecrop.originalWidth = originalDimensions.width;
-                        this._livecrop.originalHeight = originalDimensions.height;
+                        this._livecrop.originalDimensions = originalDimensions;
                     }
 
-                    // Compute node size to fit stacked previews (max width 512)
-                    const maxW = 512;
+                    // Compute node size to fit stacked previews (max width MAX_SIDE)
+                    const maxW = MAX_SIDE;
                     const widths = this._livecrop.images.map(e => e.w);
                     const targetW = Math.min(maxW, Math.max(...widths, 1));
                     const SPACING = 6;
@@ -895,7 +901,9 @@ app.registerExtension({
                         totalH += dh + (i < arr.length - 1 ? SPACING : 0);
                     });
 
-                    this.setSize([targetW, Math.max(1, totalH)]);
+                    const s = computeNodeSize.call(this, [300, 0]);
+
+                    this.setSize([targetW, Math.max(1, totalH) + s[1]]);
                     this._livecrop_redraw?.();
                 };
 

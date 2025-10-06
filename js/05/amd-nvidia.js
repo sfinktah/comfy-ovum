@@ -1,0 +1,60 @@
+/** @typedef {import('@comfyorg/comfyui-frontend-types').ComfyApp} ComfyApp */
+/** @typedef {import('@comfyorg/litegraph').LiteGraph} LiteGraph */
+/** @typedef {import("@comfyorg/litegraph/dist/interfaces").INodeInputSlot} INodeInputSlot */
+/** @typedef {import("@comfyorg/litegraph/dist/interfaces").INodeOutputSlot} INodeOutputSlot */
+/** @typedef {import("../../typings/ComfyNode").ComfyNode} ComfyNode */
+
+import { app } from "../../../scripts/app.js";
+import { chainCallback } from "../01/utility.js";
+import { setupDynamicIOMixin } from "../mtb/utils/dynamic_connections.js";
+
+app.registerExtension({
+    name: "ovum.amdnvidia.dynamicio",
+    async beforeRegisterNodeDef(nodeType, nodeData, appInstance) {
+        if (nodeType.comfyClass !== "AmdNvidiaIfElseOvum") return;
+
+        // Use generic mixin to provide two independent dynamic input groups
+        setupDynamicIOMixin(nodeType, {
+            inputs: [
+                { prefix: 'amd_', type: '*', start: 1 },
+                { prefix: 'nvidia_', type: '*', start: 1 },
+            ],
+            // outputs are handled custom below (out_#)
+            outputs: { mirrorInputs: false },
+        });
+
+        // After mixin hooks, add custom output management named out_#
+        const onNodeCreated = nodeType.prototype.onNodeCreated;
+        nodeType.prototype.onNodeCreated = function () {
+            const r = onNodeCreated ? onNodeCreated.apply(this, []) : undefined;
+            ensureOutputs.call(this);
+            return r;
+        };
+
+        const onConnectionsChange = nodeType.prototype.onConnectionsChange;
+        nodeType.prototype.onConnectionsChange = function (type, index, connected, link_info, inputOrOutput) {
+            const r = onConnectionsChange ? onConnectionsChange.apply(this, [type, index, connected, link_info, inputOrOutput]) : undefined;
+            if (type === LiteGraph.INPUT) {
+                ensureOutputs.call(this);
+                this.setDirtyCanvas(true, true);
+            }
+            return r;
+        };
+
+        function ensureOutputs() {
+            // Count connected amd_ and nvidia_ inputs separately
+            const amdCount = (this.inputs || []).filter(i => i.name.startsWith('amd_') && i.link != null).length;
+            const nvdCount = (this.inputs || []).filter(i => i.name.startsWith('nvidia_') && i.link != null).length;
+            const outCount = Math.max(amdCount, nvdCount);
+            this.outputs = this.outputs || [];
+            // adjust number of outputs to outCount
+            while (this.outputs.length < outCount) this.addOutput(`out_${this.outputs.length + 1}`, '*');
+            while (this.outputs.length > outCount) this.removeOutput(this.outputs.length - 1);
+            // ensure names correct
+            for (let i = 0; i < this.outputs.length; i++) {
+                const desired = `out_${i + 1}`;
+                if (this.outputs[i].name !== desired) this.outputs[i].name = desired;
+            }
+        }
+    },
+});

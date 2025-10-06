@@ -63,14 +63,15 @@ def node_wrapper(container):
 def validate(container):
     # check if "custom_name", "FUNCTION", "INPUT_TYPES", "RETURN_TYPES", "CATEGORY" attributes are set
     for cls in container:
-        for attr in ["FUNCTION", "INPUT_TYPES", "RETURN_TYPES", "CATEGORY"]:
+        # for attr in ["FUNCTION", "INPUT_TYPES", "RETURN_TYPES", "CATEGORY"]:
+        for attr in ["FUNCTION", "INPUT_TYPES", "CATEGORY"]:
             if not hasattr(cls, attr):
                 raise Exception("Class {} doesn't have attribute {}".format(cls.__name__, attr))
-        return_type = cls.RETURN_TYPES
-        if not isinstance(return_type, tuple):
-            raise Exception(f"RETURN_TYPES must be a tuple, got {type(return_type)} in {cls.__name__}")
-        if not all(isinstance(x, str) for x in return_type):
-            raise Exception(f"RETURN_TYPES must be a tuple of strings, got {return_type} in {cls.__name__}")
+        # return_type = cls.RETURN_TYPES
+        # if not isinstance(return_type, tuple):
+        #     raise Exception(f"RETURN_TYPES must be a tuple, got {type(return_type)} in {cls.__name__}")
+        # if not all(isinstance(x, str) for x in return_type):
+        #     raise Exception(f"RETURN_TYPES must be a tuple of strings, got {return_type} in {cls.__name__}")
         input_keys = ["self"]
         for key in cls.INPUT_TYPES()["required"]:
             input_keys.append(key)

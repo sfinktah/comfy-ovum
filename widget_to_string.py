@@ -4,6 +4,7 @@ from pathlib import Path
 import folder_paths  # type: ignore
 
 # noinspection PyUnresolvedReferences,PyPackageRequirements
+from common_types import ByPassTypeTuple
 from comfy.comfy_types.node_typing import IO
 # noinspection PyUnresolvedReferences,PyPackageRequirements
 from nodes import PreviewImage, SaveImage
@@ -14,19 +15,6 @@ from numpy.__config__ import CONFIG
 
 logger = logging.getLogger(__name__)
 matches = None
-
-class TautologyStr(str):
-    def __ne__(self, other):
-        return False
-
-class ByPassTypeTuple(tuple):
-    def __getitem__(self, index):
-        if index>0:
-            index=0
-        item = super().__getitem__(index)
-        if isinstance(item, str):
-            return TautologyStr(item)
-        return item
 
 
 class WidgetToStringOvum:
@@ -75,7 +63,7 @@ The 'any_input' is required for making sure the node you want the value from exi
         workflow = extra_pnginfo["workflow"]
         meta = MetadataProcessor(workflow, prompt)
         # find node
-        node_full_id = meta.findWorkflowNodeFullId(id=id, node_title=node_title, any_input=any_input, unique_id=unique_id)
+        node_full_id = meta.findWorkflowNodeFullId(id=id, node_title=node_title, any_input=any_input, unique_id=unique_id, current_node=cls.__name__)
         # return value
         if return_all:
             # Build string from native inputs
@@ -134,7 +122,7 @@ Alternatively you can search with the node title.
         meta = MetadataProcessor(promptAndWorkflow['workflow'], promptAndWorkflow['prompt'])
 
         # find node
-        node_full_id = meta.findWorkflowNodeFullId(id=id, node_title=node_title, any_input=None, unique_id=unique_id)
+        node_full_id = meta.findWorkflowNodeFullId(id=id, node_title=node_title, any_input=None, unique_id=unique_id, current_node=cls.__name__)
 
         # return value
         if return_all:

@@ -1,0 +1,8 @@
+# Add the unique identifier of each node type you want to convert to result-wrapped.
+# Lines starting with a hash are comments.
+
+# The identifier you want is the one used in NODE_CLASS_MAPPINGS
+# Each non-empty, non-comment line will be attempted for in-place conversion on startup via /ovum_result_wrap_init
+
+# For instance, uncomment this next line to always wrap KSampler:
+# KSampler

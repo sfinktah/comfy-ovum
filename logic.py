@@ -2,6 +2,7 @@ import logging
 from nodes import NODE_CLASS_MAPPINGS as ALL_NODE_CLASS_MAPPINGS
 from server import PromptServer
 from comfy_execution.graph_utils import GraphBuilder, is_link
+from common_types import TautologyStr, ByPassTypeTuple
 
 class AlwaysEqualProxy(str):
     def __eq__(self, _):
@@ -9,17 +10,6 @@ class AlwaysEqualProxy(str):
 
     def __ne__(self, _):
         return False
-
-class TautologyStr(str):
-    def __ne__(self, other):
-        return False
-
-class ByPassTypeTuple(tuple):
-    def __getitem__(self, index):
-        item = super().__getitem__(index)
-        if isinstance(item, str):
-            return TautologyStr(item)
-        return item
 
 
 def update_node_status(node, text, progress=None):

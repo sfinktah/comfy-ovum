@@ -1,7 +1,9 @@
 # Stolen from/extends functionality of https://github.com/aria1th/ComfyUI-LogicUtils/blob/main/pystructure.py
 from common_types import NewPointer, ANYTYPE, _parse_optional_int
 from nodes import NODE_CLASS_MAPPINGS as ALL_NODE_CLASS_MAPPINGS
+from passthru_nodes import PASSTHRU_CLAZZES
 import logging
+from ovum_helpers import resolve_effective_list
 logger = logging.getLogger(__name__)
 
 
@@ -593,150 +595,6 @@ class ListExtend(NewPointer):
             }
         }
 
-class PassthruOvum:
-    """
-    Return an element from a list by index as anytype.
-    """
-    @classmethod
-    def IS_CHANGED(cls, *args, **kwargs):
-        return float("NaN")  # Forces ComfyUI to consider it always changed
-
-    FUNCTION = "passthru"
-    DESCRIPTION = """
-    Does absolutely nothing but pass through the input and log it to the console (it's a debugging thing)
-    """
-    # INPUT_IS_LIST = True
-    RETURN_TYPES = (ANYTYPE,)
-    RETURN_NAMES = ("any_out",)
-    CATEGORY = "ovum/debug"
-    custom_name="Passthru"
-
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "optional": {
-                "any_in": (ANYTYPE,),
-            },
-            "hidden": {
-                "prompt": "PROMPT",
-                "my_unique_id": "UNIQUE_ID"
-            }
-        }
-
-    # noinspection PyShadowingBuiltins
-    @classmethod
-    def passthru(cls, any_in=None, prompt=None, my_unique_id=None, **kwargs):
-        # Only needed if INPUT_IS_LIST is True
-        # prompt = prompt[0]
-        # Only needed if INPUT_IS_LIST is True
-        # my_unique_id = my_unique_id[0]
-        my_unique_id = my_unique_id.rpartition(".")[-1]
-        id, slot = prompt[my_unique_id]['inputs']['any']
-        class_type = prompt[id]['class_type']
-        node_class = ALL_NODE_CLASS_MAPPINGS[class_type]
-        node_title = prompt[my_unique_id]['_meta']['title']
-        output_is_list = node_class.OUTPUT_IS_LIST[slot] if hasattr(node_class, 'OUTPUT_IS_LIST') else False
-        logger.info(f"[ovum] {cls.custom_name}({my_unique_id}): {node_title} ({type(any_in)}) {any_in}, output_is_list: {output_is_list}, id: {id}, slot: {slot}, class_type: {class_type}, node_class: {node_class}")
-        return {
-            "ui": {"status": f"{str(any_in)[:-16]}"},
-            "result": (any_in,)
-        }
-
-class PassthruInputIsListOvum:
-    """
-    Return an element from a list by index as anytype.
-    """
-    @classmethod
-    def IS_CHANGED(cls, *args, **kwargs):
-        return float("NaN")  # Forces ComfyUI to consider it always changed
-
-    FUNCTION = "passthru"
-    DESCRIPTION = """
-    Does absolutely nothing but pass through the input and log it to the console (it's a debugging thing)
-    """
-    INPUT_IS_LIST = True
-    RETURN_TYPES = (ANYTYPE,)
-    RETURN_NAMES = ("any_out",)
-    CATEGORY = "ovum/debug"
-    custom_name="Passthru (Input Is List)"
-
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "optional": {
-                "any_in": (ANYTYPE,),
-            }
-        }
-
-    @classmethod
-    def passthru(cls, any_in=None):
-        logging.info(f"{cls.custom_name}: ({type(any_in)}) {any_in}")
-        return (any_in,)
-
-
-class PassthruInputAndOutputIsListOvum:
-    """
-    Return an element from a list by index as anytype.
-    """
-    @classmethod
-    def IS_CHANGED(cls, *args, **kwargs):
-        return float("NaN")  # Forces ComfyUI to consider it always changed
-
-    FUNCTION = "passthru"
-    DESCRIPTION = """
-    Does absolutely nothing but pass through the input and log it to the console (it's a debugging thing)
-    """
-    INPUT_IS_LIST = True
-    OUTPUT_IS_LIST = (True,)
-    RETURN_TYPES = (ANYTYPE,)
-    RETURN_NAMES = ("any_out",)
-    CATEGORY = "ovum/debug"
-    custom_name="Passthru (Input & Output is List)"
-
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "optional": {
-                "any_in": (ANYTYPE,),
-            }
-        }
-
-    @classmethod
-    def passthru(cls, any_in=None):
-        logging.info(f"{cls.custom_name}: ({type(any_in)}) {any_in}")
-        return (any_in,)
-
-class PassthruOutputIsListOvum:
-    """
-    Return an element from a list by index as anytype.
-    """
-    @classmethod
-    def IS_CHANGED(cls, *args, **kwargs):
-        return float("NaN")  # Forces ComfyUI to consider it always changed
-
-    FUNCTION = "passthru"
-    DESCRIPTION = """
-    Does absolutely nothing but pass through the input and log it to the console (it's a debugging thing)
-    """
-    OUTPUT_IS_LIST = (True,)
-    RETURN_TYPES = (ANYTYPE,)
-    RETURN_NAMES = ("any_out",)
-    CATEGORY = "ovum/debug"
-    custom_name="Passthru (Output Is List)"
-
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "optional": {
-                "any_in": (ANYTYPE,),
-            }
-        }
-
-    @classmethod
-    def passthru(cls, any_in=None):
-        logging.info(f"{cls.custom_name}: ({type(any_in)}) {any_in}")
-        return (any_in,)
-
 
 class GetByIndex(NewPointer):
     """
@@ -744,7 +602,7 @@ class GetByIndex(NewPointer):
     """
     FUNCTION = "list_get"
     DESCRIPTION = """
-    Return an element of any type, from a list of anything, identified by index.
+    Return an element of any type, from a list or batch of anything, identified by index.
     """
     INPUT_IS_LIST = True
     RETURN_TYPES = (ANYTYPE,)
@@ -753,11 +611,14 @@ class GetByIndex(NewPointer):
 
     # noinspection PyShadowingBuiltins
     @staticmethod
-    def list_get(list, index):
+    def list_get(list, index, prompt=None, my_unique_id=None):
+        # Unwrap index, since it will be wrapped in a list due to INPUT_IS_LIST=True
         index = index[0]
-        if index < 0 or index >= len(list):
-            raise IndexError(f"Index out of range: {index} (length {len(list)})")
-        return (list[index],)
+        # Determine the correct collection to index into, accounting for wrapped lists vs batches
+        effective_list, _is_batch, _meta = resolve_effective_list(list, prompt, my_unique_id, input_name='list', logger=logger)
+        if index < 0 or index >= len(effective_list):
+            raise IndexError(f"Index out of range: {index} (length {len(effective_list)})")
+        return (effective_list[index],)
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -765,6 +626,10 @@ class GetByIndex(NewPointer):
             "required": {
                 "list": (ANYTYPE,),
                 "index": ("INT", {"default": 0}),
+            },
+            "hidden": {
+                "prompt": "PROMPT",
+                "my_unique_id": "UNIQUE_ID"
             }
         }
 
@@ -793,31 +658,9 @@ class OvumLength:
     # noinspection PyShadowingBuiltins
     @staticmethod
     def getLength(any, prompt=None, my_unique_id=None):
-        prompt = prompt[0]
-        my_unique_id = my_unique_id[0]
-        my_unique_id = my_unique_id.rpartition(".")[-1]
-        id, slot = prompt[my_unique_id]['inputs']['any']
-        class_type = prompt[id]['class_type']
-        node_class = ALL_NODE_CLASS_MAPPINGS[class_type]
-        output_is_list = node_class.OUTPUT_IS_LIST[slot] if hasattr(node_class, 'OUTPUT_IS_LIST') else False
-        logger.info(f"[ovum] OvumLength({my_unique_id}): {type(any)}: my_unique_id: {my_unique_id}, output_is_list: {output_is_list}, id: {id}, slot: {slot}, class_type: {class_type}, node_class: {node_class}")
-
-        # [ovum] OvumLength(879): <class 'list'>: my_unique_id: 879, output_is_list: True,  id: 834, slot: 0, class_type: LoadImagesListWithCallback, node_class: <class 'image_list_loader.LoadImagesListWithCallback'>
-        # [ovum] OvumLength(881): <class 'list'>: my_unique_id: 881, output_is_list: True,  id: 834, slot: 4, class_type: LoadImagesListWithCallback, node_class: <class 'image_list_loader.LoadImagesListWithCallback'>
-        # [ovum] OvumLength(880): <class 'list'>: my_unique_id: 880, output_is_list: False, id: 926, slot: 0, class_type: CastAnyToList, node_class: <class 'pystructure.CastAnyToList'>
-        # [ovum] OvumLength(928): <class 'list'>: my_unique_id: 928, output_is_list: False, id: 927, slot: 0, class_type: JsonParseNode, node_class: <class 'C:\zluda\comfyui-n\custom_nodes\comfyui-logicutils.pystructure.JsonParseNode'>
-
-        # [ovum] OvumLength(879): <class 'list'>: my_unique_id: 879, output_is_list: True,  id: 834, slot: 0, class_type: LoadImagesListWithCallback, node_class: <class 'image_list_loader.LoadImagesListWithCallback'>
-        # [ovum] OvumLength(881): <class 'list'>: my_unique_id: 881, output_is_list: True,  id: 834, slot: 4, class_type: LoadImagesListWithCallback, node_class: <class 'image_list_loader.LoadImagesListWithCallback'>
-        # [ovum] OvumLength(880): <class 'list'>: my_unique_id: 880, output_is_list: False, id: 926, slot: 0, class_type: CastAnyToList, node_class: <class 'pystructure.CastAnyToList'>
-        # [ovum] OvumLength(928): <class 'list'>: my_unique_id: 928, output_is_list: False, id: 927, slot: 0, class_type: JsonParseNode, node_class: <class 'C:\zluda\comfyui-n\custom_nodes\comfyui-logicutils.pystructure.JsonParseNode'>
-        if output_is_list or len(any) > 1:
-            # If output_is_list is True OR if the input list has more than 1 item,
-            # return the length of the input list
-            return (len(any),)
-        else:
-            # Otherwise, return the length of the first (and only) item in the list
-            return (len(any[0]),)
+        wrapped_input = any
+        effective_list, _is_batch, _meta = resolve_effective_list(wrapped_input, prompt, my_unique_id, input_name='any', logger=logger)
+        return (len(effective_list),)
 
 
 # TODO: add the dynamic input javascript
@@ -856,4 +699,5 @@ class MakeFlatImageList:
         return (images, )
 
 
-CLAZZES = [ListSlice, ListSplice, RepeatItem, ReverseList, ConcatLists, IndexOf, JoinList, UniqueList, StringListEditor, CastListToAny, CastAnyToList, FromListTypeNode, ReinterpretCast, ReinterpretAsListCast, GetByIndex, ListExtend, PassthruOvum, PassthruInputIsListOvum, PassthruInputAndOutputIsListOvum, PassthruOutputIsListOvum, OvumLength, MakeFlatImageList]
+CLAZZES = [ListSlice, ListSplice, RepeatItem, ReverseList, ConcatLists, IndexOf, JoinList, UniqueList, StringListEditor, CastListToAny, CastAnyToList, FromListTypeNode, ReinterpretCast, ReinterpretAsListCast, GetByIndex, ListExtend, OvumLength, MakeFlatImageList]
+CLAZZES.extend(PASSTHRU_CLAZZES)

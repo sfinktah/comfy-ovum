@@ -119,9 +119,9 @@ const ovumCategory = "^ovum";
 app.registerExtension({
     name: "ovum.ui",
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
-        if (!nodeData.category.match(ovumCategory) && !nodeData.name.startsWith("Ovum") && !nodeData.name.endsWith("Ovum")) {
-            return;
-        }
+        // if (!nodeData.category.match(ovumCategory) && !nodeData.name.startsWith("Ovum") && !nodeData.name.endsWith("Ovum")) {
+        //     return;
+        // }
 
         // 2. Display status text from python `ui` return
         const onExecuted = nodeType.prototype.onExecuted;

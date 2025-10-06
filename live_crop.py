@@ -1,5 +1,6 @@
 import base64
 import io
+from pathlib import Path
 from typing import Optional, Tuple, Any, Dict, List, Type
 
 import numpy as np
@@ -12,6 +13,18 @@ Image.MAX_IMAGE_PIXELS = None
 
 # --- Cached directory listing for rotating temp files ---
 _LIVE_CROP_TEMP_CACHE: Dict[str, Dict[str, Any]] = {}
+
+
+def find_first_tensor(x):
+    if isinstance(x, torch.Tensor):
+        return x
+    if isinstance(x, (list, tuple)):
+        for e in x:
+            r = find_first_tensor(e)
+            if r is not None:
+                return r
+    return None
+
 
 def _parse_temp_index_from_name(name: str, prefix: str = "livecrop_temp_", suffix: str = ".png") -> Optional[int]:
     if name.startswith(prefix) and name.endswith(suffix):
@@ -365,6 +378,7 @@ class LiveCrop:
 
     def apply(self, crop_top, crop_bottom, crop_left, crop_right, rotate_degrees, image=None, mask=None, image_ex=None):
         previews = []
+        original_sizes = []
 
         def add_preview_from_tensor(img_t):
             if len(previews) >= 3:
@@ -372,6 +386,7 @@ class LiveCrop:
             try:
                 pil = _tensor_image_to_pil(img_t)
                 previews.append(pil.copy())
+                original_sizes.append(pil.size)
             except Exception:
                 pass
 
@@ -502,6 +517,7 @@ class LiveCrop:
         # overwrite with new image/mask and add image_edits
         img_ex_out["image"] = image_out
         img_ex_out["mask"] = mask_out
+        # noinspection PyListCreation
         edits: List[Dict[str, Any]] = []
         # Rotation edit
         edits.append(LiveCropRotate(int(rotate_degrees or 0)).to_json())
@@ -515,15 +531,6 @@ class LiveCrop:
         try:
             # Save first preview of image_out if possible
             first_tensor = None
-            def find_first_tensor(x):
-                if isinstance(x, torch.Tensor):
-                    return x
-                if isinstance(x, (list, tuple)):
-                    for e in x:
-                        r = find_first_tensor(e)
-                        if r is not None:
-                            return r
-                return None
             first_tensor = find_first_tensor(image_out)
             if first_tensor is not None:
                 pil = _tensor_image_to_pil(first_tensor if first_tensor.dim() == 3 else first_tensor[0])
@@ -552,33 +559,35 @@ class LiveCrop:
         ui = None
         try:
             # If we didn't collect previews above, find the first tensor and preview it
+            width = None
+            height = None
             if not previews and image is not None:
-                def find_first_tensor(x):
-                    if isinstance(x, torch.Tensor):
-                        return x
-                    if isinstance(x, (list, tuple)):
-                        for e in x:
-                            r = find_first_tensor(e)
-                            if r is not None:
-                                return r
-                    return None
+                print("[ovum.livecrop] this point can actually be reached (#234)")
                 t0 = find_first_tensor(image)
                 if t0 is not None:
                     previews = [_tensor_image_to_pil(t0)]
+                    width, height = t0.size if t0 else (None, None)
 
             if previews:
                 b64s = [_make_preview_base64(p) for p in previews[:3]]
-                width, height = previews[0].size if previews else (None, None)
                 ui = {
                     "live_crop": b64s,
-                    "original_dimensions": {"width": width, "height": height}
+                    "original_dimensions": original_sizes
                 }
+                # Add filenames from image_ex filepath if available
+                if isinstance(image_ex, dict) and "filepath" in image_ex:
+                    filepath = image_ex.get("filepath")
+                    if filepath and isinstance(filepath, str):
+                        ui["filenames"] = [Path(filepath).stem]
         except Exception:
             pass
 
         if ui:
             print("[LiveCrop] outputting UI\n")
-            return {"ui": ui, "result": (img_ex_out, image_out, mask_out, bbox_px, bbox_pct)}
+            return {
+                "ui": ui,
+                "result": (img_ex_out, image_out, mask_out, bbox_px, bbox_pct)
+            }
         print("[LiveCrop] not outputting UI\n")
         return img_ex_out, image_out, mask_out, bbox_px, bbox_pct
 

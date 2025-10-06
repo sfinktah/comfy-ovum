@@ -128,7 +128,7 @@ class addValueToList:
         
         return (new_list,)
 
-class getListLength:
+class GetListLength:
     NAME = "Get List Length"
 
     @classmethod
@@ -146,8 +146,8 @@ class getListLength:
 
     def get_length(self, array):
         if not isinstance(array, list):
-            raise ValueError(f"Input 'array' for getListLength must be a list, received {type(array)}.")
-        print(f"getListLength: {str(len(array))}")
+            raise ValueError(f"Input 'array' for GetListLength must be a list, received {type(array)}.")
+        print(f"GetListLength: {str(len(array))}")
         return (len(array),)
 
 class isListNotEmpty:
@@ -168,13 +168,13 @@ class isListNotEmpty:
 
     def not_empty(self, array):
         if not isinstance(array, list):
-            raise ValueError(f"Input 'array' for getListLength must be a list, received {type(array)}.")
+            raise ValueError(f"Input 'array' for GetListLength must be a list, received {type(array)}.")
         print(f"notEmpty: {str(len(array))}")
         return (len(array) > 0,)
 
 
 
-class createEmptyList:
+class CreateEmptyList:
     NAME = "Create Empty List"
 
     @classmethod
@@ -331,8 +331,8 @@ class IfElseOvum:
 CLAZZES = [
     getValueFromList,
     addValueToList,
-    getListLength,
-    createEmptyList,
+    GetListLength,
+    CreateEmptyList,
     listValues,
     listKeys,
     createTuple,

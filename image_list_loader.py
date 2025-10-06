@@ -118,9 +118,9 @@ class LoadImagesListWithCallback:
     CATEGORY = "ovum/image"
     FUNCTION = "load_images"
 
-    RETURN_TYPES = ("IMAGE", "MASK", "STRING", "STRING", "DICT", "BOOLEAN")
-    RETURN_NAMES = ("IMAGE", "MASK", "FILE PATH", "CALLBACK DATA", "PROMPT&WORKFLOW", "exhausted")
-    OUTPUT_IS_LIST = (True, True, False, True, True, False)
+    RETURN_TYPES = ("IMAGE", "MASK", "LIST",          "LIST",               "LIST",                 "LIST",          "BOOLEAN")
+    RETURN_NAMES = ("IMAGE", "MASK", "FILEPATH LIST", "CALLBACK DATA LIST", "PROMPT&WORKFLOW LIST", "IMAGE_EX LIST", "exhausted")
+    OUTPUT_IS_LIST = (True,   True,   False,           False,                False,                  False,           False)
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -128,6 +128,7 @@ class LoadImagesListWithCallback:
             "required": {
             },
             "optional": {
+                "prev_image_exs": ("LIST", {"forceInput": True}),
                 "directory": ("STRING", {"default": ""}),
                 "filenames": ("LIST", {"forceInput": True}),
                 "regex": ("STRING", {"default": ""}),
@@ -269,7 +270,7 @@ class LoadImagesListWithCallback:
         except Exception:
             return str(p.resolve())
 
-    def load_images(self, directory: str = "", filenames: Optional[List[Any]] = None, regex: str = "", custom_filter_class: str = "", image_load_cap: int = 0,
+    def load_images(self, prev_image_exs: Optional[List[Dict[str, Any]]] = None, directory: str = "", filenames: Optional[List[Any]] = None, regex: str = "", custom_filter_class: str = "", image_load_cap: int = 0,
                     start_index: int = 0, recurse: bool = False, invoke_callback: bool = False, load_always: bool = False, sort_method: str = "None",
                     callback_message: str = "ovum.image_list.info"):
         # Choose source of files: explicit filenames list (if provided) or scan directory
@@ -305,6 +306,9 @@ class LoadImagesListWithCallback:
             if not exhausted and total_files == 0:
                 exhausted = True
 
+        # Build a list of per-image dictionaries; start with any prev_image_exs passthrough
+        image_ex_list: List[Dict[str, Any]] = []
+        # Initialize outputs (prev entries will be prepended by adding them first)
         images: List[torch.Tensor] = []
         masks: List[torch.Tensor] = []
         file_paths: List[str] = []
@@ -323,29 +327,63 @@ class LoadImagesListWithCallback:
             except Exception:
                 pass
 
+        # Start by copying through any prev_image_exs items (unknown keys preserved)
+        # IMPORTANT: Do not reprocess or filter these. Simply prepend to outputs.
+        try:
+            for item in (prev_image_exs or []):
+                if not isinstance(item, dict):
+                    continue
+                # Always keep the original dict in IMAGE_EX LIST
+                image_ex_list.append(dict(item))
+
+                # Try to also prepend to the parallel outputs without altering the data
+                img = item.get("image")
+                m = item.get("mask")
+                # Only add to parallel arrays if the basic pair is present to keep lengths consistent
+                if img is not None and m is not None:
+                    images.append(img)
+                    masks.append(m)
+                    file_paths.append(str(item.get("filepath", "")))
+                    cb_payloads.append(str(item.get("callback", "")))
+                    # Combine to preserve previous structure used by callers
+                    prompt_workflow_out.append({
+                        "prompt": item.get("prompt", {}),
+                        "workflow": item.get("workflow", {})
+                    })
+        except Exception:
+            pass
+
         for filepath in files:
             try:
                 img, m = self._load_image_mask(filepath)
-                images.append(img)
-                masks.append(m)
-                # Normalize and use forward slashes for file paths
-                file_paths.append(normalize_path(str(filepath), forward_slashes=True))
+                path_str = normalize_path(str(filepath), forward_slashes=True)
                 if cb_data is not None:
-                    cb_payloads.append(json.dumps(cb_data))
+                    cb_payload = json.dumps(cb_data)
                 else:
-                    cb_payloads.append("")
-                # Extract metadata using MetadataFileExtractor
+                    cb_payload = ""
                 try:
                     combined_dict = MetadataFileExtractor.extract_both(str(filepath))
                 except Exception as e:
                     logger.warning(f"Failed to extract metadata from {filepath}: {e}")
                     combined_dict = {"prompt": {}, "workflow": {}}
+                # Build the IMAGE_EX dict entry and keep fields also in parallel lists for backward compat
+                image_ex = {
+                    "image": img,
+                    "mask": m,
+                    "filepath": path_str,
+                    "callback": cb_payload,
+                    "prompt": combined_dict.get("prompt", {}),
+                    "workflow": combined_dict.get("workflow", {}),
+                }
+                image_ex_list.append(image_ex)
+                images.append(img)
+                masks.append(m)
+                file_paths.append(path_str)
+                cb_payloads.append(cb_payload)
                 prompt_workflow_out.append(combined_dict)
             except Exception:
-                # Skip unreadable image
                 continue
 
-        # Sanity check: lengths should match; log if they don't to aid debugging
         if not (len(images) == len(masks) == len(file_paths) == len(cb_payloads) == len(prompt_workflow_out)):
             logger.warning(
                 "[ovum] Mismatch in output lengths: images=%d masks=%d file_paths=%d cb_payloads=%d prompt_workflow=%d; files=%s",
@@ -353,8 +391,7 @@ class LoadImagesListWithCallback:
                 [str(f) for f in files]
             )
 
-        # logger.info("[ovum] file_paths: {}".format(json.dumps(file_paths, indent=0)))
-        return images, masks, file_paths[:], cb_payloads, prompt_workflow_out, exhausted
+        return images, masks, file_paths[:], cb_payloads, prompt_workflow_out, image_ex_list, exhausted
 
 
 class FolderPathsNode:
