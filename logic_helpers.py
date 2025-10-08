@@ -1,3 +1,5 @@
+from math_string import coerce_any_to_int
+
 class AlwaysEqualProxy(str):
     def __eq__(self, _):
         return True
@@ -18,6 +20,9 @@ class ByPassTypeTuple(tuple):
 
 
 lazy_options = {"lazy": True}
+
+from ovum_helpers import resolve_possible_wrapped_input
+
 
 class mathIntOperation:
     def __init__(self):
@@ -328,6 +333,56 @@ class IfElseOvum:
         return (kwargs['on_true'] if kwargs['boolean'] else kwargs['on_false'],)
 
 
+class PlusOne:
+    NAME = "Convert any to INT and add 1"
+    CATEGORY = "ovum/loop"
+    RETURN_TYPES = ("INT",)
+    FUNCTION = "compute"
+    INPUT_IS_LIST = True
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "value": (any_type,),
+            },
+            "hidden": {
+                "prompt": "PROMPT",
+                "my_unique_id": "UNIQUE_ID",
+            }
+        }
+
+    def compute(self, value, prompt=None, my_unique_id=None):
+        resolved = resolve_possible_wrapped_input(value, prompt, my_unique_id, input_name="value")
+        n = coerce_any_to_int(resolved)
+        return (n + 1,)
+
+
+class MinusOne:
+    NAME = "Convert any to INT and subtract 1"
+    CATEGORY = "ovum/loop"
+    RETURN_TYPES = ("INT",)
+    FUNCTION = "compute"
+    INPUT_IS_LIST = True
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "value": (any_type,),
+            },
+            "hidden": {
+                "prompt": "PROMPT",
+                "my_unique_id": "UNIQUE_ID",
+            }
+        }
+
+    def compute(self, value, prompt=None, my_unique_id=None):
+        resolved = resolve_possible_wrapped_input(value, prompt, my_unique_id, input_name="value")
+        n = coerce_any_to_int(resolved)
+        return (n - 1,)
+
+
 CLAZZES = [
     getValueFromList,
     addValueToList,
@@ -337,6 +392,8 @@ CLAZZES = [
     listKeys,
     createTuple,
     mathIntOperation,
+    PlusOne,
+    MinusOne,
     CompareOvum,
     IfElseOvum,
     isListNotEmpty,

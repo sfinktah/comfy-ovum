@@ -22,7 +22,7 @@ import {GraphHelpers} from "../common/graphHelpersForTwinNodes.js";
 import {analyzeNamesForAbbrev, computeTwinNodeTitle, extractWidgetNames, safeStringTrim} from "../01/stringHelper.js";
 import {
     ensureSlotCounts, findGetters, validateWidgetValue, wrapWidgetValueSetter, setWidgetValue,
-    setWidgetValueWithValidation, suggestValidWidgetValue
+    setWidgetValueWithValidation, suggestValidWidgetValue, showAlert
 } from "../01/twinnodeHelpers.js";
 import { chainCallback } from "../01/utility.js";
 import {TwinNodes} from "../common/twinNodes.js";
@@ -208,6 +208,30 @@ class SetTwinNodes extends TwinNodes {
      */
     onBeforeConnectInput(target_slot, requested_slot) {
         log({ class: "SetTwinNodes", method: "onBeforeConnectInput", severity: "trace", tag: "function_entered" }, "onBeforeConnectInput", { target_slot, requested_slot });
+
+        // During restore, bypass collapsed enforcement and accept the requested/target slot
+        if (this.__restoring) {
+            if (typeof requested_slot === "number" && Number.isFinite(requested_slot) && requested_slot >= 0) return requested_slot | 0;
+            if (typeof target_slot === "number" && Number.isFinite(target_slot) && target_slot >= 0) return target_slot | 0;
+            return 0;
+        }
+
+        // If collapsed, prefer routing to the single active slot (non-empty constant)
+        if (this.flags && this.flags.collapsed) {
+            const active = Array.isArray(this.widgets)
+                ? this.widgets.map((w, i) => ({ i, v: safeStringTrim(w?.value) }))
+                    .filter(o => !!o.v)
+                    .map(o => o.i)
+                : [];
+            if (active.length === 1) {
+                return active[0] | 0;
+            }
+            const reason = active.length === 0 ? "no active inputs (constants unset)" : "multiple active inputs";
+            showAlert(`Cannot connect while collapsed: ${reason}. Expand node to choose a slot.`, { severity: 'warn' });
+            // Disallow the connection
+            return false;
+        }
+
         // Prefer explicitly requested slot if valid
         if (typeof requested_slot === "number" && Number.isFinite(requested_slot) && requested_slot >= 0) {
             return requested_slot | 0;
@@ -304,8 +328,56 @@ class SetTwinNodes extends TwinNodes {
             });
         }
 
+        const stackTrace = new Error().stack || "";
+        const triggers = {
+            'LGraphNode.prototype.connect': stackTrace.includes('LGraphNode.prototype.connect'),
+            'convertToSubgraph': stackTrace.includes('convertToSubgraph'),
+            'pasteFromClipboard': stackTrace.includes('pasteFromClipboard'),
+            'LGraphNode.connect': stackTrace.includes('LGraphNode.connect'),
+            'loadGraphData': stackTrace.includes('loadGraphData')
+        };
+        const isKnownTrigger = Object.values(triggers).some(v => v);
+        if (isConnected) {
+            if (isKnownTrigger) {
+                const trigger = Object.entries(triggers).find(([_, v]) => v)?.[0];
+                log({
+                    class: "SetTwinNodes",
+                    method: "onConnectionsChange",
+                    severity: "debug",
+                    tag: "stacktrace"
+                }, `Known trigger identified: ${trigger}`);
+            }
+            else {
+                log({
+                    class: "SetTwinNodes",
+                    method: "onConnectionsChange",
+                    severity: "trace",
+                    tag: "stacktrace"
+                }, "Unknown trigger: ", stackTrace);
+            }
+
+        }
+
         // Input connected
         if (type === LiteGraph.INPUT && isConnected && link_info && this.graph) {
+            // If collapsed and ambiguous or wrong slot, remove link and expand
+            if (this.flags && this.flags.collapsed && !isKnownTrigger) {
+                const active = Array.isArray(this.widgets)
+                    ? this.widgets.map((w, i) => ({ i, v: safeStringTrim(w?.value) }))
+                        .filter(o => !!o.v)
+                        .map(o => o.i)
+                    : [];
+                const ok = active.length === 1 && active[0] === index;
+                if (!ok) {
+                        showAlert("Collapsed SetTwinNodes connection blocked (no single active input). Caller not recognized; stack captured to console.", { severity: 'warn' });
+                        // try { console.warn('[SetTwinNodes] blocked collapsed connect; stack:', stackTrace); } catch (_) {}
+
+                    // For now, do NOT remove the link; just warn and expand to aid user selection
+                    // this.flags.collapsed = false;
+                    this.canvas?.setDirty(true, true);
+                    return;
+                }
+            }
             const fromNode = GraphHelpers.getNodeById(this.graph, link_info.origin_id);
             if (fromNode?.outputs?.[link_info.origin_slot]) {
                 const srcSlot = fromNode.outputs[link_info.origin_slot];
@@ -385,6 +457,16 @@ class SetTwinNodes extends TwinNodes {
                 validateWidgetValue(this, i);
             }
         }
+    }
+
+    /**
+     * Called after the node has been configured or deserialized.
+     * Used to temporarily suppress connection enforcement while the graph restores links.
+     */
+    onConfigure(_data) {
+        log({ class: "SetTwinNodes", method: "onConfigure", severity: "trace", tag: "function_entered" }, _data);
+        this.__restoring = true;
+        setTimeout(() => { this.__restoring = false; }, 1000);
     }
 
     checkConnections() {

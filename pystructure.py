@@ -1,13 +1,14 @@
 # Stolen from/extends functionality of https://github.com/aria1th/ComfyUI-LogicUtils/blob/main/pystructure.py
 from common_types import NewPointer, ANYTYPE, _parse_optional_int
 from nodes import NODE_CLASS_MAPPINGS as ALL_NODE_CLASS_MAPPINGS
-from passthru_nodes import PASSTHRU_CLAZZES
 import logging
 from ovum_helpers import resolve_effective_list
 logger = logging.getLogger(__name__)
 
 
 class ListSlice(NewPointer):
+    DEPRECATED = True
+    class_name = "ListSliceDEPRECATED(batch)"
     DESCRIPTION = """
     Extract a slice of a list (JavaScript Array.prototype.slice semantics).
 
@@ -81,6 +82,8 @@ class ListSlice(NewPointer):
 
 
 class ListSplice(NewPointer):
+    DEPRECATED = True
+    class_name = "ListSpliceDEPRECATED(batch)"
     DESCRIPTION = """ 
     Splice a list in place (JavaScript Array.prototype.splice semantics).
 
@@ -170,6 +173,8 @@ class ListSplice(NewPointer):
 
 
 class RepeatItem(NewPointer):
+    DEPRECATED = True
+    class_name = "RepeatItemDEPRECATED(batch)"
     DESCRIPTION = """
     Create a list containing the given item repeated 'count' times.
     """
@@ -200,6 +205,8 @@ class RepeatItem(NewPointer):
 
 
 class ReverseList(NewPointer):
+    DEPRECATED = True
+    class_name = "ReverseListDEPRECATED(batch)"
     DESCRIPTION = """
     Return a new list with the elements of the input list in reverse order.
     """
@@ -226,6 +233,8 @@ class ReverseList(NewPointer):
 
 
 class ConcatLists(NewPointer):
+    DEPRECATED = True
+    class_name = "ConcatListsDEPRECATED(batch)"
     DESCRIPTION = """
     Concatenate arrays (lists) (JavaScript Array.prototype.concat semantics).
     - If list_b is empty/unspecified, returns a shallow copy of list_a.
@@ -257,6 +266,8 @@ class ConcatLists(NewPointer):
 
 
 class IndexOf(NewPointer):
+    DEPRECATED = True
+    class_name = "IndexOfDEPRECATED(batch)"
     DESCRIPTION = """
     JavaScript Array.prototype.indexOf-like search.
     - start (optional): Blank -> 0. Negative -> n+start clamped to [0,n].
@@ -300,6 +311,8 @@ class IndexOf(NewPointer):
 
 
 class JoinList(NewPointer):
+    DEPRECATED = True
+    class_name = "JoinListDEPRECATED(batch)"
     DESCRIPTION = """
     Join elements into a string (JavaScript Array.prototype.join semantics).
     - separator (optional): Blank/unspecified -> "," (comma) per JS default. Use empty string for no separator.
@@ -329,6 +342,8 @@ class JoinList(NewPointer):
 
 
 class UniqueList(NewPointer):
+    DEPRECATED = True
+    class_name = "UniqueListDEPRECATED(batch)"
     DESCRIPTION = """
     Return a new list with duplicate values removed, preserving the first occurrence order.
     """
@@ -367,6 +382,8 @@ class UniqueList(NewPointer):
 
 
 class StringListEditor(NewPointer):
+    DEPRECATED = True
+    class_name = "StringListEditorDEPRECATED(batch)"
     DESCRIPTION = """
     Create and edit a list of strings with UI support for adding items and drag & drop of files.
     UI behavior (frontend):
@@ -407,6 +424,8 @@ class StringListEditor(NewPointer):
         }
 
 class FromListTypeNode(NewPointer):
+    DEPRECATED = True
+    class_name = "FromListTypeNodeDEPRECATED(batch)"
     """
     Takes a Python list and converts it to other types (tuple, set, dict, etc.).
     This is the inverse of ToListTypeNode.
@@ -455,6 +474,8 @@ class FromListTypeNode(NewPointer):
         }
 
 class ReinterpretCast(NewPointer):
+    DEPRECATED = True
+    class_name = "ReinterpretCastDEPRECATED(batch)"
     """
     Blindly cast anything to anything
     """
@@ -476,6 +497,8 @@ class ReinterpretCast(NewPointer):
         }
 
 class ReinterpretAsListCast(NewPointer):
+    DEPRECATED = True
+    class_name = "ReinterpretAsListCastDEPRECATED(batch)"
     """
     Blindly cast anything to anything
     """
@@ -500,6 +523,8 @@ class ReinterpretAsListCast(NewPointer):
 
 
 class CastListToAny(NewPointer):
+    DEPRECATED = True
+    class_name = "CastListToAnyDEPRECATED(batch)"
     DESCRIPTION = """
     Cast a LIST to anytype (*) so it can connect to any input.
     Non-mutating pass-through of the given list.
@@ -524,12 +549,13 @@ class CastListToAny(NewPointer):
 
 
 class CastAnyToList(NewPointer):
+    DEPRECATED = True
+    class_name = "CastAnyToListDEPRECATED(batch)"
     DESCRIPTION = """
     Cast anytype (*) to LIST. Validates that the input is a Python list and passes it through.
     """
     FUNCTION = "any_to_list"
     RETURN_TYPES = ("LIST",)
-    # INPUT_IS_LIST = True
     CATEGORY = "ovum/data"
     custom_name = "Cast Any to Pyobjects/List"
 
@@ -560,6 +586,8 @@ class CastAnyToList(NewPointer):
         }
 
 class ListExtend(NewPointer):
+    DEPRECATED = True
+    class_name = "ListExtendDEPRECATED(batch)"
     """
     Extends list A by appending elements from list B. Returns result, doesn't modify A.
     """
@@ -595,109 +623,4 @@ class ListExtend(NewPointer):
             }
         }
 
-
-class GetByIndex(NewPointer):
-    """
-    Return an element from a list by index as anytype.
-    """
-    FUNCTION = "list_get"
-    DESCRIPTION = """
-    Return an element of any type, from a list or batch of anything, identified by index.
-    """
-    INPUT_IS_LIST = True
-    RETURN_TYPES = (ANYTYPE,)
-    CATEGORY = "Data"
-    custom_name="Get by Index"
-
-    # noinspection PyShadowingBuiltins
-    @staticmethod
-    def list_get(list, index, prompt=None, my_unique_id=None):
-        # Unwrap index, since it will be wrapped in a list due to INPUT_IS_LIST=True
-        index = index[0]
-        # Determine the correct collection to index into, accounting for wrapped lists vs batches
-        effective_list, _is_batch, _meta = resolve_effective_list(list, prompt, my_unique_id, input_name='list', logger=logger)
-        if index < 0 or index >= len(effective_list):
-            raise IndexError(f"Index out of range: {index} (length {len(effective_list)})")
-        return (effective_list[index],)
-
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "list": (ANYTYPE,),
-                "index": ("INT", {"default": 0}),
-            },
-            "hidden": {
-                "prompt": "PROMPT",
-                "my_unique_id": "UNIQUE_ID"
-            }
-        }
-
-# Copied from easyuse to better understand how the crazed INPUT_IS_LIST/OUTPUT_IS_LIST system works (or doesn't)
-class OvumLength:
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "any": (ANYTYPE, {}),
-            },
-            "hidden":{
-                "prompt": "PROMPT",
-                "my_unique_id": "UNIQUE_ID"
-            }
-        }
-
-    RETURN_TYPES = ("INT",)
-    RETURN_NAMES = ("length",)
-
-    INPUT_IS_LIST = True
-
-    FUNCTION = "getLength"
-    CATEGORY = "EasyUse/Logic"
-
-    # noinspection PyShadowingBuiltins
-    @staticmethod
-    def getLength(any, prompt=None, my_unique_id=None):
-        wrapped_input = any
-        effective_list, _is_batch, _meta = resolve_effective_list(wrapped_input, prompt, my_unique_id, input_name='any', logger=logger)
-        return (len(effective_list),)
-
-
-# TODO: add the dynamic input javascript
-class MakeFlatImageList:
-    @classmethod
-    def INPUT_TYPES(s):
-        return {"optional": {"image1": ("IMAGE",), }}
-
-    DESCRIPTION = """
-    Create a list of images, lists of lists of images, batches, whatever.
-    """
-    RETURN_TYPES = ("IMAGE",)
-    # OUTPUT_IS_LIST = (True,)
-    FUNCTION = "doit"
-
-    CATEGORY = "ovum/debug"
-
-    def doit(self, **kwargs):
-        images = []
-
-        for k, v in kwargs.items():
-            logger.info(f"k: {k}, v: {type(v)}")
-            if isinstance(v, list):
-                for i in v:
-                    logger.info(f"i: {i}, v: {type(v)}")
-                    if isinstance(i, list):
-                        for j in i:
-                            logger.info(f"i: {j}, v: {type(v)}")
-                            images.append(j)
-                    else:
-                        images.append(i)
-            else:
-                images.append(v)
-
-        logger.info(f"returned {len(images)} images")
-        return (images, )
-
-
-CLAZZES = [ListSlice, ListSplice, RepeatItem, ReverseList, ConcatLists, IndexOf, JoinList, UniqueList, StringListEditor, CastListToAny, CastAnyToList, FromListTypeNode, ReinterpretCast, ReinterpretAsListCast, GetByIndex, ListExtend, OvumLength, MakeFlatImageList]
-CLAZZES.extend(PASSTHRU_CLAZZES)
+CLAZZES = [ListSlice, ListSplice, RepeatItem, ReverseList, ConcatLists, IndexOf, JoinList, UniqueList, StringListEditor, CastListToAny, CastAnyToList, FromListTypeNode, ReinterpretCast, ReinterpretAsListCast, ListExtend]

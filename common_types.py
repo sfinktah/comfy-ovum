@@ -29,6 +29,18 @@ class ByPassTypeTuple(tuple):
         return item
 
 
+# noinspection DuplicatedCode
+class MultiType(str):
+    def __ne__(self, value: object) -> bool:
+        if self == "*" or value == "*":
+            return False
+        if not isinstance(value, str):
+            return True
+        a = frozenset(self.split(","))
+        b = frozenset(value.split(","))
+        return not (b.issubset(a) or a.issubset(b))
+
+
 ANYTYPE = AnyType("*")
 
 

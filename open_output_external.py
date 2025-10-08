@@ -33,6 +33,7 @@ class OpenOutputViaShell:
     RETURN_NAMES = ("output",)
     FUNCTION = "run_command"
     CATEGORY = "ovum"
+    OUTPUT_NODE = True # otherwise it won't run unless it's part of a continued work flow
 
     def _validate_media_file(self, filepath):
         """Validate that the file exists and is an image or video file."""

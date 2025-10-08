@@ -16,7 +16,7 @@
   },
   "license": "MIT",
   "author": "me",
-  "type": "idk",
+  "type": "module",
   "main": "index.js",
   "directories": {
     "doc": "docs"
@@ -29,5 +29,8 @@
     "@comfyorg/litegraph": "^0.8.100",
     "fzf": "^0.5.2",
     "typescript": "^5.9.2"
+  },
+  "dependencies": {
+    "lodash-es": "^4.17.21"
   }
 }

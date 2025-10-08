@@ -241,12 +241,70 @@ app.registerExtension({
                     }, "No 'numberOfWidgets' property found in node properties and beginning of function. Aborting rather than using a default value of 2.");
                     return;
                 }
-                // if (this.__restoring) { log({ class: "GetTwinNodes", method: "onConnectionsChange", severity: "debug", tag: "restore_skip" }, "[GetTwinNodes] aborted due to __restoring state"); return; }
+                if (this.__restoring) { log({ class: "GetTwinNodes", method: "onConnectionsChange", severity: "debug", tag: "restore_skip" }, "[GetTwinNodes] aborted due to __restoring state"); return; }
 
 
                 // If an output is connected and the constant for that slot is unset,
                 // auto-select if there's only one known option for that widgetIndex.
                 if (slotType === LiteGraph.OUTPUT && isChangeConnect) {
+                    // const stackTrace = new Error().stack || "";
+                    // const triggers = {
+                    //     'LGraphNode.prototype.connect': stackTrace.includes('LGraphNode.prototype.connect'),
+                    //     'convertToSubgraph': stackTrace.includes('convertToSubgraph'),
+                    //     'pasteFromClipboard': stackTrace.includes('pasteFromClipboard'),
+                    //     'LGraphNode.connect': stackTrace.includes('LGraphNode.connect'),
+                    //     'loadGraphData': stackTrace.includes('loadGraphData')
+                    // };
+                    // const isKnownTrigger = Object.values(triggers).some(v => v);
+                    // if (isKnownTrigger) {
+                    //     const trigger = Object.entries(triggers).find(([_, v]) => v)?.[0];
+                    //     log({
+                    //         class: "GetTwinNodes",
+                    //         method: "onConnectionsChange",
+                    //         severity: "debug",
+                    //         tag: "stacktrace"
+                    //     }, `Known trigger identified: ${trigger}`);
+                    // }
+                    // else {
+                    //     log({
+                    //         class: "GetTwinNodes",
+                    //         method: "onConnectionsChange",
+                    //         severity: "trace",
+                    //         tag: "stacktrace"
+                    //     }, "Unknown trigger: ", stackTrace);
+                    //
+                    // }
+                    
+                    // When collapsed, only allow connecting if there is exactly one active output and it matches
+                    // if (this.flags && this.flags.collapsed && !isKnownTrigger) {
+                    //     const active = Array.isArray(this.widgets)
+                    //         ? this.widgets.map((w, i) => ({ i, v: safeStringTrim(w?.value) }))
+                    //             .filter(o => !!o.v)
+                    //             .map(o => o.i)
+                    //         : [];
+                    //     const ok = active.length === 1 && active[0] === slot;
+                    //     if (!ok) {
+                    //             showAlert("Collapsed GetTwinNodes connection blocked (no single active output). Caller not recognized; stack captured to console.", { severity: 'warn' });
+                    //             try { console.warn('[GetTwinNodes] blocked collapsed connect; stack:', stackTrace); } catch (_) {}
+                    //         // For now, do NOT remove the link; just warn and expand
+                    //         // this.flags.collapsed = false;
+                    //         this.canvas?.setDirty(true, true);
+                    //         return;
+                    //     }
+                    // }
+
+                    // If the specific output's constant is unset/invalid, warn and remove link
+                    // const currVal = safeStringTrim(this.widgets?.[slot]?.value);
+                    // if (!currVal) {
+                    //     if (isKnownTrigger) {
+                    //         showAlert("GetTwinNodes: output connect attempted with empty/invalid constant. Caller not recognized; stack captured to console.", { severity: 'warn' });
+                    //         // try { console.warn('[GetTwinNodes] invalid constant connect; stack:', stackTrace); } catch (_) {}
+                    //     } else {
+                    //         showAlert("GetTwinNodes: output connect attempted with empty/invalid constant.", { severity: 'warn' });
+                    //     }
+                    //     // Do not remove the link for now; just warn
+                    //     return;
+                    // }
                     // When connecting the FIRST output and widget[0] is unset, and there are no other links,
                     // derive widget[0] from the target input's label/name/type.
                     // TODO: Check - auto-derive is intentionally limited to first output slot (slot 0)

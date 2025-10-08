@@ -3,10 +3,9 @@
 import { app } from "../../../scripts/app.js";
 import {chainCallback} from "../01/utility.js";
 import { Logger } from "../common/logger.js";
+import { drawNodeStatus } from "../common/ui_helpers.js";
 
 const ovumRegexCategory = "ovum/regex";
-
-const STATUS_BELOW_NODE = true;
 
 app.registerExtension({
     name: "ovum.regex.ui",
@@ -94,23 +93,7 @@ app.registerExtension({
         const onDrawForeground = nodeType.prototype.onDrawForeground;
         nodeType.prototype.onDrawForeground = function(ctx) {
             onDrawForeground?.apply(this, arguments);
-
-            /** @this {LGraphNode} */
-            if (this.status) {
-                const fontSize = 12;
-                ctx.font = `${fontSize}px Arial`;
-                ctx.fillStyle = "#888";
-                ctx.textAlign = "center";
-                if (STATUS_BELOW_NODE) {
-                    const V_OFFSET_BELOW = 14;
-                    ctx.fillText(this.status, this.size[0] / 2, this.size[1] + V_OFFSET_BELOW);
-                } else {
-                    if (this.flags?.collapsed) {
-                        return;
-                    }
-                    ctx.fillText(this.status, this.size[0] / 2, this.size[1] - fontSize / 2 - 2);
-                }
-            }
+            drawNodeStatus.call(this, ctx, this.status, this.size, this.flags);
         };
     },
 });
@@ -133,32 +116,23 @@ app.registerExtension({
                 method: 'onExecuted',
                 severity: 'trace',
             }, {message});
-            if ((this.status = message?.status ? message.status.join("\n") : undefined)) {
-                /** @this {LGraphNode} */
-                this.setDirtyCanvas(true, true);
+            if (message?.status) {
+                if ((this.status = message.status.slice(0,5).join("⏎\n"))) {
+                    /** @this {LGraphNode} */
+                    this.setDirtyCanvas(true, true);
+                }
+            } else {
+                if ((this.status = undefined)) {
+                    /** @this {LGraphNode} */
+                    this.setDirtyCanvas(true, true);
+                }
             }
         };
 
         const onDrawForeground = nodeType.prototype.onDrawForeground;
         nodeType.prototype.onDrawForeground = function(ctx) {
             onDrawForeground?.apply(this, arguments);
-
-            /** @this {LGraphNode} */
-            if (this.status) {
-                const fontSize = 12;
-                ctx.font = `${fontSize}px Arial`;
-                ctx.fillStyle = "#888";
-                ctx.textAlign = "center";
-                if (STATUS_BELOW_NODE) {
-                    const V_OFFSET_BELOW = 14;
-                    ctx.fillText(this.status, this.size[0] / 2, this.size[1] + V_OFFSET_BELOW);
-                } else {
-                    if (this.flags?.collapsed) {
-                        return;
-                    }
-                    ctx.fillText(this.status, this.size[0] / 2, this.size[1] - fontSize / 2 - 2);
-                }
-            }
+            drawNodeStatus.call(this, ctx, this.status, this.size, this.flags);
         };
     },
 });

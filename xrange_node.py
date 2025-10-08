@@ -1,5 +1,8 @@
-from common_types import NewPointer, _parse_optional_int
+from common_types import NewPointer, _parse_optional_int, MultiType
+from math_string import coerce_any_to_int
 
+# INT_STRING = MultiType("STRING,INT")
+INT_STRING = "STRING"
 
 class XRangeNode(NewPointer):
     DESCRIPTION = """
@@ -64,13 +67,40 @@ class XRangeNode(NewPointer):
 
     @staticmethod
     def xrange_compute(start=None, stop=None, step=None, repeat=False, cursor=0, advance=True, reset=False):
-        s, e, st = XRangeNode._compute_range_params(start, stop, step)
+        # Helper to check blank-like strings
+        def _is_blank(x):
+            if x is None:
+                return True
+            try:
+                return str(x).strip() == ""
+            except Exception:
+                return False
+
+        # DRY helper to coerce fields with defaults and clear errors
+        def _field_int(val, name, default=None, required=False, required_error=None):
+            if _is_blank(val):
+                if required:
+                    if required_error:
+                        raise ValueError(required_error)
+                    raise ValueError(f"'{name}' is required")
+                return default
+            try:
+                return coerce_any_to_int(val)
+            except Exception as e:
+                raise ValueError(f"Invalid '{name}': {e}")
+
+        # Parse parameters using math-aware coercion, preserving optional semantics
+        s = _field_int(start, "start", default=0)
+        st = _field_int(step, "step", default=1)
+        if st == 0:
+            raise ValueError("Invalid 'step': step cannot be 0")
+        e = _field_int(stop, "stop", required=True, required_error="'stop' must be provided for XRange")
+
         n = XRangeNode._range_length(s, e, st)
         full_list = list(range(s, e, st))
 
-        # Normalize cursor (STRING widget)
-        cur_opt = _parse_optional_int(cursor, "cursor")
-        cur = 0 if cur_opt is None else cur_opt
+        # Normalize cursor (accept INT or STRING; default 0 on blank)
+        cur = _field_int(cursor, "cursor", default=0)
 
         # Degenerate: no values. Define outputs sanely and keep/normalize cursor.
         if n == 0:
@@ -125,11 +155,11 @@ class XRangeNode(NewPointer):
             "required": {
             },
             "optional": {
-                "start": ("STRING", {"default": "0", "tooltip": "Optional start as integer string. Blank/whitespace -> 0."}),
-                "stop": ("STRING", {"default": "10", "tooltip": "Required stop as integer string. Leave blank to error at runtime."}),
-                "step": ("STRING", {"default": "1", "tooltip": "Optional step as integer string. Blank/whitespace -> 1. Non-zero. Can be negative."}),
+                "start": (INT_STRING, {"default": "0", "tooltip": "Optional start as integer string. Blank/whitespace -> 0."}),
+                "stop": (INT_STRING, {"default": "10", "tooltip": "Required stop as integer string. Leave blank to error at runtime."}),
+                "step": (INT_STRING, {"default": "1", "tooltip": "Optional step as integer string. Blank/whitespace -> 1. Non-zero. Can be negative."}),
                 "repeat": ("BOOLEAN", {"default": False, "tooltip": "When enabled, wraps to beginning after reaching the end (or to end for negative step)."}),
-                "cursor": ("STRING", {"default": None, "tooltip": "Current index into the range as integer string. Blank/whitespace -> 0."}),
+                "cursor": ("INT", {"default": 0, "tooltip": "Current index into the range as integer string."}),
                 "advance": ("BOOLEAN", {"default": True, "tooltip": "Disable to pause at the current value."}),
                 "reset": ("BOOLEAN", {"default": False, "tooltip": "When True, restart at the beginning."}),
             }
