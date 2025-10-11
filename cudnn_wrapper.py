@@ -1,4 +1,4 @@
-from typing import Callable, Optional, Type
+from typing import Callable, Optional, Type, Any
 import types
 
 # noinspection PyPackageRequirements
@@ -57,6 +57,64 @@ def _print_cudnn_change(target_value: bool, prev_enabled: bool, prev_benchmark: 
     else:
         print(f"[OVUM_CDDN_TOGGLE] torch.backends.cudnn.benchmark still set to {target_value}")
 
+# def _shape_result(value: Any) -> Any:
+#     """
+#     Transform node return values to their types (prefixed with 'cudNN:') instead of the actual values:
+#     - If the node returns a tuple, return:
+#         {
+#            "ui": {"status": [list of 'cudNN:<TypeName>' strings]},
+#            "result": (tuple of 'cudNN:<TypeName>' strings)
+#         }
+#     - If the node returns a dict, do not mutate the original; ensure that 'result' is present and
+#       replaced with its typed representation, and that 'ui.status' mirrors the same information.
+#     - Otherwise, for any single value, return:
+#         {
+#            "ui": {"status": ["cudNN:<TypeName>"]},
+#            "result": "cudNN:<TypeName>"
+#         }
+#     """
+#
+#     def _typed_repr(x: Any):
+#         if isinstance(x, tuple):
+#             return tuple(f"cudNN:{type(el).__name__}" for el in x)
+#         return f"cudNN:{type(x).__name__}"
+#
+#     # Tuple case
+#     if isinstance(value, tuple):
+#         typed = _typed_repr(value)  # tuple of strings
+#         return {
+#             "ui": {"status": list(typed)},
+#             "result": typed,
+#         }
+#
+#     # Dict case
+#     if isinstance(value, dict):
+#         # Do not mutate original dict
+#         out = dict(value)
+#         if 'result' in out:
+#             result_val = out['result']
+#         else:
+#             # If no explicit 'result', treat the entire dict as the result payload
+#             result_val = value
+#             out['result'] = result_val
+#
+#         typed = _typed_repr(result_val)
+#         out['result'] = typed
+#
+#         ui = dict(out.get('ui') or {})
+#         if isinstance(typed, tuple):
+#             ui['status'] = list(typed)
+#         else:
+#             ui['status'] = typed
+#         out['ui'] = ui
+#         return out
+#
+#     # Fallback: single value -> wrap
+#     typed = _typed_repr(value)
+#     return {
+#         "ui": {"status": [typed]},
+#         "result": typed,
+#     }
 
 def _wrap_function_with_cudnn_disable(callable_fn: Callable) -> Callable:
     def wrapped(node, *args, **kwargs):
@@ -84,6 +142,8 @@ def _wrap_function_with_cudnn_disable(callable_fn: Callable) -> Callable:
 
         try:
             return callable_fn(node, *args, **kwargs)
+            # original = callable_fn(node, *args, **kwargs)
+            # return _shape_result(original)
         finally:
             # Restore
             cur_enabled = torch.backends.cudnn.enabled
@@ -103,11 +163,13 @@ def create_cudnn_wrapped_node(class_to_wrap: Type,
     is wrapped to temporarily disable cudnn for AMD users during the call, then restore.
     """
     if getattr(class_to_wrap, _FLAG, False):
+        print(f"[CUDNNWrapper] {class_to_wrap.__name__} already wrapped")
         # already wrapped
         return None
 
     new_name = new_name or f"cudnn_wrapped_{class_to_wrap.__name__}"
     if new_name in NODE_CLASS_MAPPINGS:
+        print(f"[CUDNNWrapper] '{class_to_wrap.__name__}' => '{new_name}' name collision; avoid duplicate registration")
         # name collision; avoid duplicate registration
         return None
 

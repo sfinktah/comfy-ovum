@@ -1,6 +1,6 @@
-import { app } from "../../../scripts/app.js";
-import { api } from "../../../scripts/api.js";
-import { chainCallback } from "../01/utility.js";
+import {app} from "../../../scripts/app.js";
+import {api} from "../../../scripts/api.js";
+import {chainCallback} from "../01/utility.js";
 
 // Debounced bulk query machinery for cudnn wrap status
 const BULK_QUERY_ROUTE = "/ovum/cudnn_wrap_query_bulk";
@@ -193,11 +193,11 @@ app.registerExtension({
     async nodeCreated(node) {
         const original_getTitle = node.getTitle;
         // We don't need to do this is we are adding a freakin' AMD logo to the titlebar.
-        // node.getTitle = function () {
-        //     const t = original_getTitle ? original_getTitle.call(node) : node.title || node.type;
-        //     if (node._is_cudnn_wrapped) return `${t} (cudnn)`;
-        //     else return t;
-        // };
+        node.getTitle = function () {
+            const t = original_getTitle ? original_getTitle.call(node) : node.title || node.type;
+            if (node._is_cudnn_wrapped) return `${t} (cudnn)`;
+            else return t;
+        };
 
         // Track running state
         chainCallback(node, 'onExecute', function () {
@@ -258,6 +258,7 @@ app.registerExtension({
 
             // Tooltip when hovering
             if (this._ov_cudnn_hover) {
+                ctx.save();
                 let msg;
                 let bg = color;
                 if (!AMD_LIKE) {
@@ -281,6 +282,7 @@ app.registerExtension({
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 ctx.fillText(msg, cx, ry + th / 2);
+                ctx.restore();
             }
         });
     },
@@ -295,7 +297,7 @@ app.registerExtension({
             await fetch_status();
         } catch {}
         if (!STATUS_TIMER) {
-            STATUS_TIMER = setInterval(fetch_status, 2500);
+            STATUS_TIMER = setInterval(fetch_status, 60000);
         }
     },
 });
@@ -304,8 +306,7 @@ async function call_server(type, method) {
     const body = new FormData();
     if (type) body.append("type", type);
     const response = await api.fetchApi(method, { method: "POST", body });
-    const data = await response.json();
-    return data;
+    return await response.json();
 }
 
 async function call_server_bulk(types, method) {
@@ -314,6 +315,5 @@ async function call_server_bulk(types, method) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ types }),
     });
-    const data = await response.json();
-    return data;
+    return await response.json();
 }

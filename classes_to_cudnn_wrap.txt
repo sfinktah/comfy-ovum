@@ -18,6 +18,8 @@
 #
 # For instance, uncomment this next line to indicate you want to always cudnn-wrap KSampler:
 # KSampler
+VAEDecodeOvum
+VAEDecode Ovum
 VAEDecode
 VAEDecodeTiled
 Vae Decode (mtb)

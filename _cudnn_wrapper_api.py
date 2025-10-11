@@ -4,6 +4,7 @@ from nodes import NODE_CLASS_MAPPINGS
 from server import PromptServer
 import os
 import re
+import inspect
 # noinspection PyUnresolvedReferences,PyPackageRequirements
 import torch
 
@@ -154,9 +155,13 @@ async def ovum_cudnn_wrap_init(request: web.Request):
         # Apply exact matches first
         for key in exact_keys:
             try:
-                wrapped = convert_to_cudnn_wrapped_inplace(key)
+                wrapped = bool(convert_to_cudnn_wrapped_inplace(key))
+                if not wrapped and not is_cudnn_wrapped(key):
+                    wrapped = create_cudnn_wrapped_version(key) is not None
                 if wrapped:
                     print(f"CUDNNWrapper: Wrapped '{key}'")
+                elif not is_cudnn_wrapped(key):
+                    print(f"CUDNNWrapper: Failed wrapping '{key}'")
             except KeyError:
                 print(f"CUDNNWrapper: '{key}' not found to wrap")
             except Exception as e:
@@ -170,9 +175,13 @@ async def ovum_cudnn_wrap_init(request: web.Request):
                     if pat.search(key):
                         matched_any = True
                         try:
-                            wrapped = convert_to_cudnn_wrapped_inplace(key)
+                            wrapped = bool(convert_to_cudnn_wrapped_inplace(key))
+                            if not wrapped and not is_cudnn_wrapped(key):
+                                wrapped = create_cudnn_wrapped_version(key) is not None
                             if wrapped:
                                 print(f"CUDNNWrapper: Wrapped via regex {disp} -> '{key}'")
+                            elif not is_cudnn_wrapped(key):
+                                print(f"CUDNNWrapper: Failed wrapping via regex {disp} -> '{key}'")
                         except Exception as e:
                             print(f"CUDNNWrapper: Failed regex-wrap '{key}' for {disp} because {type(e).__name__}")
                 except Exception as e:
@@ -212,5 +221,221 @@ async def status(d):
             "torch.backends.cudnn.benchmark": torch.backends.cudnn.benchmark,
             "amd_like": amd_like
         })
+    except Exception as e:
+        return web.json_response({"error": True, "message": str(e)})
+
+
+# -------------------- Debug helpers and routes --------------------
+
+def _flags_from_letters_debug(letters: str) -> int:
+    flag_map = {
+        'i': re.IGNORECASE,
+        'm': re.MULTILINE,
+        's': re.DOTALL,
+        'x': re.VERBOSE,
+        'a': re.ASCII,
+        'u': re.UNICODE,
+        'L': re.LOCALE,
+    }
+    flags = 0
+    for ch in letters or "":
+        if ch in flag_map:
+            flags |= flag_map[ch]
+    return flags
+
+
+def _node_info_for_key(key: str) -> dict:
+    info = {"key": key, "exists": key in NODE_CLASS_MAPPINGS}
+    if not info["exists"]:
+        return info
+    cls = NODE_CLASS_MAPPINGS.get(key)
+    info["class_repr"] = repr(cls)
+    info["class_name"] = getattr(cls, "__name__", None)
+    info["module"] = getattr(cls, "__module__", None)
+    info["qualname"] = getattr(cls, "__qualname__", None)
+    info["category"] = getattr(cls, "CATEGORY", None)
+    info["function"] = getattr(cls, "FUNCTION", None)
+    try:
+        src_file = inspect.getsourcefile(cls) or inspect.getfile(cls)
+        info["file"] = src_file
+        try:
+            src_lines, start_line = inspect.getsourcelines(cls)
+            info["line"] = start_line
+            info["lines_of_code"] = len(src_lines)
+        except Exception:
+            pass
+    except Exception:
+        pass
+    try:
+        info["is_wrapped"] = bool(is_cudnn_wrapped(key))
+    except Exception:
+        info["is_wrapped"] = False
+    return info
+
+
+@PromptServer.instance.routes.get("/ovum/debug/node-mappings")
+async def debug_node_mappings(request: web.Request):
+    """
+    Query params:
+      - q: substring filter (case-insensitive)
+      - re: regex pattern to filter keys
+      - flags: regex flags letters among [imsxauL]
+      - details: "1" to include detailed class info
+      - limit: integer to limit returned items (after sorting/filtering)
+    """
+    try:
+        params = request.rel_url.query
+        substr = (params.get("q") or "").strip()
+        pattern = (params.get("re") or "").strip()
+        flags_letters = (params.get("flags") or "").strip()
+        details = (params.get("details") or "0").strip() == "1"
+        limit_str = (params.get("limit") or "").strip()
+        limit = int(limit_str) if limit_str.isdigit() else None
+
+        keys = sorted(NODE_CLASS_MAPPINGS.keys())
+        if substr:
+            s = substr.lower()
+            keys = [k for k in keys if s in k.lower()]
+
+        if pattern:
+            try:
+                pat = re.compile(pattern, _flags_from_letters_debug(flags_letters))
+                keys = [k for k in keys if pat.search(k)]
+            except re.error as e:
+                return web.json_response({"error": True, "message": f"Invalid regex: {e}"})
+        total = len(keys)
+        if limit is not None:
+            keys = keys[:max(0, limit)]
+        if details:
+            data = [_node_info_for_key(k) for k in keys]
+        else:
+            data = keys
+        return web.json_response({
+            "count": total,
+            "returned": len(keys),
+            "filters": {"q": substr, "re": pattern, "flags": flags_letters, "details": details, "limit": limit},
+            "data": data
+        })
+    except Exception as e:
+        return web.json_response({"error": True, "message": str(e)})
+
+
+@PromptServer.instance.routes.get("/ovum/debug/node-details")
+async def debug_node_details(request: web.Request):
+    """
+    Query params:
+      - key: exact NODE_CLASS_MAPPINGS key
+    """
+    try:
+        key = (request.rel_url.query.get("key") or "").strip()
+        if not key:
+            return web.json_response({"error": True, "message": "Missing 'key' parameter"})
+        info = _node_info_for_key(key)
+        if not info.get("exists"):
+            # Provide basic suggestions to help spotting typos
+            suggestions = []
+            k_lower = key.lower()
+            for k in sorted(NODE_CLASS_MAPPINGS.keys()):
+                if k_lower in k.lower() or k.lower() in k_lower:
+                    suggestions.append(k)
+                if len(suggestions) >= 20:
+                    break
+            return web.json_response({"exists": False, "key": key, "suggestions": suggestions})
+        return web.json_response(info)
+    except Exception as e:
+        return web.json_response({"error": True, "message": str(e)})
+
+
+@PromptServer.instance.routes.get("/ovum/debug/config")
+async def debug_config(request: web.Request):
+    """
+    Parses classes_to_cudnn_wrap.txt and previews how it would match current NODE_CLASS_MAPPINGS.
+    Returns exact targets, regex entries (display), and which keys each regex would match.
+    """
+    try:
+        # Resolve config path similarly to init
+        root_cfg = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'classes_to_cudnn_wrap.txt'))
+        module_cfg = os.path.join(os.path.dirname(__file__), 'classes_to_cudnn_wrap.txt')
+        cfg_path = root_cfg if os.path.isfile(root_cfg) else module_cfg
+
+        exact_keys = []
+        regex_entries = []  # list of tuples (display, compiled)
+        raw_lines = []
+
+        def add_regex(display: str, pattern: str, flags_val: int):
+            try:
+                regex_entries.append((display, re.compile(pattern, flags_val)))
+            except re.error as e:
+                regex_entries.append((f"{display} [INVALID: {e}]", None))
+
+        with open(cfg_path, 'r', encoding='utf-8', errors='ignore') as f:
+            for raw in f.readlines():
+                raw_lines.append(raw.rstrip("\n"))
+                if raw.startswith('#'):
+                    continue
+                line = raw.strip()
+                if not line:
+                    continue
+                if line.startswith('re:'):
+                    rest = line[3:].strip()
+                    flags_val = 0
+                    if ':' in rest:
+                        maybe_flags, _, remainder = rest.partition(':')
+                        if maybe_flags and all(c.isalpha() for c in maybe_flags):
+                            flags_val = _flags_from_letters_debug(maybe_flags)
+                            pat = remainder
+                            disp = f"re:{maybe_flags}:{pat}"
+                        else:
+                            pat = rest
+                            disp = f"re:{pat}"
+                    else:
+                        pat = rest
+                        disp = f"re:{pat}"
+                    if pat.startswith('/') and pat.endswith('/') and len(pat) >= 2:
+                        inner = pat[1:-1]
+                        disp = f'/{inner}/'
+                        add_regex(disp, inner, flags_val)
+                    else:
+                        add_regex(disp, pat, flags_val)
+                elif line.startswith('/') and len(line) >= 2:
+                    last_slash = line.rfind('/')
+                    if last_slash == 0:
+                        continue
+                    pat = line[1:last_slash]
+                    trailing = line[last_slash+1:]
+                    flags_val = _flags_from_letters_debug(trailing)
+                    disp = f'/{pat}/{trailing}' if trailing else f'/{pat}/'
+                    add_regex(disp, pat, flags_val)
+                else:
+                    exact_keys.append(line)
+
+        mapping_keys = sorted(NODE_CLASS_MAPPINGS.keys())
+        regex_matches = {}
+        for disp, comp in regex_entries:
+            if comp is None:
+                regex_matches[disp] = {"error": True, "matches": []}
+                continue
+            hits = []
+            for key in mapping_keys:
+                try:
+                    if comp.search(key):
+                        hits.append(key)
+                except Exception:
+                    pass
+            regex_matches[disp] = {"error": False, "count": len(hits), "matches": hits}
+
+        missing_exact = [k for k in exact_keys if k not in NODE_CLASS_MAPPINGS]
+
+        return web.json_response({
+            "config_path": cfg_path,
+            "raw_lines": raw_lines,
+            "exact_keys": exact_keys,
+            "missing_exact": missing_exact,
+            "regex_count": len(regex_entries),
+            "regex_matches": regex_matches,
+            "mapping_count": len(mapping_keys)
+        })
+    except FileNotFoundError:
+        return web.json_response({"error": True, "message": "classes_to_cudnn_wrap.txt not found"})
     except Exception as e:
         return web.json_response({"error": True, "message": str(e)})
