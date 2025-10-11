@@ -15,6 +15,9 @@ import { setupDynamicConnections, setupDynamicIOMixin } from "../mtb/utils/dynam
 // Dynamic input/output management for AssertOvum similar to convert-any-2.js
 app.registerExtension({
     name: "ovum.assertovum.dynamicio",
+    /**
+     * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} appInstance
+     */
     async beforeRegisterNodeDef(nodeType, nodeData, appInstance) {
         if (nodeType.comfyClass !== "AssertOvum") return;
         Logger.log({class:'ovum.assertovum.dynamicio',method:'beforeRegisterNodeDef',severity:'info',tag:'registered', nodeName:'AssertOvum'}, 'registered');
