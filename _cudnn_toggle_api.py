@@ -63,16 +63,6 @@ async def ovum_index_json(d):
     except Exception as e:
         return web.json_response({"error": True, "message": str(e)})
 
-@PromptServer.instance.routes.get('/ovum/cudnn-status')
-async def status(d):
-    try:
-        return web.json_response({
-            "torch.backends.cudnn.enabled": torch.backends.cudnn.enabled,
-            "torch.backends.cudnn.benchmark": torch.backends.cudnn.benchmark
-        })
-    except Exception as e:
-        return web.json_response({"error": True, "message": str(e)})
-
 @PromptServer.instance.routes.get('/ovum/cudnn/enable')
 async def cudnn_enable(d):
     try:
