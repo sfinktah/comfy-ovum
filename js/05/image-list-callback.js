@@ -141,6 +141,9 @@ app.registerExtension({
     name: "ovum.image_list.loader_callback",
 
     // Hook into the backend node so we can add UI later
+    /**
+     * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} appInstance
+     */
     async beforeRegisterNodeDef(nodeType, nodeData, appInstance) {
         if (!nodeData || nodeData.name !== "LoadImagesListWithCallback") return;
         /** @type {LGraphNode} */

@@ -10,6 +10,9 @@ import { setupDynamicIOMixin } from "../mtb/utils/dynamic_connections.js";
 
 app.registerExtension({
     name: "ovum.amdnvidia.dynamicio",
+    /**
+     * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} appInstance
+     */
     async beforeRegisterNodeDef(nodeType, nodeData, appInstance) {
         if (nodeType.comfyClass !== "AmdNvidiaIfElseOvum") return;
 

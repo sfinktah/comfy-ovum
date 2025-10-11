@@ -1,252 +1,167 @@
 import {app} from "../../../scripts/app.js";
 import {Fzf} from "/ovum/node_modules/fzf/dist/fzf.es.js";
+import {Logger} from "../common/logger.js";
+import {buildUI, getPositionsInRange, highlightText, updateActiveState} from "./spotlight-helper-dom.js";
+import {allLinks, allNodes, collectAllNodesRecursive, findWidgetMatch, getGraph, navigateToItemAndFocus} from "./spotlight-helper-graph.js";
+import {isBlockedByActiveUI, matchesHotkey} from "./spotlight-helper-hotkey.js";
+import {
+    focusNodeWithOverlayAwareCenter as helperFocusNodeWithOverlayAwareCenter,
+    focusNodeWithOverlayAwareCenterPreview as helperFocusNodeWithOverlayAwareCenterPreview
+} from "./spotlight-helper-focus.js";
+import {createShowResult} from "./spotlight-helper-showresult.js";
+
 // Minimal Alfred-like spotlight for ComfyUI graph
 // Uses fzf from npm
 
-const LEFT_MOUSE_BUTTON = 0;
+/**
+ * Ovum Spotlight module
+ *
+ * This file implements a lightweight Spotlight-style search UI for ComfyUI, with a small plugin API.
+ * External extensions can register keyword handlers ("<keyword> <text>") and default handlers
+ * that contribute items to the global results when no keyword is active.
+ *
+ * Plugin API summary:
+ * - window.OvumSpotlight.registerKeywordHandler(keyword, handler)
+ * - window.OvumSpotlight.registerDefaultHandler(handler)
+ *
+ * Handlers receive a context object with helpers to access the graph and set the placeholder.
+ *
+ * Types are defined in spotlight-typedefs.js and can be imported via JSDoc.
+ */
 
-// Module-level variables to track pointer movement and keyboard navigation
-let lastPointerMoveTime = 0;
-let lastKeyboardNavigationTime = 0;
-let ignoreHoverUntilMove = false;
-let lastPointerX = 0;
-let lastPointerY = 0;
-const HOVER_SUPPRESSION_WINDOW_MS = 250;
-const MINIMUM_POINTER_DISTANCE = 5; // pixels
+/** @typedef {import("./spotlight-typedefs.js").SpotlightUI} SpotlightUI */
+/** @typedef {import("./spotlight-typedefs.js").SubgraphPathItem} SubgraphPathItem */
+/** @typedef {import("./spotlight-typedefs.js").NodeItem} NodeItem */
+/** @typedef {import("./spotlight-typedefs.js").LinkItem} LinkItem */
+/** @typedef {import("./spotlight-typedefs.js").CommandItem} CommandItem */
+/** @typedef {import("./spotlight-typedefs.js").SpotlightItem} SpotlightItem */
+/** @typedef {import("./spotlight-typedefs.js").SpotlightHandlerContext} SpotlightHandlerContext */
+/** @typedef {import("./spotlight-typedefs.js").KeywordHandler} KeywordHandler */
+/** @typedef {import("./spotlight-typedefs.js").DefaultHandler} DefaultHandler */
+/** @typedef {import("./spotlight-typedefs.js").ISpotlightRegistry} ISpotlightRegistry */
 
-function createStyles() {
-    if (document.getElementById("ovum-spotlight-style")) return;
-    const style = document.createElement("style");
-    style.id = "ovum-spotlight-style";
-    style.textContent = `
-    .ovum-spotlight { position: fixed; left: 50%; top: 12%; transform: translateX(-50%); width: min(800px, 90vw); border-radius: 14px; background: #2b2b2b; box-shadow: 0 20px 60px rgba(0,0,0,.7); z-index: 10000; color: #eee; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
-    .ovum-spotlight.hidden { display:none; }
-    .ovum-spotlight-header { display: flex; align-items: center; gap: 10px; background: #1f1f1f; border-radius: 14px 14px 0 0; padding: 18px 22px; }
-    .ovum-spotlight-badge { background:#3b3b3b; color:#bbb; padding:4px 10px; border-radius:10px; font-size:12px; pointer-events:none; white-space: nowrap; }
-    .ovum-spotlight-badge.hidden { display: none; }
-    .ovum-spotlight-input { flex: 1; box-sizing: border-box; background: transparent; border: none; padding: 0; font-size: 28px; color: #fff; outline: none; }
-    .ovum-spotlight-list { overflow:auto; padding: 10px 0; }
-    .ovum-spotlight-item { display:flex; gap:10px; align-items:center; padding: 12px 18px; font-size: 20px; border-top: 1px solid rgba(255,255,255,.04); cursor: pointer; transition: background 0.15s ease; }
-    .ovum-spotlight.hover-enabled .ovum-spotlight-item:hover { background: #2f7574; }
-    .ovum-spotlight-item .item-main { flex: 1; }
-    .ovum-spotlight-item .item-title-row { display:flex; align-items:center; gap:8px; }
-    .ovum-spotlight-item .state-badges { display:flex; gap:6px; align-items:center; }
-    .ovum-spotlight-item .badge { font-size: 11px; padding: 2px 6px; border-radius: 6px; background: rgba(255,255,255,.08); color:#ddd; text-transform: uppercase; letter-spacing: .4px; }
-    .ovum-spotlight-item .badge-muted { background: #734b4b; color: #ffd9d9; }
-    .ovum-spotlight-item .badge-bypassed { background: #6b6b6b; color: #e6e6e6; }
-    .ovum-spotlight-item .item-details { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
-    .ovum-spotlight-item .sub { opacity:.6; font-size: 14px; }
-    .ovum-spotlight-item .widget-match { opacity:.5; font-size: 12px; font-family: monospace; background: rgba(255,255,255,.05); padding: 2px 8px; border-radius: 4px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .ovum-spotlight-item .subgraph-path { display: flex; gap: 6px; align-items: center; font-size: 12px; opacity: .5; margin-top: 4px; flex-wrap: wrap; }
-    .ovum-spotlight-item .subgraph-path-item { background: rgba(255,255,255,.08); padding: 2px 8px; border-radius: 4px; }
-    .ovum-spotlight-item.active { background: #2f7574; }
-    .ovum-spotlight-highlight { color: #4fd1c5; font-weight: 600; }
-    .ovum-spotlight-bigbox { border-top: 1px solid rgba(255,255,255,.08); max-height: 60vh; overflow: auto; width: 100%; box-sizing: border-box; padding: 10px 18px 18px; border-radius: 0 0 14px 14px; }
-    .ovum-spotlight-bigbox.hidden { display:none; }
-    .ovum-spotlight-bigbox, .ovum-spotlight-bigbox * { max-width: 100%; }
-    `;
-    document.head.appendChild(style);
-}
+// Encapsulated runtime state and constants for Spotlight interactions
+const SpotlightRuntime = {
+    LEFT_MOUSE_BUTTON: 0,
+    // Track pointer movement and keyboard navigation
+    lastPointerMoveTime: 0,
+    lastKeyboardNavigationTime: 0,
+    ignoreHoverUntilMove: false,
+    lastPointerX: 0,
+    lastPointerY: 0,
+    HOVER_SUPPRESSION_WINDOW_MS: 250,
+    MINIMUM_POINTER_DISTANCE: 5 // pixels
+};
 
-function buildUI() {
-    createStyles();
-    const wrap = document.createElement("div");
-    wrap.className = "ovum-spotlight hidden";
-    const header = document.createElement("div");
-    header.className = "ovum-spotlight-header";
-    const badge = document.createElement("div");
-    badge.className = "ovum-spotlight-badge hidden";
-    const input = document.createElement("input");
-    input.className = "ovum-spotlight-input";
-    input.placeholder = "Search nodes, links, ids…";
-    const list = document.createElement("div");
-    list.className = "ovum-spotlight-list";
-    const bigbox = document.createElement("div");
-    bigbox.className = "ovum-spotlight-bigbox hidden";
-    header.appendChild(badge);
-    header.appendChild(input);
-    wrap.appendChild(header);
-    wrap.appendChild(list);
-    wrap.appendChild(bigbox);
-    document.body.appendChild(wrap);
-    return {wrap, input, list, badge, bigbox};
-}
+// Track viewport to restore after spotlight closes
+let __ovumSpotlightSavedViewport = null; // { scale:number, offset:[x,y] }
+let __ovumSpotlightUserSelectedNode = false;
 
-function getGraph() {
-    return app?.graph;
-}
+// Bind showResult renderer to the runtime object
+const renderResults = createShowResult(SpotlightRuntime);
 
-function allNodes() {
-    return getGraph()?._nodes ?? [];
-}
+// moved to spotlight-helper-dom.js: buildUI
+// moved to spotlight-helper-dom.js: createStyles
+// moved to spotlight-helper-graph.js: collectAllNodesRecursive
+// moved to spotlight-helper-graph.js: findWidgetMatch
+// moved to spotlight-helper-graph.js: getGraph, allNodes, allLinks
+// moved to spotlight-helper-graph.js: isNumericLike
+// moved to spotlight-helper-hotkey.js: matchesHotkey
 
-function allLinks() {
-    return getGraph()?.links ?? {};
-}
-
-function matchesHotkey(event, hotkeyString) {
-    if (!hotkeyString) return false;
-
-    const parts = hotkeyString.toLowerCase().split('+').map(p => p.trim());
-    const key = parts[parts.length - 1];
-    const modifiers = parts.slice(0, -1);
-
-    const hasCtrl = modifiers.includes('ctrl') || modifiers.includes('control');
-    const hasMeta = modifiers.includes('meta') || modifiers.includes('cmd') || modifiers.includes('command');
-    const hasAlt = modifiers.includes('alt');
-    const hasShift = modifiers.includes('shift');
-
-    const eventKey = event.key.toLowerCase();
-    const matchesKey = eventKey === key || (key === 'space' && eventKey === ' ');
-
-    return matchesKey &&
-        (hasCtrl ? event.ctrlKey : !event.ctrlKey) &&
-        (hasMeta ? event.metaKey : !event.metaKey) &&
-        (hasAlt ? event.altKey : !event.altKey) &&
-        (hasShift ? event.shiftKey : !event.shiftKey);
-}
-
-function collectAllNodesRecursive(parentPath = "", parentChain = []) {
-    const result = [];
-    const nodes = allNodes();
-
-    for (const node of nodes) {
-        const nodeId = parentPath ? `${parentPath}:${node.id}` : String(node.id);
-        result.push({node, id: nodeId, displayId: nodeId, parentChain: [...parentChain]});
-
-        // Check if this node has a subgraph
-        if (node.subgraph && node.subgraph._nodes) {
-            const subgraph = node.subgraph;
-            const newParentChain = [...parentChain, node];
-            const collectSubgraphNodes = (sg, path, chain) => {
-                for (const subNode of sg._nodes) {
-                    const subNodeId = `${path}:${subNode.id}`;
-                    result.push({node: subNode, id: subNodeId, displayId: subNodeId, parentChain: [...chain]});
-
-                    // Recursively check for nested subgraphs
-                    if (subNode.subgraph && subNode.subgraph._nodes) {
-                        const nestedSubgraph = subNode.subgraph;
-                        collectSubgraphNodes(nestedSubgraph, subNodeId, [...chain, subNode]);
-                    }
-                }
-            };
-            collectSubgraphNodes(subgraph, nodeId, newParentChain);
-        }
-    }
-
-    return result;
-}
-
-function isNumericLike(t) {
-    return /^\d[:\d]*$/.test(t.trim());
-}
-
-function findWidgetMatch(node, searchText) {
-    if (!node.widgets || !Array.isArray(node.widgets) || !searchText) return null;
-    const lower = searchText.toLowerCase();
-
-    for (let i = 0; i < node.widgets.length; i++) {
-        const widget = node.widgets[i];
-        const val = widget.value;
-        const str = String(val);
-        const lowerStr = str.toLowerCase();
-        const idx = lowerStr.indexOf(lower);
-
-        if (idx !== -1) {
-            // Extract snippet with context
-            const start = Math.max(0, idx - 10);
-            const end = Math.min(str.length, idx + searchText.length + 40);
-            let snippet = str.substring(start, end);
-            let prefix = "";
-            let suffix = "";
-            if (start > 0) prefix = "…";
-            if (end < str.length) suffix = "...";
-
-            // Calculate match positions within the snippet
-            const matchPositions = new Set();
-            const snippetLower = snippet.toLowerCase();
-            const matchIdx = snippetLower.indexOf(lower);
-            if (matchIdx !== -1) {
-                for (let j = 0; j < searchText.length; j++) {
-                    matchPositions.add(matchIdx + j);
-                }
-            }
-
-            return {
-                name: widget.name || `Widget ${i}`,
-                snippet: snippet,
-                prefix: prefix,
-                suffix: suffix,
-                matchPositions: matchPositions
-            };
-        }
-    }
-    return null;
-}
-
+/**
+ * SpotlightRegistry is an object used to manage and register handlers for specific keywords and default behaviors.
+ * This registry facilitates mapping keywords to their corresponding handler functions and maintaining a list of default handlers.
+ *
+ * Properties:
+ * - keywordHandlers: A Map that associates keywords with specific handler functions. The key is a string representing a keyword,
+ *   and the value is a function that takes a single argument (text of type string) and returns an object with available items and the corresponding handler.
+ *
+ * - defaultHandlers: An array of functions that represent default handlers. Each function returns an object containing available items
+ *   and its associated handler information when invoked.
+ *
+ * Methods:
+ * - registerKeywordHandler(keyword, callback): Registers a handler for a specific keyword. The `keyword` is case-insensitive
+ *   and is converted to lowercase before storing. If the keyword is invalid or the given `callback` is not a function, the method terminates
+ *   without performing any operations.
+ *
+ * - registerDefaultHandler(callback): Adds a function to the list of default handlers. If the given `callback` is not a function, it is ignored.
+  *
+  * @type {ISpotlightRegistry}
+ */
 // Simple plugin registry to allow external nodes to inject spotlight search providers
 const SpotlightRegistry = {
     keywordHandlers: new Map(), // keyword -> (text:string)=>{items, handler}
     defaultHandlers: [],        // list of () => {items, handler:""}
-    registerKeywordHandler(keyword, callback) {
-        if (!keyword || typeof callback !== "function") return;
+    registerKeywordHandler (keyword, callback) {
+        if (!keyword || typeof callback !== "function") {
+            return;
+        }
         this.keywordHandlers.set(String(keyword).toLowerCase(), callback);
     },
-    registerDefaultHandler(callback) {
-        if (typeof callback === "function") this.defaultHandlers.push(callback);
+    registerDefaultHandler (callback) {
+        if (typeof callback === "function") {
+            this.defaultHandlers.push(callback);
+        }
     }
 };
+
 
 // Expose a global hook so custom nodes can register from their JS
 // Usage: window.OvumSpotlight?.registerKeywordHandler("mykey", (text)=>({...}))
 //        window.OvumSpotlight?.registerDefaultHandler(()=>({...}))
+/** @type {ISpotlightRegistry} */
+// @ts-ignore - augmenting window with OvumSpotlight
 window.OvumSpotlight = window.OvumSpotlight || SpotlightRegistry;
 
-function parseHandler(q) {
-    // Accept any registered keyword first
+/**
+ * Parse the user's query to detect an active keyword registered via registerKeywordHandler.
+ * Returns the handler key and the remaining text if a keyword is present.
+ * @param {string} q
+ * @returns {{handler:string, text:string, matched:boolean}}
+ */
+function parseHandler (q) {
+    // Accept only registered keywords
     const m = q.match(/^\s*(\w+)\s+(.*)$/i);
     if (m) {
         const kw = m[1].toLowerCase();
-        if (kw === "node" || kw === "link" || SpotlightRegistry.keywordHandlers.has(kw)) {
+        if (SpotlightRegistry.keywordHandlers.has(kw)) {
             return {handler: kw, text: m[2], matched: true};
         }
     }
     return {handler: "", text: q, matched: false};
 }
 
-function searchData(q) {
+/**
+ * Build the list of SpotlightItem records for a given query.
+ * If a registered keyword handler matches, it will be invoked. Otherwise, core items
+ * and contributions from default handlers are returned.
+ * @param {string} q
+ * @returns {Promise<{items: SpotlightItem[], handler:string}>}
+ */
+async function searchData (q) {
     const {handler, text} = parseHandler(q);
     const g = getGraph();
-    if (!g) return {items: [], handler};
-
-    // Built-in: "link" handler: search link ids
-    if (handler === "link") {
-        const links = allLinks();
-        const arr = Object.entries(links).map(([id, l]) => ({
-            type: "link",
-            id: Number(id),
-            title: `Link ${id}: ${l.origin_id} -> ${l.target_id}`,
-            link: l
-        }));
-        return {items: arr, handler};
+    if (!g) {
+        return {items: [], handler};
     }
 
-    // Built-in: "node" handler: search node ids including subgraphs
-    if (handler === "node") {
-        const allNodesWithSubgraphs = collectAllNodesRecursive();
-        const items = allNodesWithSubgraphs.map(({node, id, displayId, parentChain}) => {
-            const title = `${node.title || node.type}  [${displayId}]`;
-            return {type: "node", id: displayId, title, sub: node.type, node, parentChain};
-        });
-        return {items, handler};
-    }
 
     // Custom keyword handler
     if (handler && SpotlightRegistry.keywordHandlers.has(handler)) {
         try {
             const fn = SpotlightRegistry.keywordHandlers.get(handler);
-            const res = fn?.(text, {app, getGraph, allNodes, allLinks, collectAllNodesRecursive});
-            if (res && Array.isArray(res.items)) return {items: res.items, handler};
+            const maybe = fn?.(text, {
+                app,
+                getGraph,
+                allNodes,
+                allLinks,
+                collectAllNodesRecursive,
+                setPlaceholder: (s) => SpotlightRegistry._setPlaceholder?.(s)
+            });
+            const res = (typeof maybe?.then === 'function') ? await maybe : maybe;
+            if (res && Array.isArray(res.items)) {
+                return {items: res.items, handler};
+            }
         } catch (e) {
             console.warn("OvumSpotlight keyword handler error", handler, e);
         }
@@ -255,291 +170,110 @@ function searchData(q) {
     // default (no handler): core list + contributions from default handlers
     const allNodesWithSubgraphs = collectAllNodesRecursive();
     let items = allNodesWithSubgraphs.map(({node, id, displayId, parentChain}) => {
-        const widgetText = node.widgets && Array.isArray(node.widgets) ? node.widgets.map(w => `${w.name} ${w.value}`).join(" ") : "";
-        const title = `${node.title || node.type}  [${displayId}]`;
-        const className = node.comfyClass || "";
+        const widgetText = node.widgets && Array.isArray(node.widgets) ? node.widgets.map(w => `${w.name}:${w.value}`).join(" ") : "";
+        const className = node.comfyClass || node.type;
+        const title = `${node.title || className}  [${displayId}]`;
         return {
-            type: "node",
+            "@type": "node",
             id: displayId,
             title,
-            sub: node.type,
+            itemClass: node.type,
             node,
-            parentChain,
-            widgetText,
+            itemSubtitlePath: parentChain,
+            itemDetails: widgetText,
             searchText: `${node.title || node.type} ${node.type} ${className} ${displayId} ${widgetText}`
         };
     });
 
-    // Let default handlers add more items
-    for (const fn of SpotlightRegistry.defaultHandlers) {
+    // Let default handlers add more items (support async)
+    const contributions = await Promise.all(SpotlightRegistry.defaultHandlers.map(async (fn) => {
         try {
-            const res = fn?.({app, getGraph, allNodes, allLinks, collectAllNodesRecursive});
-            if (res && Array.isArray(res.items)) items = items.concat(res.items);
+            const maybe = fn?.({app, getGraph, allNodes, allLinks, collectAllNodesRecursive});
+            return (typeof maybe?.then === 'function') ? await maybe : maybe;
         } catch (e) {
             console.warn("OvumSpotlight default handler error", e);
+            return null;
+        }
+    }));
+    for (const res of contributions) {
+        if (res && Array.isArray(res.items)) {
+            items = items.concat(res.items);
         }
     }
 
     return {items, handler: ""};
 }
 
-function getPositionsInRange(positions, start, end) {
-    if (!positions) return new Set();
-    const rangePositions = new Set();
-    for (let pos of positions) {
-        if (pos >= start && pos < end) {
-            rangePositions.add(pos - start);
-        }
-    }
-    return rangePositions;
-}
+// moved to spotlight-helper-dom.js: getPositionsInRange
+// moved to spotlight-helper-dom.js: highlightText
+// Returns the list of CSS selectors that should block spotlight activation when visible
+// moved to spotlight-helper-hotkey.js: getSpotlightBlockSelectors
+// moved to spotlight-helper-hotkey.js: getSpotlightBlockSelectors
 
-function highlightText(text, positions) {
-    if (!positions || positions.size === 0) {
-        return text;
-    }
-
-    // Create an array of characters with their highlight status
-    const chars = text.split('').map((char, idx) => ({
-        char,
-        highlighted: positions.has(idx)
-    }));
-
-    // Build HTML string with highlighted spans
-    let result = '';
-    let i = 0;
-    while (i < chars.length) {
-        if (chars[i].highlighted) {
-            // Start a highlighted span
-            let highlightedChars = '';
-            while (i < chars.length && chars[i].highlighted) {
-                highlightedChars += chars[i].char;
-                i++;
-            }
-            result += `<span class="ovum-spotlight-highlight">${highlightedChars}</span>`;
-        } else {
-            // Add non-highlighted character
-            result += chars[i].char;
-            i++;
-        }
-    }
-
-    return result;
-}
-
-function updateActiveState(listEl, activeIdx) {
-    // Update active class on items
-    Array.from(listEl.children).forEach((child, idx) => {
-        if (idx === activeIdx) {
-            child.classList.add("active");
-        } else {
-            child.classList.remove("active");
-        }
-    });
-
-    // Scroll active item into view
-    const activeItem = listEl.children[activeIdx];
-    if (activeItem) {
-        activeItem.scrollIntoView({block: "nearest", behavior: "smooth"});
-    }
-}
-
-function showResult(listEl, results, activeIdx, searchText, onActiveChange, onSelect) {
-    listEl.innerHTML = "";
-    results.forEach((r, idx) => {
-        const div = document.createElement("div");
-        div.className = "ovum-spotlight-item" + (idx === activeIdx ? " active" : "");
-
-        // Reconstruct the searchText to map positions correctly
-        let highlightedTitle = r.item.title;
-        let highlightedSub = r.item.sub;
-        let highlightedId = r.item.id;
-
-        if (r.positions && r.item.searchText) {
-            // Map positions to different parts of searchText
-            const searchText = r.item.searchText;
-            const titleText = r.item.node?.title || r.item.node?.type || r.item.title || '';
-            const typeText = r.item.node?.type || r.item.sub || '';
-            const classText = r.item.node?.comfyClass || '';
-            const idText = String(r.item.id);
-
-            // Calculate positions in searchText
-            let currentPos = 0;
-
-            // Title positions
-            const titleStart = currentPos;
-            currentPos += titleText.length + 1; // +1 for space
-            const titlePositions = getPositionsInRange(r.positions, titleStart, titleStart + titleText.length);
-            highlightedTitle = highlightText(r.item.title, titlePositions);
-
-            // Type positions
-            const typeStart = currentPos;
-            currentPos += typeText.length + 1;
-            const typePositions = getPositionsInRange(r.positions, typeStart, typeStart + typeText.length);
-            if (r.item.sub) {
-                highlightedSub = highlightText(r.item.sub, typePositions);
-            }
-
-            // Class positions
-            currentPos += classText.length + 1;
-
-            // ID positions - find where ID appears in the title string
-            const titleMatch = r.item.title.match(/\[([^\]]+)\]$/);
-            if (titleMatch) {
-                const idInTitle = titleMatch[1];
-                const idStart = r.item.title.lastIndexOf('[' + idInTitle);
-                const idEnd = idStart + idInTitle.length + 2; // +2 for brackets
-                const idPositions = getPositionsInRange(r.positions, titleStart + idStart + 1, titleStart + idStart + 1 + idInTitle.length);
-                if (idPositions.size > 0) {
-                    const highlightedIdText = highlightText(idInTitle, idPositions);
-                    highlightedTitle = r.item.title.substring(0, idStart) + '[' + highlightedIdText + ']';
-                }
-            }
-        }
-
-        // Determine node state badges (muted/bypassed)
-                const n = r.item.node;
-                const isMuted = !!(n && (n.muted || n?.flags?.muted));
-                const isBypassed = !!(n && (n.bypassed || n?.flags?.bypassed));
-                const badgesHtml = (isMuted || isBypassed)
-                    ? `<span class="state-badges">${isMuted ? '<span class="badge badge-muted">muted</span>' : ''}${isBypassed ? '<span class=\"badge badge-bypassed\">bypassed</span>' : ''}</span>`
-                    : "";
-
-                let html = `<div class="item-main"><div class="item-title-row">${highlightedTitle} ${badgesHtml}</div>`;
-
-        // Add parent chain if exists
-        if (r.item.parentChain && r.item.parentChain.length > 0) {
-            html += `<div class="subgraph-path">`;
-            r.item.parentChain.forEach((parent, idx) => {
-                html += `<div class="subgraph-path-item">${parent.title || parent.type}</div>`;
-                if (idx < r.item.parentChain.length - 1) {
-                    html += `<span>›</span>`;
-                }
-            });
-            html += `</div>`;
-        }
-
-        html += `</div>`;
-
-        // Create flex container for .sub and .widget-match
-        let detailsHtml = '';
-        if (r.item.sub) {
-            detailsHtml += `<div class="sub">${highlightedSub}</div>`;
-        }
-
-        // Check if there's a widget match to display
-        if (r.item.node && r.item.widgetText && searchText) {
-            const widgetMatch = findWidgetMatch(r.item.node, searchText);
-            if (widgetMatch) {
-                const highlightedSnippet = highlightText(widgetMatch.snippet, widgetMatch.matchPositions);
-                detailsHtml += `<div class="widget-match"><strong>${widgetMatch.name}:</strong> ${widgetMatch.prefix}${highlightedSnippet}${widgetMatch.suffix}</div>`;
-            }
-        }
-
-        if (detailsHtml) {
-            html += `<div class="item-details">${detailsHtml}</div>`;
-        }
-
-        div.innerHTML = html;
-
-        // Add mouseover handler to update active state (only when the pointer actually moved recently and no recent keyboard navigation)
-        div.addEventListener("mouseover", () => {
-            // Ignore hover if we're explicitly ignoring until mouse moves
-            if (ignoreHoverUntilMove) return;
-
-            const now = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
-            const pointerMovedRecently = (now - lastPointerMoveTime) < HOVER_SUPPRESSION_WINDOW_MS;
-            const keyboardNavigatedRecently = (now - lastKeyboardNavigationTime) < HOVER_SUPPRESSION_WINDOW_MS;
-
-            // Only update active state if pointer moved recently and no recent keyboard navigation
-            if (pointerMovedRecently && !keyboardNavigatedRecently) {
-                if (onActiveChange) onActiveChange(idx);
-            }
-        });
-
-        // Add mousedown handler to select item (fires before blur)
-        div.addEventListener("mousedown", (e) => {
-            if (e.button !== LEFT_MOUSE_BUTTON) return; // Only react to left mouse button
-            e.preventDefault(); // Prevent input from losing focus
-            if (onSelect) onSelect(r);
-        });
-
-        listEl.appendChild(div);
-    });
-
-    // Scroll active item into view
-    updateActiveState(listEl, activeIdx);
-}
-
-function jump(item) {
-    const g = getGraph();
-    if (!g) return;
-    if (item.type === "node" && item.node) {
-        // First, always return to the root graph
-        const rootGraph = app.graph;
-        if (app.canvas.graph !== rootGraph) {
-            if (typeof app.canvas.setGraph === 'function') {
-                app.canvas.setGraph(rootGraph);
-            } else {
-                app.canvas.graph = rootGraph;
-            }
-        }
-
-        // If the node is in a subgraph, we need to navigate to it
-        if (item.parentChain && item.parentChain.length > 0) {
-            // Navigate through the parent chain to reach the target node
-            for (const parentNode of item.parentChain) {
-                if (parentNode.subgraph) {
-                    // Use canvas methods to open the subgraph
-                    if (typeof app.canvas.openSubgraph === 'function') {
-                        app.canvas.openSubgraph(parentNode.subgraph);
-                    } else if (typeof app.canvas.setGraph === 'function') {
-                        app.canvas.setGraph(parentNode.subgraph);
-                    } else if (app.canvas.graph !== parentNode.subgraph) {
-                        app.canvas.graph = parentNode.subgraph;
-                    }
-                }
-            }
-            // Small delay to allow subgraph to open, then select the node
-            setTimeout(() => {
-                app.canvas.selectNode(item.node, false);
-                app.canvas.fitViewToSelectionAnimated?.();
-            }, 100);
-        } else {
-            app.canvas.selectNode(item.node, false);
-            app.canvas.fitViewToSelectionAnimated?.();
-        }
-    }
-    if (item.type === "link" && item.link) {
-        const origin = g.getNodeById(item.link.origin_id);
-        if (origin) {
-            app.canvas.selectNode(origin, false);
-            app.canvas.fitViewToSelectionAnimated?.();
-        }
-    }
-}
+// Checks if any blocking UI element is currently visible in the DOM
+// moved to spotlight-helper-hotkey.js: isBlockedByActiveUI
 
 app.registerExtension({
     name: "ovum.spotlight",
-    async setup(app) {
+    /**
+     * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} app
+     */
+    setup: async function (app) {
+        // Helper: get canvas element and DragAndScale
+        const getCanvasElement = () => app?.canvas?.canvas;
+        const getDS = () => app?.canvas?.ds;
+        const setDirty = () => app?.canvas?.setDirty?.(true, true);
+        const saveViewport = () => {
+            const ds = getDS();
+            if (!ds) {
+                return;
+            }
+            __ovumSpotlightSavedViewport = {
+                scale: ds.scale,
+                offset: [ds.offset[0], ds.offset[1]]
+            };
+        };
+        const restoreViewportIfNeeded = () => {
+            const ds = getDS();
+            if (!ds || !__ovumSpotlightSavedViewport) {
+                return;
+            }
+            if (!__ovumSpotlightUserSelectedNode) {
+                ds.scale = __ovumSpotlightSavedViewport.scale;
+                ds.offset[0] = __ovumSpotlightSavedViewport.offset[0];
+                ds.offset[1] = __ovumSpotlightSavedViewport.offset[1];
+                setDirty();
+            }
+            __ovumSpotlightSavedViewport = null;
+        };
+        const focusNodeWithOverlayAwareCenter = (node) => helperFocusNodeWithOverlayAwareCenter(ui, node);
+        const focusNodeWithOverlayAwareCenterPreview = (node) => helperFocusNodeWithOverlayAwareCenterPreview(ui, node);
+        // Preview-focus an item without closing Spotlight. Delegates to helper to navigate/select/focus.
+        const previewFocusForItem = (it) => {
+            navigateToItemAndFocus(it, focusNodeWithOverlayAwareCenterPreview, { delay: 50 });
+        };
         const ui = buildUI();
+        const defaultPlaceholder = ui.input.placeholder;
+        SpotlightRegistry._setPlaceholder = (s) => {
+            ui.input.placeholder = s || defaultPlaceholder;
+        };
         // Track actual pointer movement to avoid hover overriding keyboard selection when mouse is stationary
         const updatePointerMoveTime = (e) => {
-            const deltaX = Math.abs(e.clientX - lastPointerX);
-            const deltaY = Math.abs(e.clientY - lastPointerY);
+            const deltaX = Math.abs(e.clientX - SpotlightRuntime.lastPointerX);
+            const deltaY = Math.abs(e.clientY - SpotlightRuntime.lastPointerY);
             const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
 
             // Only count as real movement if pointer moved a minimum distance
-            if (ignoreHoverUntilMove && distance < MINIMUM_POINTER_DISTANCE) {
+            if (SpotlightRuntime.ignoreHoverUntilMove && distance < SpotlightRuntime.MINIMUM_POINTER_DISTANCE) {
                 return;
             }
 
-            lastPointerX = e.clientX;
-            lastPointerY = e.clientY;
-            lastPointerMoveTime = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
+            SpotlightRuntime.lastPointerX = e.clientX;
+            SpotlightRuntime.lastPointerY = e.clientY;
+            SpotlightRuntime.lastPointerMoveTime = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
 
             // Enable CSS hover once the mouse actually moves
-            ignoreHoverUntilMove = false;
+            SpotlightRuntime.ignoreHoverUntilMove = false;
             ui.wrap.classList.add('hover-enabled');
         };
 
@@ -547,6 +281,8 @@ app.registerExtension({
         ui.wrap.addEventListener("mousemove", updatePointerMoveTime);
         ui.list.addEventListener("pointermove", updatePointerMoveTime);
         ui.list.addEventListener("mousemove", updatePointerMoveTime);
+        // Track whether the last non-modifier key pressed was an Arrow key
+        let lastKeyWasArrow = false;
         let state = {
             open: false,
             active: 0,
@@ -558,7 +294,150 @@ app.registerExtension({
             preventHandlerActivation: false,
             reactivateAwaitingSpaceToggle: false,
             reactivateSpaceRemoved: false,
-            restoredHandler: ""
+            restoredHandler: "",
+            shiftPreviewActive: false
+        };
+
+        // Temporary viewport snapshot used while Shift preview is active
+        let shiftPreviewSavedViewport = null;
+        const saveShiftPreviewViewport = () => {
+            if (shiftPreviewSavedViewport) {
+                return;
+            } // already saved
+            const ds = getDS();
+            if (!ds) {
+                return;
+            }
+            shiftPreviewSavedViewport = {scale: ds.scale, offset: [ds.offset[0], ds.offset[1]]};
+        };
+        const restoreShiftPreviewViewport = () => {
+            const ds = getDS();
+            if (!ds || !shiftPreviewSavedViewport) {
+                return;
+            }
+            ds.scale = shiftPreviewSavedViewport.scale;
+            ds.offset[0] = shiftPreviewSavedViewport.offset[0];
+            ds.offset[1] = shiftPreviewSavedViewport.offset[1];
+            setDirty();
+            shiftPreviewSavedViewport = null;
+        };
+
+        // Snapshot and restore graph/subgraph context during Shift preview
+        let shiftPreviewSavedGraphContext = null;
+        const saveShiftPreviewGraphContext = () => {
+            if (shiftPreviewSavedGraphContext) {
+                return;
+            } // already saved
+            const canvas = app?.canvas;
+            if (!canvas) {
+                return;
+            }
+            // Save current graph reference; if there is a stack in this build, try to copy it
+            const stack = canvas.graph_stack ? [...canvas.graph_stack] : null;
+            shiftPreviewSavedGraphContext = {graph: canvas.graph, stack};
+        };
+        const restoreShiftPreviewGraphContext = () => {
+            if (!shiftPreviewSavedGraphContext) {
+                return;
+            }
+            if (__ovumSpotlightUserSelectedNode) { // do not restore if user finalized a selection
+                shiftPreviewSavedGraphContext = null;
+                return;
+            }
+            const canvas = app?.canvas;
+            if (!canvas) {
+                shiftPreviewSavedGraphContext = null;
+                return;
+            }
+            try {
+                if (shiftPreviewSavedGraphContext.stack && Array.isArray(canvas.graph_stack)) {
+                    // Restore stack then graph
+                    canvas.graph_stack.length = 0;
+                    for (const g of shiftPreviewSavedGraphContext.stack) canvas.graph_stack.push(g);
+                }
+                if (typeof canvas.setGraph === 'function') {
+                    canvas.setGraph(shiftPreviewSavedGraphContext.graph);
+                } else {
+                    canvas.graph = shiftPreviewSavedGraphContext.graph;
+                }
+                setDirty();
+            } catch (_) {
+                // Best effort; ignore errors
+            } finally {
+                shiftPreviewSavedGraphContext = null;
+            }
+        };
+
+        // Snapshot and restore selection during Shift preview
+        let shiftPreviewSavedSelection = null;
+        const getCurrentSelection = () => {
+            const canvas = app?.canvas;
+            if (!canvas) {
+                return [];
+            }
+            try {
+                if (canvas.selected_nodes) {
+                    return Object.values(canvas.selected_nodes);
+                }
+            } catch (_) { /* ignore */
+            }
+            // Fallback: try selectedItems if available
+            try {
+                if (canvas.selectedItems && typeof canvas.selectedItems.forEach === 'function') {
+                    const arr = [];
+                    canvas.selectedItems.forEach?.(v => {
+                        if (v && v.constructor?.name?.includes('LGraphNode')) {
+                            arr.push(v);
+                        }
+                    });
+                    return arr;
+                }
+            } catch (_) { /* ignore */
+            }
+            return [];
+        };
+        const saveShiftPreviewSelection = () => {
+            if (shiftPreviewSavedSelection) {
+                return;
+            } // already saved
+            shiftPreviewSavedSelection = getCurrentSelection();
+        };
+        const restoreShiftPreviewSelection = () => {
+            if (!shiftPreviewSavedSelection || __ovumSpotlightUserSelectedNode) {
+                shiftPreviewSavedSelection = null;
+                return;
+            }
+            const canvas = app?.canvas;
+            if (!canvas) {
+                shiftPreviewSavedSelection = null;
+                return;
+            }
+            try {
+                // Clear any selection introduced by preview
+                if (typeof canvas.deselectAllNodes === 'function') {
+                    canvas.deselectAllNodes();
+                } else if (canvas.selected_nodes) {
+                    for (const k in canvas.selected_nodes) {
+                        if (canvas.selected_nodes[k]) {
+                            canvas.selected_nodes[k].selected = false;
+                        }
+                    }
+                    canvas.selected_nodes = {};
+                }
+                // Re-select previously selected nodes (best effort)
+                for (const node of shiftPreviewSavedSelection) {
+                    if (!node) {
+                        continue;
+                    }
+                    try {
+                        canvas.selectNode?.(node, true);
+                    } catch (_) { /* ignore */
+                    }
+                }
+            } catch (_) { /* ignore */
+            } finally {
+                shiftPreviewSavedSelection = null;
+            }
         };
 
         const isHTMLElement = (v) => !!(v && typeof v === 'object' && v.nodeType === 1);
@@ -584,6 +463,16 @@ app.registerExtension({
             updateActiveState(ui.list, state.active);
             updateBigboxContent();
         };
+        
+        const jump = item => {
+            const g = getGraph();
+            if (!g) {
+                return;
+            }
+            // Use preview-level zoom for final jump to match preview focus
+            navigateToItemAndFocus(item, focusNodeWithOverlayAwareCenterPreview, { delay: 100 });
+        };
+
 
         const handleSelect = (result) => {
             const it = result.item;
@@ -593,22 +482,33 @@ app.registerExtension({
                 } catch (e) {
                     console.warn("Spotlight item onSelect error", e);
                 }
+                // Treat custom onSelect as a selection/navigation
+                __ovumSpotlightUserSelectedNode = true;
                 close();
                 return;
             }
-            if (it && (it.type === "node" || it.type === "link")) {
+            // Support both legacy `type` and refactored `@type`
+            const t = it?.["@type"] ?? it?.type;
+            if (t === "node" || t === "link") {
+                __ovumSpotlightUserSelectedNode = true;
                 jump(it);
             }
             close();
         };
 
-        const refresh = () => {
+        let _searchSeq = 0;
+        const refresh = async () => {
+            _searchSeq++;
+            const seq = _searchSeq;
             const q = ui.input.value;
             const fullQuery = state.handlerActive ? `${state.handler} ${q}` : q;
             state.fullQuery = fullQuery;
 
             const parseResult = parseHandler(fullQuery);
-            const {items, handler} = searchData(fullQuery);
+            const {items, handler} = await searchData(fullQuery);
+            if (seq !== _searchSeq) {
+                return;
+            }
 
             // Manage reactivation gating: require removal of ALL spaces before reactivation is allowed
             if (state.reactivateAwaitingSpaceToggle) {
@@ -655,19 +555,26 @@ app.registerExtension({
             const matches = fzf.find(searchText).slice(0, maxMatches);
             state.results = matches;
             state.active = 0;
+            if (window.Logger?.log) { Logger.log({ class: 'ovum.spotlight', method: 'refresh', severity: 'trace', tag: 'fzf', nodeName: 'ovum.timer' }, 'fzf matches', matches.slice(0, visibleItems)); }
 
             // Update list max-height based on visible items setting
             // Each item is approximately 47px (12px padding top + 12px padding bottom + 20px font-size + 1px border + ~2px for spacing)
             const itemHeight = 47;
             ui.list.style.maxHeight = `${itemHeight * visibleItems}px`;
 
-            showResult(ui.list, matches, state.active, searchText, updateActiveItem, handleSelect);
-                        updateBigboxContent();
+            renderResults(ui.list, matches, state.active, searchText, updateActiveItem, handleSelect);
+            updateBigboxContent();
         };
 
-        function open() {
+
+        function open () {
+            // Save current viewport to restore on close (unless a node is selected)
+            __ovumSpotlightUserSelectedNode = false;
+            saveViewport();
             ui.wrap.classList.remove("hidden");
             ui.wrap.classList.remove("hover-enabled");
+            // Reset placeholder to default when opening
+            ui.input.placeholder = defaultPlaceholder;
             ui.input.focus();
             ui.input.select();
             state.open = true;
@@ -678,19 +585,40 @@ app.registerExtension({
             state.reactivateAwaitingSpaceToggle = false;
             state.reactivateSpaceRemoved = false;
             state.restoredHandler = "";
+            state.shiftPreviewActive = false;
+            shiftPreviewSavedViewport = null;
+            shiftPreviewSavedGraphContext = null;
+            shiftPreviewSavedSelection = null;
             // Reset pointer tracking to ignore hover until mouse actually moves
-            lastPointerMoveTime = 0;
-            lastKeyboardNavigationTime = 0;
-            lastPointerX = 0;
-            lastPointerY = 0;
-            ignoreHoverUntilMove = true;
+            SpotlightRuntime.lastPointerMoveTime = 0;
+            SpotlightRuntime.lastKeyboardNavigationTime = 0;
+            SpotlightRuntime.lastPointerX = 0;
+            SpotlightRuntime.lastPointerY = 0;
+            SpotlightRuntime.ignoreHoverUntilMove = true;
+            lastKeyWasArrow = false;
             clearBigbox();
             refresh();
         }
 
-        function close() {
+        function close () {
+            // If a preview was active and no final selection happened, restore graph, selection, and viewport (in that order)
+            if (!__ovumSpotlightUserSelectedNode) {
+                if (shiftPreviewSavedGraphContext) {
+                    restoreShiftPreviewGraphContext();
+                }
+                if (shiftPreviewSavedSelection) {
+                    restoreShiftPreviewSelection();
+                }
+                if (shiftPreviewSavedViewport) {
+                    restoreShiftPreviewViewport();
+                }
+            }
+            // Restore viewport if no node was selected during this spotlight session
+            restoreViewportIfNeeded();
             ui.wrap.classList.add("hidden");
             clearBigbox();
+            // Restore default placeholder on close
+            ui.input.placeholder = defaultPlaceholder;
             state.open = false;
             state.handlerActive = false;
             state.handler = "";
@@ -699,6 +627,11 @@ app.registerExtension({
             state.reactivateAwaitingSpaceToggle = false;
             state.reactivateSpaceRemoved = false;
             state.restoredHandler = "";
+            // Clear any shift preview state
+            state.shiftPreviewActive = false;
+            shiftPreviewSavedViewport = null;
+            shiftPreviewSavedGraphContext = null;
+            shiftPreviewSavedSelection = null;
         }
 
         // Handle backspace on input to deactivate handler
@@ -717,6 +650,8 @@ app.registerExtension({
                 state.reactivateSpaceRemoved = false;
                 state.restoredHandler = oldHandler;
                 ui.badge.classList.add("hidden");
+                // Restore placeholder to default when handler deactivates
+                ui.input.placeholder = defaultPlaceholder;
                 ui.input.value = restoredText;
                 // Move cursor to end
                 setTimeout(() => {
@@ -726,6 +661,31 @@ app.registerExtension({
             }
         });
 
+        // Helper to unify ArrowUp/ArrowDown navigation logic to avoid duplicate code
+        const handleArrowNavigation = (delta, shiftKey) => {
+            // Record keyboard navigation timestamp to suppress hover selection briefly
+            SpotlightRuntime.lastKeyboardNavigationTime = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
+            // Disable hover-driven active changes while using keyboard
+            ui.wrap.classList.remove('hover-enabled');
+
+            const maxIdx = Math.max(0, (state.results?.length || 1) - 1);
+            const newIdx = Math.max(0, Math.min(maxIdx, state.active + delta));
+            updateActiveItem(newIdx);
+
+            if (shiftKey) {
+                if (!state.shiftPreviewActive) {
+                    saveShiftPreviewViewport();
+                    saveShiftPreviewGraphContext();
+                    saveShiftPreviewSelection();
+                    state.shiftPreviewActive = true;
+                }
+                const r = state.results?.[newIdx];
+                if (r && r.item) {
+                    previewFocusForItem(r.item);
+                }
+            }
+        };
+
         // Keyboard handling for both settings-based hotkeys and internal navigation
         document.addEventListener("keydown", (e) => {
             const setting = app.ui.settings.getSettingValue("ovum.spotlightHotkey") ?? "/";
@@ -733,21 +693,39 @@ app.registerExtension({
             const matchesPrimary = e.key === setting && !state.open && !e.ctrlKey && !e.metaKey && !e.altKey;
             const matchesAlternate = matchesHotkey(e, alternateSetting) && !state.open;
 
-            if (matchesPrimary || matchesAlternate) {
-                e.preventDefault();
-                open();
+            // Update lastKeyWasArrow tracking before handling Shift
+            const isModifier = (k) => k === "Shift" || k === "Control" || k === "Alt" || k === "Meta";
+            if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "ArrowLeft" || e.key === "ArrowRight") {
+                lastKeyWasArrow = true;
+            } else if (!isModifier(e.key)) {
+                lastKeyWasArrow = false;
+            }
+
+            if ((matchesPrimary || matchesAlternate)) {
+                if (!isBlockedByActiveUI()) {
+                    e.preventDefault();
+                    open();
+                }
             } else if (state.open) {
-                if (e.key === "Escape") {
+                if (e.key === "Shift") {
+                    // Only activate preview-focus if the last real key pressed was an Arrow key
+                    if (!state.shiftPreviewActive && lastKeyWasArrow) {
+                        saveShiftPreviewViewport();
+                        saveShiftPreviewGraphContext();
+                        saveShiftPreviewSelection();
+                        state.shiftPreviewActive = true;
+                        const r = state.results?.[state.active];
+                        if (r && r.item) {
+                            previewFocusForItem(r.item);
+                        }
+                    }
+                } else if (e.key === "Escape") {
                     close();
                 } else if (e.key === "ArrowDown") {
-                    lastKeyboardNavigationTime = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
-                    ui.wrap.classList.remove('hover-enabled');
-                    updateActiveItem(Math.min((state.results?.length || 1) - 1, state.active + 1));
+                    handleArrowNavigation(+1, e.shiftKey);
                     e.preventDefault();
                 } else if (e.key === "ArrowUp") {
-                    lastKeyboardNavigationTime = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
-                    ui.wrap.classList.remove('hover-enabled');
-                    updateActiveItem(Math.max(0, state.active - 1));
+                    handleArrowNavigation(-1, e.shiftKey);
                     e.preventDefault();
                 } else if (e.key === "Enter") {
                     const r = state.results[state.active];
@@ -757,9 +735,25 @@ app.registerExtension({
                 }
             }
         });
+        document.addEventListener("keyup", (e) => {
+            if (!state.open) {
+                return;
+            }
+            if (e.key === "Shift") {
+                if (state.shiftPreviewActive) {
+                    // Restore graph level first, then selection, then viewport
+                    restoreShiftPreviewGraphContext();
+                    restoreShiftPreviewSelection();
+                    restoreShiftPreviewViewport();
+                    state.shiftPreviewActive = false;
+                }
+            }
+        });
         ui.input.addEventListener("input", refresh);
         ui.input.addEventListener("blur", () => setTimeout(() => {
-            if (state.open) close();
+            if (state.open) {
+                close();
+            }
         }, 150));
 
         app.ui.settings.addSetting({
@@ -792,6 +786,12 @@ app.registerExtension({
             type: "number",
             defaultValue: 6
         });
+        app.ui.settings.addSetting({
+            id: "ovum.spotlightBlockSelectors",
+            name: "ovum: Spotlight block selectors (comma-separated)",
+            type: "text",
+            defaultValue: ""
+        });
 
         // Store open function for command access
         this._spotlightOpen = open;
@@ -804,7 +804,10 @@ app.registerExtension({
             function: () => {
                 // Access the open function through the extension instance
                 if (app.extensions?.extensions?.["ovum.spotlight"]?._spotlightOpen) {
-                    app.extensions.extensions["ovum.spotlight"]._spotlightOpen();
+                    // Respect UI blockers when activating via command as well
+                    if (!isBlockedByActiveUI()) {
+                        app.extensions.extensions["ovum.spotlight"]._spotlightOpen();
+                    }
                 }
             }
         }

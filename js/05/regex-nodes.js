@@ -9,6 +9,9 @@ const ovumRegexCategory = "ovum/regex";
 
 app.registerExtension({
     name: "ovum.regex.ui",
+    /**
+     * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} app
+     */
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
         if (nodeData.category !== ovumRegexCategory && !nodeData.name.startsWith("OvumRe")) {
             return;
@@ -101,6 +104,9 @@ app.registerExtension({
 const ovumCategory = "^ovum";
 app.registerExtension({
     name: "ovum.ui",
+    /**
+     * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} app
+     */
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
         // if (!nodeData.category.match(ovumCategory) && !nodeData.name.startsWith("Ovum") && !nodeData.name.endsWith("Ovum")) {
         //     return;

@@ -22,13 +22,15 @@
     "doc": "docs"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "copy:modules": "vite build"
   },
   "devDependencies": {
     "@comfyorg/comfyui-frontend-types": "^1.25.10",
     "@comfyorg/litegraph": "^0.8.100",
     "fzf": "^0.5.2",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.2",
+    "vite": "^7.1.9"
   },
   "dependencies": {
     "lodash-es": "^4.17.21"

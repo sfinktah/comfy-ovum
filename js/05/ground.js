@@ -9,6 +9,9 @@ import {ensureDynamicInputsImpl} from "../01/dynamicInputHelpers.js";
 app.registerExtension({
     name: "ovum.ground",
 
+    /**
+     * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} appInstance
+     */
     async beforeRegisterNodeDef(nodeType, nodeData, appInstance) {
         if (nodeType.comfyClass !== "Ground") return;
 

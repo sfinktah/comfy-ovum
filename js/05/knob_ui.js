@@ -54,6 +54,9 @@ function setWidgetValue(node, name, value) {
 
 app.registerExtension({
     name: "ovum.ui.knob",
+    /**
+     * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} appInstance
+     */
     async beforeRegisterNodeDef(nodeType, nodeData, appInstance) {
         // Bind only to our Python node
         if (!nodeData || nodeData.name !== "BigKnob") return;

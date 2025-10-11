@@ -140,7 +140,7 @@ async def ovum_web(request: web.Request):
 @PromptServer.instance.routes.get('/ovum/node_modules/{tail:.*}')
 async def ovum_node_modules(request: web.Request):
     tail = request.match_info.get('tail', '')
-    return _serve_static_files(tail, NODE_MODULES_DIR, '/ovum/node_modules')
+    return _serve_static_files(tail, NODE_MODULES_DIR, '/ovum/web/dist/node_modules')
 
 
 

@@ -101,6 +101,9 @@ const updateSlots = (value) => {
 };
 app.registerExtension({
     name: "ovum.contextmenu",
+    /**
+     * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} app
+     */
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
         if (possibleUniversalNodesToAdd.includes(nodeData.name)) {
             universalNodesToAddToOutput.add(nodeData.name);
@@ -152,7 +155,10 @@ app.registerExtension({
             updateSlots('timer');
         }, 1000);
     },
-    async setup(app) {
+    /**
+         * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} app
+         */
+        async setup(app) {
         app.ui.settings.addSetting({
             id: "ovum.SetGetMenu",
             name: "ovum: Make TwinNodes default options",

@@ -39,6 +39,9 @@ app.registerExtension({
             }
         });
     },
+    /**
+     * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} app_
+     */
     async beforeRegisterNodeDef(nodeType, nodeData, app_) {
         // 2) Still honor UI side-effects for SetLocalStorage on node onExecuted
         if (nodeType?.comfyClass !== "SetLocalStorage") {

@@ -2,10 +2,12 @@ import { app } from "../../../scripts/app.js";
 import { api } from "../../../scripts/api.js";
 import {chainCallback} from "../01/utility.js";
 
-// Register the extension
 app.registerExtension({
     name: "ovum.halt_toggle",
 
+    /**
+     * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} app
+     */
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
         if (nodeData.name === "HaltToggle") {
             const onExecuted = nodeType.prototype.onExecuted;

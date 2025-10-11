@@ -12,7 +12,7 @@ from .result_wrapper import (
 
 # Backend endpoints analogous to cg-nodecaching/node_cacher_api.py
 
-@PromptServer.instance.routes.post("/ovum_result_wrap_request")
+@PromptServer.instance.routes.post("/ovum/result_wrap_request")
 async def ovum_result_wrap_request(request: web.Request):
     try:
         data = await request.post()
@@ -28,7 +28,7 @@ async def ovum_result_wrap_request(request: web.Request):
         return web.json_response({"response": False})
 
 
-@PromptServer.instance.routes.post("/ovum_result_wrap_query")
+@PromptServer.instance.routes.post("/ovum/result_wrap_query")
 async def ovum_result_wrap_query(request: web.Request):
     try:
         data = await request.post()
@@ -37,7 +37,7 @@ async def ovum_result_wrap_query(request: web.Request):
     except Exception:
         return web.json_response({"response": False})
 
-@PromptServer.instance.routes.post("/ovum_result_wrap_query_bulk")
+@PromptServer.instance.routes.post("/ovum/result_wrap_query_bulk")
 async def ovum_result_wrap_query_bulk(request: web.Request):
     # Accepts JSON body: { "types": ["ClassA", "ClassB", ...] }
     try:
@@ -64,7 +64,7 @@ async def ovum_result_wrap_query_bulk(request: web.Request):
 
 
 
-@PromptServer.instance.routes.post("/ovum_result_wrap_init")
+@PromptServer.instance.routes.post("/ovum/result_wrap_init")
 async def ovum_result_wrap_init(request: web.Request):
     # Auto-convert any classes listed in classes_to_result_wrap.txt (like cg-nodecaching)
     try:

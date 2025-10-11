@@ -325,6 +325,9 @@ app.registerExtension({
             logger.error("Failed to load resources, node may be unavailable", e);
         }
     },
+    /**
+     * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} app
+     */
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
         if (nodeData.name !== "Label") return;
 

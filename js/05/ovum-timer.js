@@ -128,6 +128,9 @@ app.registerExtension({
 
         Logger.log({class:'ovum.timer',method:'setup',severity:'info',tag:'registration'}, 'ovum.timer registered');
     },
+    /**
+     * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} app
+     */
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
         if (nodeType.comfyClass === "Timer") {
             chainCallback(nodeType.prototype, "onExecutionStart", function () {
