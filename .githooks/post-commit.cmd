@@ -25,7 +25,7 @@ for %%S in ("%S1%" "%S2%" "%S3%") do (
       set LINE=%%l
       if "!LINE!"=="CHANGED=1" set CHANGED=1
       for /f "tokens=1,2 delims==" %%a in ("!LINE!") do (
-        if "%%a"=="FILE" set FILEPATH=%%b & git add "!FILEPATH!"
+        if "%%a"=="FILE" set "FILEPATH=%%b" & git add "!FILEPATH!"
       )
     )
   )
