@@ -177,105 +177,120 @@ Does nothing, used to force additional attached inputs to complete before the ne
             "result": tuple([any_input] + outputs),
         }
 
-METADATA_RAW = ("METADATA_RAW", {"forceInput": True})
+# Dynamically create complimentary nodes for ComfyUI primitive types in a DRY way
 
-class CImagePreviewFromMetadata(PreviewImage):
-    def __init__(self):
-        self.data_cached = None
-        self.data_cached_text = None
+def _make_widget_to_primitive(clazz_name: str, return_type: str, caster):
+    # Build a class similar to WidgetToStringOvum but emitting a primitive type
+    class _WidgetToPrimitive:
+        @classmethod
+        def IS_CHANGED(cls, *, id, node_title, any_input=None, **kwargs):
+            if any_input is not None and (id != 0 or node_title != ""):
+                return float("NaN")
 
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                # if it is required, in next node does not receive any value even the cache!
-            },
-            "optional": {
-                "metadata_raw": METADATA_RAW,
-            },
-        }
-
-    CATEGORY = "ovum/crystools"
-    RETURN_TYPES = ("METADATA_RAW",)
-    RETURN_NAMES = ("Metadata RAW",)
-    OUTPUT_NODE = True
-
-    FUNCTION = "execute"
-
-    def execute(self, metadata_raw=None):
-        text = ""
-        title = ""
-        data = {
-            "result": [''],
-            "ui": {
-                "text": [''],
-                "images": [],
+        @classmethod
+        def INPUT_TYPES(cls):
+            # Same inputs as WidgetToStringOvum, but omit allowed_float_decimals unless FLOAT
+            optional = {
+                "any_input": (IO.ANY,),
+                "node_title": ("STRING", {"multiline": False}),
             }
-        }
+            if return_type == "FLOAT":
+                optional["allowed_float_decimals"] = ("INT", {"default": 2, "min": 0, "max": 10, "tooltip": "Number of decimal places to round for floats (display only)"})
+            return {
+                "required": {
+                    "id": ("STRING", {"multiline": False}),
+                    "widget_name": ("STRING", {"multiline": False}),
+                    "return_all": ("BOOLEAN", {"default": False}),
+                },
+                "optional": optional,
+                "hidden": {
+                    "extra_pnginfo": "EXTRA_PNGINFO",
+                    "prompt": "PROMPT",
+                    "unique_id": "UNIQUE_ID",
+                },
+            }
 
-        if metadata_raw is not None and metadata_raw != '':
-            promptFromImage = {}
-            if "prompt" in metadata_raw:
-                promptFromImage = metadata_raw["prompt"]
+        RETURN_TYPES = (return_type,)
+        FUNCTION = "get_widget_value"
+        CATEGORY = "ovum/KJNodes"
+        DESCRIPTION = f"""
+Selects a node and its specified widget and outputs the value as {return_type}.
+If no node id or title is provided it will use the 'any_input' link and use that node.
+The 'any_input' is required for making sure the node you want the value from exists in the workflow.
+"""
 
-            title = "Source: Metadata RAW\n"
-            text += buildPreviewText(metadata_raw)
-            text += f"Prompt from image:\n"
-            text += json.dumps(promptFromImage, indent=CONFIG["indent"])
-
-            images = self.resolveImage(metadata_raw["fileinfo"]["filename"])
-            result = metadata_raw
-
-            data["result"] = [result]
-            data["ui"]["images"] = images
-
-            self.data_cached_text = text
-            self.data_cached = data
-
-        elif metadata_raw is None and self.data_cached is not None:
-            title = "Source: Metadata RAW - CACHED\n"
-            data = self.data_cached
-            text = self.data_cached_text
-
-        else:
-            logger.debug("Source: Empty on CImagePreviewFromMetadata")
-            text = "Source: Empty"
-
-        data["ui"]["text"] = [title + text]
-        return data
-
-    def resolveImage(self, filename=None):
-        images = []
-
-        if filename is not None:
-            image_input_folder = os.path.normpath(folder_paths.get_input_directory())
-            image_input_folder_abs = Path(image_input_folder).resolve()
-
-            image_path = os.path.normpath(filename)
-            image_path_abs = Path(image_path).resolve()
-
-            if Path(image_path_abs).is_file() is False:
-                raise Exception('[ovum] file not found')
-
+        @classmethod
+        def get_widget_value(cls, id, widget_name, extra_pnginfo, prompt, unique_id, return_all=False, any_input=None, node_title="", allowed_float_decimals=2):
             try:
-                # get common path, should be input/output/temp folder
-                common = os.path.commonpath([image_input_folder_abs, image_path_abs])
+                from .metadata.metadata_processor import MetadataProcessor as _MP
+            except Exception:
+                from metadata.metadata_processor import MetadataProcessor as _MP
+            workflow = extra_pnginfo["workflow"]
+            meta = _MP(workflow, prompt)
+            node_full_id = meta.findWorkflowNodeFullId(id=id, node_title=node_title, any_input=any_input, unique_id=unique_id, current_node=cls.__name__)
+            if return_all:
+                values = prompt.get(str(node_full_id))
+                if not values or 'inputs' not in values:
+                    raise ValueError(f"No prompt entry found for node id: {node_full_id}")
+                inputs = values.get('inputs') or {}
+                # Cast each value via caster when sensible
+                out = {}
+                for k, v in inputs.items():
+                    try:
+                        out[k] = caster(v, allowed_float_decimals)
+                    except Exception:
+                        # if cast fails, keep original
+                        out[k] = v
+                return (out,)
+            else:
+                native = meta.getPromptInputValue(node_full_id, widget_name)[0]
+                value = caster(native, allowed_float_decimals)
+                return (value,)
 
-                if common != image_input_folder:
-                    raise Exception("Path invalid (should be in the input folder)")
-
-                relative = os.path.normpath(os.path.relpath(image_path_abs, image_input_folder_abs))
-
-                images.append({
-                    "filename": Path(relative).name,
-                    "subfolder": os.path.dirname(relative),
-                    "type": "input"
-                })
-
-            except Exception as e:
-                logger.warn(e)
-
-        return images
+    _WidgetToPrimitive.__name__ = clazz_name
+    return _WidgetToPrimitive
 
 
-CLAZZES = [WidgetToStringOvum, WorkflowWidgetToAnyOvum, SyncSinkOvum]
+def _cast_int(v, _):
+    if isinstance(v, bool):
+        return int(v)
+    if isinstance(v, (int,)):
+        return v
+    if isinstance(v, float):
+        return int(v)
+    if isinstance(v, str) and v.strip() != "":
+        return int(float(v))
+    return int(v)
+
+
+def _cast_float(v, _):
+    if isinstance(v, (int, float, bool)):
+        return float(v)
+    if isinstance(v, str) and v.strip() != "":
+        return float(v)
+    return float(v)
+
+
+def _cast_bool(v, _):
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, (int, float)):
+        return v != 0
+    if isinstance(v, str):
+        s = v.strip().lower()
+        if s in ("true", "1", "yes", "y", "on"): return True
+        if s in ("false", "0", "no", "n", "off", ""): return False
+    return bool(v)
+
+
+def _cast_string(v, allowed_float_decimals):
+    if isinstance(v, float):
+        return f"{v:.{allowed_float_decimals}f}"
+    return str(v)
+
+# Existing explicit class for STRING remains, but we also provide a DRY-generated one for completeness if needed
+WidgetToIntOvum = _make_widget_to_primitive("WidgetToIntOvum", "INT", _cast_int)
+WidgetToFloatOvum = _make_widget_to_primitive("WidgetToFloatOvum", "FLOAT", _cast_float)
+WidgetToBooleanOvum = _make_widget_to_primitive("WidgetToBooleanOvum", "BOOLEAN", _cast_bool)
+
+CLAZZES = [WidgetToStringOvum, WidgetToIntOvum, WidgetToFloatOvum, WidgetToBooleanOvum, WorkflowWidgetToAnyOvum, SyncSinkOvum]

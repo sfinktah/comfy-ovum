@@ -1,5 +1,4 @@
 /** @typedef {import('@comfyorg/comfyui-frontend-types').ComfyApp} ComfyApp */
-/** @typedef {import("@comfyorg/comfyui-frontend-types").ComfyNode} ComfyNode */
 /** @typedef {import("../../typings/ComfyNode").ComfyNode} ComfyNode */
 
 import { app } from "../../../scripts/app.js";
