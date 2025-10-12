@@ -39,6 +39,7 @@ import {TwinNodes} from "../common/twinNodes.js";
 import {log} from "../common/logger.js";
 import {chainCallback} from "../01/utility.js";
 import {drawTextWithBg, getWidgetBounds} from "../01/canvasHelpers.js";
+import {pushCurrentView, showTwinTipIfNeeded} from "./navigation-stack.js";
 
 // mostly written by GPT-5
 // based on KJ's SetGet: https://github.com/kj-comfy/ComfyUI-extensions which was
@@ -715,6 +716,8 @@ app.registerExtension({
             goToSetter() {
                 const setter = findSetter(this);
                 if (setter) {
+                    // Push current view before jumping so user can return with Shift+T
+                    try { pushCurrentView(); showTwinTipIfNeeded(); } catch (_) {}
                     this.canvas.centerOnNode(setter.node);
                     this.canvas.selectNode(setter.node, false);
                 }
