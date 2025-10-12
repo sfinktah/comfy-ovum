@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ProjectModuleManager">
+    <modules>
+      <module fileurl="file://$PROJECT_DIR$/.idea/cg-quicknodes.iml" filepath="$PROJECT_DIR$/.idea/cg-quicknodes.iml" />
+      <module fileurl="file://$PROJECT_DIR$/../ovum-cudnn-wrapper/.idea/ovum-cudnn-wrapper.iml" filepath="$PROJECT_DIR$/../ovum-cudnn-wrapper/.idea/ovum-cudnn-wrapper.iml" />
+      <module fileurl="file://$PROJECT_DIR$/../ovum-spotlight/.idea/ovum-spotlight.iml" filepath="$PROJECT_DIR$/../ovum-spotlight/.idea/ovum-spotlight.iml" />
+    </modules>
+  </component>
+</project>

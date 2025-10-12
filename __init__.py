@@ -1,4 +1,7 @@
-import sys, os, importlib, re, os
+import importlib
+import os
+import re
+import sys
 
 sys.path.insert(0,os.path.dirname(os.path.realpath(__file__)))
 module_root_directory = os.path.dirname(os.path.realpath(__file__))
@@ -9,6 +12,8 @@ NODE_CLASS_MAPPINGS = {
 NODE_DISPLAY_NAME_MAPPINGS = {
 }
 
+
+# noinspection PyShadowingNames
 def pretty(name:str):
     return " ".join(re.findall("[A-Z]*[a-z]*", name))
 
@@ -39,7 +44,6 @@ __all__ = ['NODE_CLASS_MAPPINGS', 'NODE_DISPLAY_NAME_MAPPINGS', 'WEB_DIRECTORY']
 try:
     from . import _mini_webserver  # noqa: F401
     from . import _result_wrapper_api  # noqa: F401
-    from . import _cudnn_wrapper_api  # noqa: F401
 except Exception:
     # Do not fail package import if optional server components are unavailable
     pass
