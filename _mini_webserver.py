@@ -17,7 +17,8 @@ from server import PromptServer
 # Base directory for serving
 MODULE_DIR = Path(__file__).resolve().parent
 WEB_DIR = MODULE_DIR / "web"
-NODE_MODULES_DIR = (MODULE_DIR / "node_modules").resolve()
+# NODE_MODULES_DIR = (MODULE_DIR / "node_modules").resolve()
+NODE_MODULES_DIR = (MODULE_DIR / "web/dist/node_modules").resolve()
 
 # Ensure mimetypes has some common types on Windows
 mimetypes.add_type("text/markdown", ".md")
