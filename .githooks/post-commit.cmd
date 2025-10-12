@@ -13,9 +13,9 @@ REM Determine repository root
 for /f "tokens=*" %%i in ('git rev-parse --show-toplevel') do set REPO_ROOT=%%i
 
 REM List of per-project bump scripts (run individually)
-set S1=%REPO_ROOT%\custom_nodes\ovum\tools\auto_bump_version_ovum.py
-set S2=%REPO_ROOT%\custom_nodes\ovum\tools\auto_bump_version_spotlight.py
-set S3=%REPO_ROOT%\custom_nodes\ovum\tools\auto_bump_version_cudnn_wrapper.py
+set S1=%REPO_ROOT%\tools\auto_bump_version_ovum.py
+set S2=%REPO_ROOT%\tools\auto_bump_version_spotlight.py
+set S3=%REPO_ROOT%\tools\auto_bump_version_cudnn_wrapper.py
 
 set CHANGED=
 
