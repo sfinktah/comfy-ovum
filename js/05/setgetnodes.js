@@ -30,78 +30,6 @@ import {drawTextWithBg, getWidgetBounds} from "../01/canvasHelpers.js";
 import {log} from "../common/logger.js";
 import {pushCurrentView, showTwinTipIfNeeded} from "./navigation-stack.js";
 
-// Helper to collect unmatched getter-selected names (present in GetTwinNodes but not in any SetTwinNodes)
-function getUnmatchedGetterValues(graph) {
-    try {
-        const getterNodes = GraphHelpers.getNodesByType(graph, 'GetTwinNodes') || [];
-        const setterNodes = GraphHelpers.getNodesByType(graph, 'SetTwinNodes') || [];
-        const getterValues = new Set();
-        const setterValues = new Set();
-        // Collect non-empty getter selections (excluding the explicit unset sentinel)
-        for (const g of getterNodes) {
-            const ws = g?.widgets || [];
-            for (const w of ws) {
-                const v = safeStringTrim(w?.value);
-                if (v && v !== '(unset)') getterValues.add(v);
-            }
-        }
-        // Collect existing setter widget names
-        for (const s of setterNodes) {
-            const ws = s?.widgets || [];
-            for (const w of ws) {
-                const v = safeStringTrim(w?.value);
-                if (v) setterValues.add(v);
-            }
-        }
-        // Compute unmatched: getter - setter
-        const unmatched = Array.from(getterValues).filter(v => !setterValues.has(v));
-        unmatched.sort((a, b) => a.localeCompare(b));
-        return unmatched;
-    } catch (_e) {
-        return [];
-    }
-}
-
-// Convert a specific widget to a plain text widget (STRING) in-place
-function convertWidgetToText(node, idx) {
-    try {
-        const w = node?.widgets?.[idx];
-        if (!w) return;
-        // Change type first so renderer stops treating it as a ComboWidget
-        w.type = "text";
-        if (w.options) {
-            delete w.options.values;
-        } else {
-            w.options = {};
-        }
-        // Force a redraw to apply the change immediately
-        node?.setDirty?.(true, true);
-    } catch (_e) { /* ignore */ }
-}
-
-// Ensure a combo widget has a safe values provider/array to avoid runtime errors in renderer
-function ensureComboValues(node, idx) {
-    try {
-        const w = node?.widgets?.[idx];
-        if (!w || w.type !== "combo") return;
-        if (!w.options) w.options = {};
-        const hasValuesKey = Object.prototype.hasOwnProperty.call(w.options, "values");
-        const needsFix = !hasValuesKey || w.options.values == null;
-        if (!needsFix) return;
-        const MANUAL_OPTION = "(enter manually…)";
-        w.options.values = () => {
-            try {
-                const graph = node.graph;
-                if (!graph) return [MANUAL_OPTION];
-                const unmatched = getUnmatchedGetterValues(graph);
-                return [MANUAL_OPTION, ...unmatched];
-            } catch (_e) {
-                return [MANUAL_OPTION];
-            }
-        };
-    } catch (_e) { /* ignore */ }
-}
-
 /**
  * Get the bounding box of a widget in node-local coordinates
  * @param {LGraphNode} node - The node containing the widget
@@ -135,27 +63,13 @@ class SetTwinNodes extends TwinNodes {
         const initialCount = this.numberOfWidgets || 2;
         for (let i = 0; i < initialCount; i++) {
             const idx = i;
-            const MANUAL_OPTION = "(enter manually…)";
             const widget = this.addWidget(
-                "combo",
+                "text",
                 `Constant ${idx + 1}`,
                 '',
                 callback,
-                {
-                    values: () => {
-                        try {
-                            const graph = node.graph;
-                            if (!graph) return [MANUAL_OPTION];
-                            const unmatched = getUnmatchedGetterValues(graph);
-                            return [MANUAL_OPTION, ...unmatched];
-                        } catch (_e) {
-                            return [MANUAL_OPTION];
-                        }
-                    }
-                }
+                {}
             );
-            // Ensure values provider remains present even after deserialization/edits
-            ensureComboValues(node, idx);
             // Hook the value setter to track previous value
             // wrapWidgetValueSetter(widget);
 
@@ -179,23 +93,6 @@ class SetTwinNodes extends TwinNodes {
                     pos: pos,
                     // e: e
                 });
-                try {
-                    if (value === MANUAL_OPTION) {
-                        // Let user type a custom name via prompt, then validate and apply
-                        const entered = (typeof window !== 'undefined' && typeof window.prompt === 'function')
-                            ? window.prompt('Enter constant name:', '')
-                            : '';
-                        if (entered == null) {
-                            // user cancelled; clear selection
-                            setWidgetValue(node, idx, '');
-                        } else {
-                            setWidgetValueWithValidation(node, idx, entered);
-                            value = node.widgets[idx]?.value;
-                            // Switch this widget to a plain text widget since the user opted to enter manually
-                            convertWidgetToText(node, idx);
-                        }
-                    }
-                } catch (_e) { /* ignore */ }
                 if (node && node.graph) {
                     validateWidgetValue(node, idx);
                     node.updateTitle();
@@ -214,21 +111,6 @@ class SetTwinNodes extends TwinNodes {
         ensureSlotCounts(this);
         // Initialize previousNames snapshot to current widget values
         this.properties.previousNames = (this.widgets || []).map(w => safeStringTrim(w?.value));
-        // If there are no unmatched getter-selected names, use plain STRING widgets instead of combo
-        setTimeout(() => {
-            try {
-                const graph = node.graph;
-                if (graph) {
-                    const unmatched = getUnmatchedGetterValues(graph);
-                    if (Array.isArray(unmatched) && unmatched.length === 0) {
-                        for (let wi = 0; wi < (node.widgets?.length || 0); wi++) {
-                            convertWidgetToText(node, wi);
-                        }
-                        node.update?.();
-                    }
-                }
-            } catch (_e) { /* ignore */ }
-        }, 200);
         // node.updateTitle();
         // node.updateColors();
 
@@ -573,8 +455,6 @@ class SetTwinNodes extends TwinNodes {
     onAdded(graph) {
         if (Array.isArray(this.widgets)) {
             for (let i = 0; i < this.widgets.length; i++) {
-                // Ensure any combo widgets have a safe values provider after deserialization
-                ensureComboValues(this, i);
                 validateWidgetValue(this, i);
             }
         }
@@ -586,10 +466,6 @@ class SetTwinNodes extends TwinNodes {
      */
     onConfigure(_data) {
         log({ class: "SetTwinNodes", method: "onConfigure", severity: "trace", tag: "function_entered" }, _data);
-        // Ensure combo widgets have valid values providers after deserialization
-        if (Array.isArray(this.widgets)) {
-            for (let i = 0; i < this.widgets.length; i++) ensureComboValues(this, i);
-        }
         this.__restoring = true;
         setTimeout(() => { this.__restoring = false; }, 1000);
     }
@@ -716,7 +592,6 @@ class SetTwinNodes extends TwinNodes {
             let gettersSubmenu = node.currentGetters.flat(1).map(getter => ({
                 content: `${getter.title} id: ${getter.id}`,
                 callback: () => {
-                    // Push current view before jumping so user can return with Shift+T
                     try { pushCurrentView(); showTwinTipIfNeeded(); } catch (_) {}
                     node.canvas.centerOnNode(getter);
                     node.canvas.selectNode(getter, false);
