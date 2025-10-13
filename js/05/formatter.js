@@ -1,11 +1,11 @@
 /** @typedef {import('@comfyorg/comfyui-frontend-types').ComfyApp} ComfyApp */
 /** @typedef {import('@comfyorg/litegraph').LiteGraph} LiteGraph */
-/** @typedef {import("@comfyorg/litegraph/dist/interfaces").INodeInputSlot} INodeInputSlot */
-/** @typedef {import("@comfyorg/litegraph/dist/interfaces").INodeOutputSlot} INodeOutputSlot */
-/** @typedef {import("@comfyorg/litegraph/dist/interfaces").ISlotType} ISlotType */
-/** @typedef {import("@comfyorg/litegraph/dist/LLink").LLink} LLink */
-/** @typedef {import("@comfyorg/litegraph/dist/types/serialisation").SubgraphIO} SubgraphIO */
-/** @typedef {import("@comfyorg/litegraph/dist/LGraphNode").LGraphNode} LGraphNode */
+/** @typedef {import("@comfyorg/comfyui-frontend-types").INodeInputSlot} INodeInputSlot */
+/** @typedef {import("@comfyorg/comfyui-frontend-types").INodeOutputSlot} INodeOutputSlot */
+/** @typedef {import("@comfyorg/comfyui-frontend-types").ISlotType} ISlotType */
+/** @typedef {import("@comfyorg/comfyui-frontend-types").LLink} LLink */
+/** @typedef {import("@comfyorg/comfyui-frontend-types").SubgraphIO} SubgraphIO */
+/** @typedef {import("@comfyorg/comfyui-frontend-types").LGraphNode} LGraphNode */
 /** @typedef {import("../../typings/ComfyNode").ComfyNode} ComfyNode */
 
 import { app } from "../../../scripts/app.js";
@@ -22,8 +22,8 @@ app.registerExtension({
      * It establishes and enforces rules for dynamic input management for specific node types,
      * ensuring correct behavior during node creation, configuration, and connection changes.
      *
-     * @param {Object} node - The newly created node instance.
-     * @param {Object} app - The application instance where the node is being registered or managed.
+     * @param {LGraphNode} node - The newly created node instance.
+     * @param {ComfyApp} app - The application instance where the node is being registered or managed.
      * @return {Promise<void>} Resolves when the node's dynamic input rules and behaviors are properly initialized.
      */
     /**
@@ -39,11 +39,8 @@ app.registerExtension({
      *
      * @param {Object} nodeType - The type definition of the node being registered.
      * @param {Object} nodeData - The data associated with the node being registered.
-     * @param {Object} appInstance - The application instance where the node is being registered.
+     * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} appInstance - The application instance where the node is being registered.
      * @return {Promise<void>} Resolves when the dynamic input management is set up for the specified node type.
-     */
-    /**
-     * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} appInstance
      */
     async beforeRegisterNodeDef(nodeType, nodeData, appInstance) {
         // Target the Python class that supports many dynamic inputs

@@ -132,15 +132,37 @@ function normalizeTag(tag) {
     return [];
 }
 
-function buildSource(meta) {
+function buildSourceIdentifier (cls, method, nodeName) {
+    // Should return a string of the form "cls:nodeName:method" replacing repeated items with empty strings
+    let methodPart = method;
+    let nodePart = nodeName;
+    let clsPart = cls;
+
+    // If method matches cls or nodeName, use empty string
+    if (methodPart === clsPart || methodPart === nodePart) {
+        methodPart = '';
+    }
+
+    // If nodeName matches cls, use empty string
+    if (nodePart === clsPart) {
+        nodePart = '';
+    }
+
+    return [clsPart, nodePart, methodPart].join(':');
+}
+
+function buildSource (meta) {
+    // Extract and sanitize inputs
     const cls = meta?.class ? String(meta.class) : '';
     const method = meta?.method ? String(meta.method) : '';
-    const nodeName = meta?.nodeName ? String(meta.nodeName) : null;
+    const nodeName = meta?.nodeName ? String(meta.nodeName) : '';
 
-    let source = (cls || method) ? `${cls}${cls && method ? '::' : ''}${method}` : '';
-    if (nodeName) {
-        source = source ? `${nodeName}:${source}` : nodeName;
-    }
+    // Build the basic source identifier (class::method)
+    // noinspection UnnecessaryLocalVariableJS
+    let source = buildSourceIdentifier(cls, method, nodeName);
+
+    // Add nodeName prefix if it exists
+
     return source;
 }
 

@@ -1,14 +1,14 @@
 # Stolen from/extends functionality of https://github.com/aria1th/ComfyUI-LogicUtils/blob/main/pystructure.py
 from common_types import NewPointer, ANYTYPE, _parse_optional_int
-from nodes import NODE_CLASS_MAPPINGS as ALL_NODE_CLASS_MAPPINGS
+# from nodes import NODE_CLASS_MAPPINGS as ALL_NODE_CLASS_MAPPINGS
 import logging
-from ovum_helpers import resolve_effective_list
+# from ovum_helpers import resolve_effective_list
 logger = logging.getLogger(__name__)
 
 
 class ListSlice(NewPointer):
     DEPRECATED = True
-    class_name = "ListSliceDEPRECATED(batch)"
+    custom_name = "ListSliceDEPRECATED(batch)"
     DESCRIPTION = """
     Extract a slice of a list (JavaScript Array.prototype.slice semantics).
 
@@ -32,7 +32,7 @@ class ListSlice(NewPointer):
     INPUT_IS_LIST = True
     OUTPUT_IS_LIST = (True,)
     CATEGORY = "Data"
-    custom_name = "Pyobjects/List Slice"
+
 
     @staticmethod
     def list_slice(py_list, start=None, end=None):
@@ -83,7 +83,7 @@ class ListSlice(NewPointer):
 
 class ListSplice(NewPointer):
     DEPRECATED = True
-    class_name = "ListSpliceDEPRECATED(batch)"
+    custom_name = "ListSpliceDEPRECATED(batch)"
     DESCRIPTION = """ 
     Splice a list in place (JavaScript Array.prototype.splice semantics).
 
@@ -113,7 +113,7 @@ class ListSplice(NewPointer):
     INPUT_IS_LIST = True
     OUTPUT_IS_LIST = (True, True)
     CATEGORY = "Data"
-    custom_name = "Pyobjects/List Splice"
+
 
     @staticmethod
     def list_splice(py_list, start=None, delete_count=None, insert_list=None):
@@ -174,7 +174,7 @@ class ListSplice(NewPointer):
 
 class RepeatItem(NewPointer):
     DEPRECATED = True
-    class_name = "RepeatItemDEPRECATED(batch)"
+    custom_name = "RepeatItemDEPRECATED(batch)"
     DESCRIPTION = """
     Create a list containing the given item repeated 'count' times.
     """
@@ -182,7 +182,7 @@ class RepeatItem(NewPointer):
     RETURN_TYPES = (ANYTYPE,)
     OUTPUT_IS_LIST = (True,)
     CATEGORY = "Data"
-    custom_name = "Pyobjects/Repeat Item"
+
 
     @staticmethod
     def repeat_item(item, count):
@@ -206,7 +206,7 @@ class RepeatItem(NewPointer):
 
 class ReverseList(NewPointer):
     DEPRECATED = True
-    class_name = "ReverseListDEPRECATED(batch)"
+    custom_name = "ReverseListDEPRECATED(batch)"
     DESCRIPTION = """
     Return a new list with the elements of the input list in reverse order.
     """
@@ -215,7 +215,7 @@ class ReverseList(NewPointer):
     INPUT_IS_LIST = True
     OUTPUT_IS_LIST = (True,)
     CATEGORY = "Data"
-    custom_name = "Pyobjects/Reverse List"
+
 
     @staticmethod
     def list_reverse(py_list):
@@ -234,7 +234,7 @@ class ReverseList(NewPointer):
 
 class ConcatLists(NewPointer):
     DEPRECATED = True
-    class_name = "ConcatListsDEPRECATED(batch)"
+    custom_name = "ConcatListsDEPRECATED(batch)"
     DESCRIPTION = """
     Concatenate arrays (lists) (JavaScript Array.prototype.concat semantics).
     - If list_b is empty/unspecified, returns a shallow copy of list_a.
@@ -247,7 +247,7 @@ class ConcatLists(NewPointer):
     INPUT_IS_LIST = True
     OUTPUT_IS_LIST = (True,)
     CATEGORY = "Data"
-    custom_name = "Pyobjects/List Concat"
+
 
     @staticmethod
     def list_concat(list_a=None, list_b=None):
@@ -267,7 +267,7 @@ class ConcatLists(NewPointer):
 
 class IndexOf(NewPointer):
     DEPRECATED = True
-    class_name = "IndexOfDEPRECATED(batch)"
+    custom_name = "IndexOfDEPRECATED(batch)"
     DESCRIPTION = """
     JavaScript Array.prototype.indexOf-like search.
     - start (optional): Blank -> 0. Negative -> n+start clamped to [0,n].
@@ -278,7 +278,7 @@ class IndexOf(NewPointer):
     INPUT_IS_LIST = True
     RETURN_TYPES = ("INT",)
     CATEGORY = "Data"
-    custom_name = "Pyobjects/List IndexOf"
+
 
     @staticmethod
     def list_index_of(py_list, search_element, start=None):
@@ -312,7 +312,7 @@ class IndexOf(NewPointer):
 
 class JoinList(NewPointer):
     DEPRECATED = True
-    class_name = "JoinListDEPRECATED(batch)"
+    custom_name = "JoinListDEPRECATED(batch)"
     DESCRIPTION = """
     Join elements into a string (JavaScript Array.prototype.join semantics).
     - separator (optional): Blank/unspecified -> "," (comma) per JS default. Use empty string for no separator.
@@ -322,7 +322,7 @@ class JoinList(NewPointer):
     INPUT_IS_LIST = True
     RETURN_TYPES = ("STRING",)
     CATEGORY = "Data"
-    custom_name = "Pyobjects/List Join"
+
 
     @staticmethod
     def list_join(py_list, separator=None):
@@ -343,7 +343,7 @@ class JoinList(NewPointer):
 
 class UniqueList(NewPointer):
     DEPRECATED = True
-    class_name = "UniqueListDEPRECATED(batch)"
+    custom_name = "UniqueListDEPRECATED(batch)"
     DESCRIPTION = """
     Return a new list with duplicate values removed, preserving the first occurrence order.
     """
@@ -352,7 +352,7 @@ class UniqueList(NewPointer):
     INPUT_IS_LIST = True
     OUTPUT_IS_LIST = (True,)
     CATEGORY = "Data"
-    custom_name = "Pyobjects/Unique List"
+
 
     @staticmethod
     def list_unique(py_list):
@@ -383,7 +383,7 @@ class UniqueList(NewPointer):
 
 class StringListEditor(NewPointer):
     DEPRECATED = True
-    class_name = "StringListEditorDEPRECATED(batch)"
+    custom_name = "StringListEditorDEPRECATED(batch)"
     DESCRIPTION = """
     Create and edit a list of strings with UI support for adding items and drag & drop of files.
     UI behavior (frontend):
@@ -398,7 +398,7 @@ class StringListEditor(NewPointer):
     RETURN_TYPES = (ANYTYPE,)
     OUTPUT_IS_LIST = (True,)
     CATEGORY = "Data"
-    custom_name = "Pyobjects/String List Editor"
+
 
     @staticmethod
     def string_list_editor(items_text=""):
@@ -425,7 +425,7 @@ class StringListEditor(NewPointer):
 
 class FromListTypeNode(NewPointer):
     DEPRECATED = True
-    class_name = "FromListTypeNodeDEPRECATED(batch)"
+    custom_name = "FromListTypeNodeDEPRECATED(batch)"
     """
     Takes a Python list and converts it to other types (tuple, set, dict, etc.).
     This is the inverse of ToListTypeNode.
@@ -433,7 +433,7 @@ class FromListTypeNode(NewPointer):
     FUNCTION = "from_list_type"
     RETURN_TYPES = (ANYTYPE,)
     CATEGORY = "Data"
-    custom_name="Pyobjects/Cast from LIST"
+
 
     @staticmethod
     def from_list_type(py_list, target_type="tuple"):
@@ -473,121 +473,9 @@ class FromListTypeNode(NewPointer):
             }
         }
 
-class ReinterpretCast(NewPointer):
-    DEPRECATED = True
-    class_name = "ReinterpretCastDEPRECATED(batch)"
-    """
-    Blindly cast anything to anything
-    """
-    FUNCTION = "reinterpret_cast"
-    RETURN_TYPES = (ANYTYPE,)
-    CATEGORY = "Data"
-    custom_name="Blind Cast"
-
-    @staticmethod
-    def reinterpret_cast(anything):
-        return (anything,)
-
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "anything": (ANYTYPE,),
-            }
-        }
-
-class ReinterpretAsListCast(NewPointer):
-    DEPRECATED = True
-    class_name = "ReinterpretAsListCastDEPRECATED(batch)"
-    """
-    Blindly cast anything to anything
-    """
-    FUNCTION = "reinterpret_cast"
-    RETURN_TYPES = (ANYTYPE,)
-    OUTPUT_IS_LIST = (True,)
-    INPUT_IS_LIST = True
-    CATEGORY = "Data"
-    custom_name="Blind Cast"
-
-    @staticmethod
-    def reinterpret_cast(anything):
-        return (anything,)
-
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "anything": (ANYTYPE,),
-            }
-        }
-
-
-class CastListToAny(NewPointer):
-    DEPRECATED = True
-    class_name = "CastListToAnyDEPRECATED(batch)"
-    DESCRIPTION = """
-    Cast a LIST to anytype (*) so it can connect to any input.
-    Non-mutating pass-through of the given list.
-    """
-    FUNCTION = "list_to_any"
-    RETURN_TYPES = (ANYTYPE,)
-    OUTPUT_IS_LIST = (True,)
-    CATEGORY = "Data"
-    custom_name = "Cast Pyobjects/List to Any"
-
-    @staticmethod
-    def list_to_any(py_list):
-        return (list(py_list),)
-
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "py_list": ("LIST",),
-            }
-        }
-
-
-class CastAnyToList(NewPointer):
-    DEPRECATED = True
-    class_name = "CastAnyToListDEPRECATED(batch)"
-    DESCRIPTION = """
-    Cast anytype (*) to LIST. Validates that the input is a Python list and passes it through.
-    """
-    FUNCTION = "any_to_list"
-    RETURN_TYPES = ("LIST",)
-    CATEGORY = "ovum/data"
-    custom_name = "Cast Any to Pyobjects/List"
-
-    @staticmethod
-    def any_to_list(py_list, my_unique_id=None):
-        node_id = str(my_unique_id) if my_unique_id is not None else "unknown"
-        logger.info(f"[ovum] CastAnyToList({node_id}): {type(py_list)}")
-        try:
-            logger.info(f"[ovum] CastAnyToList({node_id})[0]: {type(py_list[0])}")
-        except:
-            pass
-        if isinstance(py_list, list):
-            return (py_list,)
-        elif isinstance(py_list, str):
-            return ([py_list],)
-        return (list(py_list),)
-        # raise ValueError("Input must be a Python list, received: {} ({})".format(str(value), type(value)))
-
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "py_list": (ANYTYPE,),
-            },
-            "hidden": {
-                "my_unique_id": "UNIQUE_ID"
-            }
-        }
-
 class ListExtend(NewPointer):
     DEPRECATED = True
-    class_name = "ListExtendDEPRECATED(batch)"
+    custom_name = "ListExtendDEPRECATED(batch)"
     """
     Extends list A by appending elements from list B. Returns result, doesn't modify A.
     """
@@ -600,7 +488,7 @@ class ListExtend(NewPointer):
     RETURN_TYPES = (ANYTYPE,)
     RETURN_NAMES = ("list",)
     CATEGORY = "Data"
-    custom_name="List Extend"
+
 
     @staticmethod
     def list_extend(list_a, list_b):
@@ -623,4 +511,4 @@ class ListExtend(NewPointer):
             }
         }
 
-CLAZZES = [ListSlice, ListSplice, RepeatItem, ReverseList, ConcatLists, IndexOf, JoinList, UniqueList, StringListEditor, CastListToAny, CastAnyToList, FromListTypeNode, ReinterpretCast, ReinterpretAsListCast, ListExtend]
+CLAZZES = [ListSlice, ListSplice, RepeatItem, ReverseList, ConcatLists, IndexOf, JoinList, UniqueList, StringListEditor, FromListTypeNode, ListExtend]

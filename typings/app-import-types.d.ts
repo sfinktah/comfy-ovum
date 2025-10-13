@@ -2,10 +2,13 @@
 // This provides IDE autocomplete for `import { app } from "../../../scripts/app.js"`.
 // It binds the exported `app` symbol to the ComfyApp type from @comfyorg/comfyui-frontend-types.
 
-import type { ComfyApp } from "@comfyorg/comfyui-frontend-types";
+import type {ComfyApi, ComfyApp} from "@comfyorg/comfyui-frontend-types";
 
 declare module "../../../scripts/app.js" {
   export const app: ComfyApp;
+}
+declare module "../../../scripts/api.js" {
+    export const api: ComfyApi;
 }
 
 /*

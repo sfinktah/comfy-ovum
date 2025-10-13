@@ -2,10 +2,10 @@
  * Shared helpers for link operations and reroute resolution.
  */
 
-/** @typedef {import('@comfyorg/litegraph/dist/litegraph').LGraph} LGraph */
-/** @typedef {import('@comfyorg/litegraph/dist/litegraph').Subgraph} Subgraph */
-/** @typedef {import('@comfyorg/litegraph/dist/LGraphNode').LGraphNode} LGraphNode */
-/** @typedef {import('@comfyorg/litegraph/dist/LLink').LLink} LLink */
+/** @typedef {import("@comfyorg/comfyui-frontend-types").LGraph} LGraph */
+/** @typedef {import("@comfyorg/comfyui-frontend-types").Subgraph} Subgraph */
+/** @typedef {import("@comfyorg/comfyui-frontend-types").LGraphNode} LGraphNode */
+/** @typedef {import("@comfyorg/comfyui-frontend-types").LLink} LLink */
 
 import { GraphHelpers } from "./graphHelpersForTwinNodes.js";
 

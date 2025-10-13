@@ -116,6 +116,9 @@ app.registerExtension({
         window.Timer = Timer;
         api.addEventListener("executing", Timer.executing);
         api.addEventListener("execution_success", Timer.executionSuccess)
+        api.addEventListener("execution_error", Timer.executionError)
+        api.addEventListener("execution_interrupted", Timer.executionInterrupted)
+        api.addEventListener("execution_start", Timer.executionStart)
         api.addEventListener("logs", Timer.onLog);
 
         // Track Control key for deletion UI cursor feedback

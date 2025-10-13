@@ -1,11 +1,11 @@
 /** @typedef {import('@comfyorg/comfyui-frontend-types').ComfyApp} ComfyApp */
 /** @typedef {import('@comfyorg/litegraph').LiteGraph} LiteGraph */
-/** @typedef {import("@comfyorg/litegraph/dist/interfaces").INodeInputSlot} INodeInputSlot */
-/** @typedef {import("@comfyorg/litegraph/dist/interfaces").INodeOutputSlot} INodeOutputSlot */
-/** @typedef {import("@comfyorg/litegraph/dist/interfaces").ISlotType} ISlotType */
-/** @typedef {import("@comfyorg/litegraph/dist/LLink").LLink} LLink */
-/** @typedef {import("@comfyorg/litegraph/dist/types/serialisation").SubgraphIO} SubgraphIO */
-/** @typedef {import("@comfyorg/litegraph/dist/LGraphNode").LGraphNode} LGraphNode */
+/** @typedef {import("@comfyorg/comfyui-frontend-types").INodeInputSlot} INodeInputSlot */
+/** @typedef {import("@comfyorg/comfyui-frontend-types").INodeOutputSlot} INodeOutputSlot */
+/** @typedef {import("@comfyorg/comfyui-frontend-types").ISlotType} ISlotType */
+/** @typedef {import("@comfyorg/comfyui-frontend-types").LLink} LLink */
+/** @typedef {import("@comfyorg/comfyui-frontend-types").SubgraphIO} SubgraphIO */
+/** @typedef {import("@comfyorg/comfyui-frontend-types").LGraphNode} LGraphNode */
 /** @typedef {import("../../typings/ComfyNode").ComfyNode} ComfyNode */
 
 import { app } from "../../../scripts/app.js";

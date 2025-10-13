@@ -1,7 +1,7 @@
 /** @typedef {import('@comfyorg/comfyui-frontend-types').ComfyApp} ComfyApp */
 /** @typedef {import('@comfyorg/litegraph').LiteGraph} LiteGraph */
-/** @typedef {import("@comfyorg/litegraph/dist/interfaces").INodeInputSlot} INodeInputSlot */
-/** @typedef {import("@comfyorg/litegraph/dist/LGraphNode").LGraphNode} LGraphNode */
+/** @typedef {import("@comfyorg/comfyui-frontend-types").INodeInputSlot} INodeInputSlot */
+/** @typedef {import("@comfyorg/comfyui-frontend-types").LGraphNode} LGraphNode */
 /** @typedef {import("../../typings/ComfyNode").ComfyNode} ComfyNode */
 
 import { app } from "../../../scripts/app.js";

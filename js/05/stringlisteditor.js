@@ -1,6 +1,6 @@
 /** @typedef {import('@comfyorg/comfyui-frontend-types').ComfyApp} ComfyApp */
 /** @typedef {import('@comfyorg/litegraph').LiteGraph} LiteGraph */
-/** @typedef {import("@comfyorg/litegraph/dist/LGraphNode").LGraphNode} LGraphNode */
+/** @typedef {import("@comfyorg/comfyui-frontend-types").LGraphNode} LGraphNode */
 
 import { app } from "../../../scripts/app.js";
 import { chainCallback } from "../01/utility.js";

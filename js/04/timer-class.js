@@ -3,12 +3,35 @@
 
 /** @type {ComfyApp} */
 import {app} from "../../../scripts/app.js";
+import {api} from "../../../scripts/api.js";
 
 import {findTimerNodes, getNodeNameById} from '../01/graphHelpers.js';
 import {onUploadGraphData} from "../01/copyButton.js";
 import {Logger} from "../common/logger.js";
 
 const LOCALSTORAGE_KEY = 'ovum.timer.history';
+
+async function fetch_cudnn_status() {
+    try {
+        const res = await api.fetchApi('/ovum/cudnn', {method: 'GET'});
+        const json = await res.json();
+        let cudnn_enabled = null;
+        if (json && typeof json === 'object') {
+            if (typeof json["torch.backends.cudnn.enabled"] === 'boolean') {
+                cudnn_enabled = json["torch.backends.cudnn.enabled"];
+            }
+        }
+        return cudnn_enabled;
+    } catch (err) {
+        Logger.log({
+            class: 'ovum.timer',
+            method: 'fetch_cudnn_status',
+            severity: 'warn',
+            tag: 'error',
+            nodeName: 'ovum.timer'
+        }, '[Timer] Failed to fetch cudnn status:', err);
+    }
+}
 
 export class Timer {
     static debug = false;
@@ -28,6 +51,7 @@ export class Timer {
     static maxRuns = 100; // Maximum saved & displayed runs
     static queuedNotesByPromptId = {}; // prompt_id -> queued note string (captured at queue time)
     static cudnn_enabled = null;
+    static currentRunDataNode = null;
     // Cache for node names: id -> { name: string, updatedAt: number }
     static nodeNameCache = {};
     static NAME_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
@@ -405,11 +429,14 @@ export class Timer {
         }
     }
 
+
     /**
-     * Handles execution tick events from ComfyApi.
+     * When a new node is about to be executed
+     * node (node id or None to indicate completion), prompt_id
      * @param {ComfyTickEvent} e
      */
     static executing(e) {
+        Logger.log({class:'ovum.timer',method:'executing',severity:'debug',tag:'flow', nodeName:'ovum.timer'}, 'executing() args', arguments);
         let detail = e.detail;
 
         if (detail === Timer?.currentNodeId) return;
@@ -429,12 +456,13 @@ export class Timer {
             const id = Timer.currentNodeId;
             if (id) {
                 if (!runData.nodes[id]) {
-                    runData.nodes[id] = { count: 0, totalTime: 0, startTimes: [], cudnn: Timer.cudnn_enabled };
+                    runData.nodes[id] = { count: 0, totalTime: 0, startTimes: [], cudnn: null };
                 }
                 if (!Array.isArray(runData.nodes[id].startTimes)) {
                     runData.nodes[id].startTimes = [];
                 }
                 runData.nodes[id].startTimes.push(Date.now());
+                Timer.currentRunDataNode = runData.nodes[id];
             }
         }
 
@@ -447,6 +475,10 @@ export class Timer {
         /*
         detail.entries = [{m: message, t: timestamp}]
          */
+        // Check Timer is actually registered
+        if (!Timer?.maxRuns) {
+            return;
+        }
         const entries = e?.detail?.entries;
         if (!Array.isArray(entries)) return;
 
@@ -457,12 +489,55 @@ export class Timer {
             // Match explicit booleans case-insensitively
             const m = msg.match(/torch\.backends\.cudnn\.enabled (?:still )?set to (true|false)/i);
             if (m) {
+                if (Timer?.currentRunDataNode?.cudnn !== null) {
+                    Logger.log({
+                        class: 'ovum.timer',
+                        method: 'onLog',
+                        severity: 'debug',
+                        tag: 'flow',
+                        nodeName: 'ovum.timer'
+                    }, "Ignoring multiple cudnn status messages for #", Timer?.currentNodeId, ":", Timer?.currentRunDataNode?.cudnn, "->", m[1].toLowerCase());
+                }
+                else {
+                    Logger.log({
+                        class: 'ovum.timer',
+                        method: 'onLog',
+                        severity: 'debug',
+                        tag: 'flow',
+                        nodeName: 'ovum.timer'
+                    }, "Investigating first cudnn status messages for #", Timer?.currentNodeId, ":", Timer?.currentRunDataNode?.cudnn, "->", m[1].toLowerCase());
+
+                    if (Timer?.currentNodeId) {
+                        fetch_cudnn_status()
+                            .then(cudnn_enabled => {
+                                if (cudnn_enabled !== null) {
+                                    if (Timer?.currentRunDataNode) {
+                                        Timer.currentRunDataNode.cudnn = Timer.cudnn_enabled = cudnn_enabled;
+                                    }
+                                }
+                            })
+                            .catch(err => {
+                                Logger.log({
+                                    class: 'ovum.timer',
+                                    method: 'onLog',
+                                    severity: 'warn',
+                                    tag: 'error',
+                                    nodeName: 'ovum.timer'
+                                }, '[Timer] Failed to fetch cudnn status:', err);
+                            })
+                        ;
+                    }
+                }
                 Timer.cudnn_enabled = m[1].toLowerCase() === "true";
-                if (Timer.debug) Logger.log({class:'ovum.timer',method:'onLog',severity:'debug',tag:'flow', nodeName:'ovum.timer'}, '[Timer] cudnn enabled:', Timer.cudnn_enabled);
+                if (Timer.debug) Logger.log({class:'ovum.timer',method:'onLog',severity:'debug',tag:'flow', nodeName:'ovum.timer'}, `[Timer] cudnn enabled #${Timer.currentNodeId} ${getNodeNameByIdCached(Timer.currentNodeId)}:`, Timer.cudnn_enabled);
             }
         });
     }
 
+    static executionError(e) {}
+    static executionInterrupted(e) {}
+    static executionStart(e) {}
+    // When all nodes from the prompt have been successfully executed	prompt_id, timestamp
     static executionSuccess(e) {
         const t = LiteGraph.getTime();
         if (Timer.current_run_id && Timer.run_history[Timer.current_run_id]) {

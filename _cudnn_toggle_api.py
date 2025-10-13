@@ -61,86 +61,80 @@ async def ovum_index_json(d):
         endpoints = sorted(set(endpoints))
         return web.json_response({"endpoints": endpoints})
     except Exception as e:
-        return web.json_response({"error": True, "message": str(e)})
+        return web.json_response({"error": True, "message": str(e), "exceptionClass": e.__class__.__name__})
+
+@PromptServer.instance.routes.get('/ovum/cudnn')
+async def cudnn_status(d):
+    try:
+        return web.json_response({
+            "torch.backends.cudnn.enabled": torch.backends.cudnn.enabled,
+            "torch.backends.cudnn.benchmark": torch.backends.cudnn.benchmark
+        })
+    except Exception as e:
+        return web.json_response({"error": True, "message": str(e), "exceptionClass": e.__class__.__name__})
+    
+def _toggle_cudnn_setting(attribute: str, value: bool) -> dict:
+    """
+    Helper function to toggle cudnn settings.
+
+    Args:
+        attribute: Either "enabled" or "benchmark"
+        value: Boolean value to set
+
+    Returns:
+        Dictionary with previous and current values
+    """
+    prev_enabled = torch.backends.cudnn.enabled
+    prev_benchmark = torch.backends.cudnn.benchmark
+
+    if attribute == "enabled":
+        torch.backends.cudnn.enabled = value
+    elif attribute == "benchmark":
+        torch.backends.cudnn.benchmark = value
+    else:
+        raise ValueError(f"Unknown attribute: {attribute}")
+
+    return {
+        "previous.torch.backends.cudnn.enabled": prev_enabled,
+        "previous.torch.backends.cudnn.benchmark": prev_benchmark,
+        "torch.backends.cudnn.enabled": torch.backends.cudnn.enabled,
+        "torch.backends.cudnn.benchmark": torch.backends.cudnn.benchmark
+    }
 
 @PromptServer.instance.routes.get('/ovum/cudnn/enable')
 async def cudnn_enable(d):
     try:
-        prev_enabled = torch.backends.cudnn.enabled
-        prev_benchmark = torch.backends.cudnn.benchmark
-
-        # Change only 'enabled'
-        torch.backends.cudnn.enabled = True
-
-        return web.json_response({
-            "previous.torch.backends.cudnn.enabled": prev_enabled,
-            "previous.torch.backends.cudnn.benchmark": prev_benchmark,
-            "torch.backends.cudnn.enabled": torch.backends.cudnn.enabled,
-            "torch.backends.cudnn.benchmark": torch.backends.cudnn.benchmark
-        })
+        return web.json_response(_toggle_cudnn_setting("enabled", True))
     except Exception as e:
-        return web.json_response({"error": True, "message": str(e)})
+        return web.json_response({"error": True, "message": str(e), "exceptionClass": e.__class__.__name__})
 
 @PromptServer.instance.routes.get('/ovum/cudnn/disable')
 async def cudnn_disable(d):
     try:
-        prev_enabled = torch.backends.cudnn.enabled
-        prev_benchmark = torch.backends.cudnn.benchmark
-
-        # Change only 'enabled'
-        torch.backends.cudnn.enabled = False
-
-        return web.json_response({
-            "previous.torch.backends.cudnn.enabled": prev_enabled,
-            "previous.torch.backends.cudnn.benchmark": prev_benchmark,
-            "torch.backends.cudnn.enabled": torch.backends.cudnn.enabled,
-            "torch.backends.cudnn.benchmark": torch.backends.cudnn.benchmark
-        })
+        return web.json_response(_toggle_cudnn_setting("enabled", False))
     except Exception as e:
-        return web.json_response({"error": True, "message": str(e)})
+        return web.json_response({"error": True, "message": str(e), "exceptionClass": e.__class__.__name__})
 
 @PromptServer.instance.routes.get('/ovum/cudnn-benchmark/enable')
 async def cudnn_benchmark_enable(d):
     try:
-        prev_enabled = torch.backends.cudnn.enabled
-        prev_benchmark = torch.backends.cudnn.benchmark
-
-        # Change only 'benchmark'
-        torch.backends.cudnn.benchmark = True
-
-        return web.json_response({
-            "previous.torch.backends.cudnn.enabled": prev_enabled,
-            "previous.torch.backends.cudnn.benchmark": prev_benchmark,
-            "torch.backends.cudnn.enabled": torch.backends.cudnn.enabled,
-            "torch.backends.cudnn.benchmark": torch.backends.cudnn.benchmark
-        })
+        return web.json_response(_toggle_cudnn_setting("benchmark", True))
     except Exception as e:
-        return web.json_response({"error": True, "message": str(e)})
+        return web.json_response({"error": True, "message": str(e), "exceptionClass": e.__class__.__name__})
 
 @PromptServer.instance.routes.get('/ovum/cudnn-benchmark/disable')
 async def cudnn_benchmark_disable(d):
     try:
-        prev_enabled = torch.backends.cudnn.enabled
-        prev_benchmark = torch.backends.cudnn.benchmark
-
-        # Change only 'benchmark'
-        torch.backends.cudnn.benchmark = False
-
-        return web.json_response({
-            "previous.torch.backends.cudnn.enabled": prev_enabled,
-            "previous.torch.backends.cudnn.benchmark": prev_benchmark,
-            "torch.backends.cudnn.enabled": torch.backends.cudnn.enabled,
-            "torch.backends.cudnn.benchmark": torch.backends.cudnn.benchmark
-        })
+        return web.json_response(_toggle_cudnn_setting("benchmark", False))
     except Exception as e:
-        return web.json_response({"error": True, "message": str(e)})
+        return web.json_response({"error": True, "message": str(e), "exceptionClass": e.__class__.__name__})
 
 @PromptServer.instance.routes.get('/ovum/hip-path')
 async def get_hip_path(d):
     try:
         return web.json_response({"HIP_PATH": os.environ.get("HIP_PATH")})
     except Exception as e:
-        return web.json_response({"error": True, "message": str(e)})
+        return web.json_response({"error": True, "message": str(e), "exceptionClass": e.__class__.__name__})
 
 @PromptServer.instance.routes.post('/ovum/update-timing')
 async def upload_json(d):
@@ -193,7 +187,7 @@ async def upload_json(d):
             "python_type": type(data).__name__
         })
     except Exception as e:
-        return web.json_response({"error": True, "message": str(e)})
+        return web.json_response({"error": True, "message": str(e), "exceptionClass": e.__class__.__name__})
 
 # New GET route to retrieve stored JSON or return error if not defined
 @PromptServer.instance.routes.get('/ovum/get-timing')
@@ -205,4 +199,4 @@ async def get_uploaded_json(d):
         # Return parsed JSON payload
         return web.json_response(json.loads(data_bytes.decode("utf-8")))
     except Exception as e:
-        return web.json_response({"error": True, "message": str(e)}, status=500)
+        return web.json_response({"error": True, "message": str(e), "exceptionClass": e.__class__.__name__}, status=500)

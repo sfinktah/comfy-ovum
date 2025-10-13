@@ -1,5 +1,5 @@
-/** @typedef {import('@comfyorg/litegraph/dist/litegraph').LGraph} LGraph */
-/** @typedef {import('@comfyorg/litegraph/dist/litegraph').Subgraph} Subgraph */
+/** @typedef {import("@comfyorg/comfyui-frontend-types").LGraph} LGraph */
+/** @typedef {import("@comfyorg/comfyui-frontend-types").Subgraph} Subgraph */
 import { log } from "./logger.js";
 
 export const GraphHelpers = {
