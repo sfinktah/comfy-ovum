@@ -141,7 +141,7 @@ Alternatively you can search with the node title.
                 native = result[0]
             else:
                 native = meta.getWorkflowWidgetValue(node_full_id, widget_name)
-            logger.info(f"Widget '{widget_name}' returned: {native} ({type(native)}")
+            # logger.info(f"Widget '{widget_name}' returned: {native} ({type(native)}")
             return (native,)
 
 MAX_FLOW_NUM = 20
