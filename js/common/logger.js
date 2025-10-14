@@ -691,6 +691,22 @@ export class Logger {
         this.flushRules();
     }
 
+    static append (actionOrRule, maybeRule) {
+        return this.appendRule(actionOrRule, maybeRule);
+    }
+
+    static insert (position, actionOrRule, maybeRule) {
+        return this.insertRule(position, actionOrRule, maybeRule);
+    }
+
+    static delete (ruleSpec) {
+        return this.deleteRule(ruleSpec);
+    }
+
+    static replace (position, actionOrRule, maybeRule) {
+        return this.replaceRule(position, actionOrRule, maybeRule);
+    }
+
     /**
      * @deprecated Use direct rule manipulation methods instead
      */

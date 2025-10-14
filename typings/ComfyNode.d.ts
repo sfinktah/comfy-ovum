@@ -1,6 +1,6 @@
 // ComfyNode.d.ts
 
-import type { LGraphNode } from "@comfyorg/litegraph/dist/LGraphNode";
+import type { LGraphNode } from "@comfyorg/comfyui-frontend-types";
 
 /**
  * ComfyNode extends LGraphNode with additional ComfyUI-specific behaviors and callbacks.
@@ -20,7 +20,6 @@ export interface ComfyNode extends LGraphNode {
     name: str
     nodeData: NodeData
     title: str
-    type: str
 }
 
 // From mtb/types/shared.d.ts

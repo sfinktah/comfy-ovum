@@ -436,7 +436,6 @@ export class Timer {
      * @param {ComfyTickEvent} e
      */
     static executing(e) {
-        Logger.log({class:'ovum.timer',method:'executing',severity:'debug',tag:'flow', nodeName:'ovum.timer'}, 'executing() args', arguments);
         let detail = e.detail;
 
         if (detail === Timer?.currentNodeId) return;

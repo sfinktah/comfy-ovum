@@ -1,7 +1,34 @@
-function listFunctions(obj, objName) {
+function listFunctions(obj, objNameOrOptions, maybeOptions) {
     if (!obj || (typeof obj !== 'object' && typeof obj !== 'function')) {
         console.log('Invalid input: Please provide a valid object or function');
         return;
+    }
+
+    // New: normalize arguments (obj, objName?, options?) allowing options before, after, or instead of objName
+    const defaultOptions = { depth: 0 /* recurse indefinitely */ };
+    let objName = undefined;
+    let options = undefined;
+
+    // Determine provided arguments
+    if (typeof objNameOrOptions === 'object' && objNameOrOptions && typeof objNameOrOptions !== 'function') {
+        // Case: (obj, options)
+        options = objNameOrOptions;
+    } else if (typeof objNameOrOptions === 'string') {
+        // Case: (obj, objName, options?)
+        objName = objNameOrOptions;
+        if (maybeOptions && typeof maybeOptions === 'object') {
+            options = maybeOptions;
+        }
+    }
+
+    // Merge options with defaults
+    const opt = Object.assign({}, defaultOptions, options || {});
+    // Normalize/validate depth: numbers >= 0; 0 means unlimited
+    let maxDepth = 0;
+    if (Number.isFinite(opt.depth) && opt.depth >= 0) {
+        maxDepth = Math.floor(opt.depth);
+    } else {
+        maxDepth = 0;
     }
 
     // Attempt to guess class name if not provided
@@ -105,6 +132,9 @@ function listFunctions(obj, objName) {
     const seenPrototypes = new WeakSet();
 
     while (current && !seenPrototypes.has(current)) {
+        // Apply depth limit: if maxDepth > 0, only traverse up to that many levels beyond the initial object
+        if (maxDepth > 0 && level > maxDepth) break;
+
         seenPrototypes.add(current);
 
         const classInfo = getClassInfo(current, level);
@@ -240,7 +270,7 @@ function listFunctions(obj, objName) {
         if (items.length === 0) return;
 
         const typeLabel = type === 'function' ? 'Functions' :
-                         type === 'getter' ? 'Getters' : 'Setters';
+            type === 'getter' ? 'Getters' : 'Setters';
         console.log(`\n${typeLabel}:`);
 
         items.forEach(member => {
@@ -295,3 +325,6 @@ window.listFunctions = listFunctions;
 // listFunctions(console);
 // listFunctions(Array.prototype);
 // listFunctions(myCustomObject, 'MyObject');
+// New examples:
+// listFunctions(myObj, { depth: 2 });
+// listFunctions(myObj, 'MyObject', { depth: 1 });

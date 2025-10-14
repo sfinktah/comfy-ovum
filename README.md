@@ -908,3 +908,19 @@ Small building blocks used with the loop nodes.
 - Convert any to INT and add 1 / subtract 1: Utility nodes (PlusOne / MinusOne) that coerce a value to INT and adjust by ±1.
 - Uncachable List Copy (immutable): Forces a fresh copy of a list or the values of a dict every run so that Comfy treats it as changed (useful in loops).
 
+
+
+## ComboMirror
+
+Mirror the options from any combobox input and drive multiple targets with a single selection.
+
+- What it does: lets you connect one ComboMirror to a node input that uses a combo-box and automatically adopts that list of options. You can then connect the ComboMirror output to any number of compatible combo inputs so they all share the same chosen value.
+- Why it’s helpful: ComboMirror allows you to set multiple instances of a combo-box from a single source, keeping nodes in sync and reducing repetitive clicking.
+- How to use:
+  1. Place a ComboMirror near a node that has a combobox input (e.g., model, scheduler, sampler).
+  2. Connect ComboMirror’s output to that input; the options will be mirrored into the ComboMirror widget.
+  3. Pick the desired value once in ComboMirror; wire its output to other matching combo inputs to keep them synchronized.
+
+Notes:
+- If ComboMirror receives a fixed index via choice_index (advanced workflows), it will select by index and disable manual picking.
+- The node also outputs the entire options list as strings for inspection or debugging.

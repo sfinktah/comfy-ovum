@@ -476,38 +476,6 @@ class SetTwinNodes extends TwinNodes {
         log({ class: "SetTwinNodes", method: "checkConnections", severity: "debug", tag: "status" }, "checkConnections", this.currentGetters);
     }
 
-    propagateNameChanges2(currNames) {
-        // const prevNames = Array.isArray(this.properties.previousNames) ? this.properties.previousNames : [];
-        //
-        // for (let i = 0; i < Math.max(prevNames.length, currNames.length); i++) {
-        //     const prev = prevNames[i] || "";
-        //     const curr = currNames[i] || "";
-        //     if (prev && curr && prev !== curr) {
-        //         const allGettersForRename = GraphHelpers.getNodesByType(this.graph, "GetTwinNodes");
-        //         allGettersForRename.forEach(/** TwinNodes */getter => {
-        //             if (!Array.isArray(getter.widgets)) return;
-        //             let changed = false;
-        //             for (let gi = 0; gi < getter.widgets.length; gi++) {
-        //                 const gv = getter.widgets[gi]?.value;
-        //                 if (gv && safeStringTrim(gv) === prev) {
-        //                     log({
-        //                         class: "SetTwinNodes",
-        //                         method: "update",
-        //                         severity: "debug",
-        //                         tag: "rename_propagate"
-        //                     }, `update, updating getter widger ${gv} -> ${curr}`);
-        //                     setWidgetValue(getter, gi, curr);
-        //                     changed = true;
-        //                 }
-        //             }
-        //             if (changed && typeof getter.onRename === "function") {
-        //                 getter.onRename();
-        //             }
-        //         });
-        //     }
-        // }
-    }
-
     /**
      * Called when the node is removed from the graph.
      * Mirrors LGraphNode.onRemoved.
