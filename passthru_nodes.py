@@ -187,18 +187,14 @@ def _passthru_common(cls, any_in=None, extra_pnginfo=None, prompt=None, my_uniqu
     return {"ui": {"status": [status_items]}, "result": (any_in,)}
 
 class PassthruOvum:
-    """
-    Return an element from a list by index as anytype.
-    """
-
     @classmethod
     def IS_CHANGED(cls, *args, **kwargs):
         return float("NaN")  # Forces ComfyUI to consider it always changed
 
     FUNCTION = "passthru"
     DESCRIPTION = """
-    Passed the input directly through to the output.
-    Dumps the input to the console.
+    Pass the input directly through to the output.
+    Dumps the input to the console and the canvas.
     """
     # INPUT_IS_LIST = True
     RETURN_TYPES = (ANYTYPE,)
@@ -237,7 +233,7 @@ class PassthruInputIsListOvum:
     FUNCTION = "passthru"
     DESCRIPTION = """
     Interprets the input as INPUT_IS_LIST, and outputs it as a python list.
-    Dumps the input to the console.
+    Dumps the input to the console and canvas.
     """
     INPUT_IS_LIST = True
     RETURN_TYPES = (ANYTYPE,)
@@ -264,10 +260,6 @@ class PassthruInputIsListOvum:
 
 
 class PassthruInputAndOutputIsListOvum:
-    """
-    Return an element from a list by index as anytype.
-    """
-
     @classmethod
     def IS_CHANGED(cls, *args, **kwargs):
         return float("NaN")  # Forces ComfyUI to consider it always changed
@@ -275,7 +267,7 @@ class PassthruInputAndOutputIsListOvum:
     FUNCTION = "passthru"
     DESCRIPTION = """
     Interprets the input as INPUT_IS_LIST, and outputs it with OUTPUT_IS_LIST.
-    Dumps the input to the console.
+    Dumps the input to the console and canvas.
     """
     INPUT_IS_LIST = True
     OUTPUT_IS_LIST = (True,)
@@ -314,7 +306,7 @@ class PassthruOutputIsListOvum:
     FUNCTION = "passthru"
     DESCRIPTION = """
     Interprets the input normally, and outputs it with OUTPUT_IS_LIST.
-    Dumps the input to the console.
+    Dumps the input to the console and canvas.
     """
     OUTPUT_IS_LIST = (True,)
     RETURN_TYPES = (ANYTYPE,)

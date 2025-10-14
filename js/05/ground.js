@@ -55,6 +55,13 @@ app.registerExtension({
                     }
                 }
             }
+            // Recompute size so all sockets fit and icon remains centered relative to inputs
+            if (typeof this.computeSize === "function") {
+                const newSize = this.computeSize();
+                if (Array.isArray(newSize) && (newSize[0] !== this.size[0] || newSize[1] !== this.size[1])) {
+                    this.size = newSize;
+                }
+            }
             this.setDirtyCanvas(true, true);
             if (origOnConnectionsChange) return origOnConnectionsChange.apply(this, arguments);
         };
@@ -109,11 +116,47 @@ app.registerExtension({
             if (this.flags?.collapsed) return;
         };
 
-        // Make it look circular and avoid default widgets region growth
+        // Make size adapt to number of inputs so all sockets fit inside and circle stays centered
         const origComputeSize = nodeType.prototype.computeSize;
         nodeType.prototype.computeSize = function() {
-            const d = 80; // fixed size suits icon
-            return [d, d];
+            const slotH = (typeof LiteGraph !== "undefined" && LiteGraph.NODE_SLOT_HEIGHT) ? LiteGraph.NODE_SLOT_HEIGHT : 20;
+            const titleH = (typeof LiteGraph !== "undefined" && LiteGraph.NODE_TITLE_HEIGHT) ? LiteGraph.NODE_TITLE_HEIGHT : 16;
+            const numInputs = Array.isArray(this.inputs) ? this.inputs.length : 0;
+            // symmetric padding keeps the icon vertically centered relative to input positions
+            const pad = Math.max(12, Math.round(slotH * 0.75));
+            const minW = 80;
+            const minH = 80;
+            const slotsH = numInputs > 0 ? (numInputs * slotH) : 0;
+            // Balance the title/header height by adding the same space below the inputs so the circle stays centered.
+            const totalH = slotsH + (pad * 2) - (titleH * 1);
+            const h = Math.max(minH, totalH);
+            // Keep width constant: use current width if set, otherwise minW. Do not expand with height.
+            const currentW = (this.size && Array.isArray(this.size) && Number.isFinite(this.size[0])) ? this.size[0] : minW;
+            const w = Math.max(minW, currentW);
+            return [w, h];
+        };
+
+        // Ensure initial size after creation reflects inputs count
+        const origOnNodeCreated = nodeType.prototype.onNodeCreated;
+        nodeType.prototype.onNodeCreated = function() {
+            if (typeof origOnNodeCreated === "function") origOnNodeCreated.apply(this, arguments);
+            // Clear any outputs that backend might add defensively
+            if (this.outputs && this.outputs.length) {
+                this.outputs.length = 0;
+            }
+            // Ensure at least arg0 and label it
+            ensureDynamicInputsImpl(this, false);
+            if (this.inputs) {
+                let i = 1;
+                for (const inp of this.inputs) {
+                    if (typeof inp.name === "string" && /^arg\d+$/.test(inp.name)) {
+                        inp.label = '  ';
+                        i++;
+                    }
+                }
+            }
+            this.size = this.computeSize ? this.computeSize() : [100, 110];
+            this.title = "GND";
         };
     },
 });
