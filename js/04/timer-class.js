@@ -8,6 +8,7 @@ import {api} from "../../../scripts/api.js";
 import {findTimerNodes, getNodeNameById} from '../01/graphHelpers.js';
 import {onUploadGraphData} from "../01/copyButton.js";
 import {Logger} from "../common/logger.js";
+import { confirmDestructive } from "./dialog-helper.js";
 
 const LOCALSTORAGE_KEY = 'ovum.timer.history';
 
@@ -209,6 +210,23 @@ export class Timer {
         Timer.run_notes = {};
         Timer.pending_run_notes = null;
         if (Timer.onChange) Timer.onChange();
+    }
+
+    static async confirmAndClear() {
+        const confirmed = await confirmDestructive({
+            title: "Clear timing history?",
+            message: "This will permanently delete all saved timing history, notes, and cached names on this browser.",
+            confirmText: "Delete",
+            cancelText: "Cancel",
+        });
+        if (!confirmed) return false;
+        try {
+            Timer.clear();
+            Timer.clearStorage();
+            return true;
+        } finally {
+            // No-op
+        }
     }
 
     static setLastNRuns(value) {
@@ -544,20 +562,20 @@ export class Timer {
             Timer.run_history[Timer.current_run_id].totalTime = t - Timer.run_history[Timer.current_run_id].startTime;
 
             // Save any notes from the textarea for this run
-            const timerNodes = findTimerNodes();
-            if (timerNodes.length > 0) {
-                const timerNode = timerNodes[0]; // Use the first timer node found
-                const activeWidget = timerNode.widgets.find(w => w.name === "Run notes (for active run)");
-                const activeText = (activeWidget?.value || "").toString().trim();
-
-                if (activeText) {
-                    Timer.run_notes[Timer.current_run_id] = activeText;
-                }
+            // const timerNodes = findTimerNodes();
+            // if (timerNodes.length > 0) {
+                // const timerNode = timerNodes[0]; // Use the first timer node found
+                // const activeWidget = timerNode.widgets.find(w => w.name === "Run notes (for active run)");
+                // const activeText = (activeWidget?.value || "").toString().trim();
+                //
+                // if (activeText) {
+                //     Timer.run_notes[Timer.current_run_id] = activeText;
+                // }
 
                 // Reset the text area for next run
-                if (activeWidget) activeWidget.value = "";
-                timerNode.setDirtyCanvas(true);
-            }
+                // if (activeWidget) activeWidget.value = "";
+                // timerNode.setDirtyCanvas(true);
+            // }
 
             // Clean up old runs if we have too many
             const runIds = Object.keys(Timer.run_history);

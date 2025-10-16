@@ -30,19 +30,19 @@ export function html_impl(scope) {
 
     // Copy button for copying table contents
     const copyButton = $el("button", {
-        textContent: "Copy",
+        textContent: "Copy as text",
         onclick: onCopyButton
     }); // onCopyGraphData
 
     const copyGraphDataButton = $el("button", {
-        textContent: "Copy Graph Data",
+        textContent: "Copy as JSON",
         onclick: onCopyGraphData
     }); // onCopyGraphData
 
-    const uploadGraphDataButton = $el("button", {
-        textContent: "Upload Graph Data",
-        onclick: onUploadGraphData
-    });
+    // const uploadGraphDataButton = $el("button", {
+    //     textContent: "Upload Graph Data",
+    //     onclick: onUploadGraphData
+    // });
 
 
     const regexCheckbox = $el("input", {
@@ -401,7 +401,7 @@ export function html_impl(scope) {
             ]),
             copyButton,
             copyGraphDataButton,
-            uploadGraphDataButton,
+            // uploadGraphDataButton,
         ]),
         $el("div", {
             className: "cg-timer-widget",

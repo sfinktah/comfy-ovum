@@ -7,29 +7,29 @@ class Timer:
     CATEGORY = "ovum"
     @classmethod    
     def INPUT_TYPES(s):
-        dyn_inputs = {"arg1": ('*', {"lazy": True, "tooltip": "Any input. When connected, one more input slot is added."}), }
+        # dyn_inputs = {"arg1": ('*', {"lazy": True, "tooltip": "Any input. When connected, one more input slot is added."}), }
 
         inputs = {
             "required": {
-                "queued_run_notes": ("STRING", {"tooltip": "This will be recorded when the job is dequeued"})
+                "notes": ("STRING", {"tooltip": "This will be recorded when the job is dequeued"})
                 # "select": ("INT", {"default": 1, "min": 1, "max": 999999, "step": 1, "tooltip": "The input number you want to output among the inputs"}),
                 # "sel_mode": ("BOOLEAN", {"default": False, "label_on": "select_on_prompt", "label_off": "select_on_execution", "forceInput": False,
                 #                          "tooltip": "In the case of 'select_on_execution', the selection is dynamically determined at the time of workflow execution. 'select_on_prompt' is an option that exists for older versions of ComfyUI, and it makes the decision before the workflow execution."}),
             },
             "optional": {
-                "image": (ANYTYPE, {"tooltip": "This is just used connect the timer to the workflow somewhere (not required)"}),
-                **dyn_inputs
+                "any_in": (ANYTYPE, {"tooltip": "This is just used connect the timer to the workflow somewhere (only required if you want 'notes' to be recorded when the workflow runs)"}),
+                # **dyn_inputs
             },
             # "hidden": {"unique_id": "UNIQUE_ID", "extra_pnginfo": "EXTRA_PNGINFO"}
         }
         return inputs
 
-    RETURN_TYPES = ()
-    RETURN_NAMES = ()
+    RETURN_TYPES = (ANYTYPE,)
+    RETURN_NAMES = ("any_out",)
     FUNCTION = "func"
     NAME = "Timer 🥚"
     OUTPUT_NODE = True
-    def func(self, queued_run_notes, image=None, *args, **kwargs):
+    def func(self, notes, any_in=None, *args, **kwargs):
         # Accept arbitrary dynamic inputs like input2, input3, etc.
 
         def _to_jsonable(obj, _seen=None):
@@ -76,7 +76,7 @@ class Timer:
 
         payload = {
             "args": _to_jsonable(args),
-            "queued_run_notes": queued_run_notes,
+            "notes": notes,
             "kwargs": _to_jsonable(kwargs),
         }
         safe_json = json.dumps(payload, ensure_ascii=False)
@@ -84,12 +84,12 @@ class Timer:
         return {
             "ui": {
                 # Return a list (not a set) to avoid unhashable type errors
-                "queued_run_notes": [queued_run_notes],
+                "notes": [notes],
                 "bg_image": [safe_json],
                 "kwargs": kwargs,
                 "args": args,
             },
-            "result": ()
+            "result": (any_out,)
         }
 
 CLAZZES = [Timer]
