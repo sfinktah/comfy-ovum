@@ -2,6 +2,7 @@
  * Navigation stack for TwinNodes jumps and a backtrack hotkey command.
  */
 import { app } from "../../../scripts/app.js";
+import { showTipWithCheckbox } from "../04/dialog-helper.js";
 
 const NAV_STORAGE_KEY = "ovum.twinnodes.navTip.hidden";
 const DEFAULT_HOTKEY = "Shift+T";
@@ -75,82 +76,13 @@ export function popAndRestoreView() {
     if (state) restoreCanvasState(state);
 }
 
-function shouldHideTip() {
-    try {
-        const v = localStorage.getItem(NAV_STORAGE_KEY);
-        return v === "1";
-    } catch (_) { return false; }
-}
-
-function setHideTip(hide) {
-    try { localStorage.setItem(NAV_STORAGE_KEY, hide ? "1" : "0"); } catch (_) {}
-}
-
-function showTip() {
-    // Build a lightweight tip dialog
-    const existing = document.querySelector(".ovum-twinnodes-tip");
-    if (existing) return;
-
-    const wrap = document.createElement("div");
-    wrap.className = "ovum-twinnodes-tip";
-    wrap.style.position = "fixed";
-    wrap.style.right = "16px";
-    wrap.style.top = "12px";
-    wrap.style.zIndex = "99999";
-    wrap.style.maxWidth = "380px";
-    wrap.style.background = "#222";
-    wrap.style.color = "#eee";
-    wrap.style.padding = "10px 12px";
-    wrap.style.borderRadius = "8px";
-    wrap.style.boxShadow = "0 6px 18px rgba(0,0,0,0.45)";
-    wrap.style.font = "13px/1.3 system-ui, sans-serif";
-    wrap.style.maxHeight = "40vh";
-    wrap.style.overflow = "auto";
-
-    const title = document.createElement("div");
-    title.textContent = "Useful tip";
-    title.style.fontWeight = "600";
-    title.style.marginBottom = "6px";
-
-    const body = document.createElement("div");
-    body.innerHTML = `After using \"Go to setter/getter\", press <b>${DEFAULT_HOTKEY}</b> to jump back. You can press it repeatedly to step back through all previous locations.`;
-    body.style.marginBottom = "10px";
-
-    const row = document.createElement("div");
-    row.style.display = "flex";
-    row.style.alignItems = "center";
-    row.style.gap = "10px";
-
-    const cb = document.createElement("input");
-    cb.type = "checkbox";
-    cb.id = "ovum-tip-hide";
-
-    const label = document.createElement("label");
-    label.htmlFor = cb.id;
-    label.textContent = "Don't show me this again";
-
-    const close = document.createElement("button");
-    close.textContent = "OK";
-    close.style.marginLeft = "auto";
-
-    close.onclick = () => {
-        if (cb.checked) setHideTip(true);
-        wrap.remove();
-    };
-
-    row.appendChild(cb);
-    row.appendChild(label);
-    row.appendChild(close);
-
-    wrap.appendChild(title);
-    wrap.appendChild(body);
-    wrap.appendChild(row);
-
-    document.body.appendChild(wrap);
-}
-
 export function showTwinTipIfNeeded() {
-    if (!shouldHideTip()) showTip();
+    showTipWithCheckbox({
+        storageKey: NAV_STORAGE_KEY,
+        title: "Useful tip",
+        message: `After using \"Go to setter/getter\", press <b>${DEFAULT_HOTKEY}</b> to jump back. You can press it repeatedly to step back through all previous locations.`,
+        okText: "OK",
+    });
 }
 
 // Register command with default hotkey
