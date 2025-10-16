@@ -1,10 +1,9 @@
 from __future__ import annotations
 from aiohttp import web
-from nodes import NODE_CLASS_MAPPINGS
 from server import PromptServer
 import os
 
-from .result_wrapper import (
+from disabled.result_wrapper import (
     create_result_wrapped_version,
     convert_to_result_wrapped_inplace,
     is_result_wrapped,

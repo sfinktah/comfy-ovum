@@ -338,7 +338,7 @@ export class Timer {
             }
             else if (name && name.startsWith('id:')) {
                 if (Timer.nodeNameCache && typeof Timer.nodeNameCache === 'object' && typeof Timer.nodeNameCache[id] === 'object') {
-                    return Timer.nodeNameCache[id].name + ' (cached)';
+                    return Timer.nodeNameCache[id].name + ' (n/a)';
                 }
             }
             return name;

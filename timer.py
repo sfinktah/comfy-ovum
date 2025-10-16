@@ -89,7 +89,7 @@ class Timer:
                 "kwargs": kwargs,
                 "args": args,
             },
-            "result": (any_out,)
+            "result": (any_in,)
         }
 
 CLAZZES = [Timer]

@@ -43,7 +43,7 @@ __all__ = ['NODE_CLASS_MAPPINGS', 'NODE_DISPLAY_NAME_MAPPINGS', 'WEB_DIRECTORY']
 # Ensure web routes in _mini_webserver are registered on package import
 try:
     from . import _mini_webserver  # noqa: F401
-    from . import _result_wrapper_api  # noqa: F401
+    # from . import _result_wrapper_api  # noqa: F401
     from . import _cudnn_toggle_api  # noqa: F401
 except Exception:
     # Do not fail package import if optional server components are unavailable

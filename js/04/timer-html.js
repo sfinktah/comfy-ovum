@@ -4,6 +4,17 @@ import {Logger} from "../common/logger.js";
 import {attachTooltip} from "../01/tooltipHelpers.js";
 import {uniq} from "../01/graphHelpers.js";
 
+// Define global tips array (can be overridden elsewhere before this file runs)
+if (!Array.isArray(window.OVUM_TIPS)) {
+    window.OVUM_TIPS = [
+        "Hold Shift while clicking on a \"RUN\" heading to delete that run.",
+        "Double-click a \"RUN\" heading to edit/insert a note for that run.",
+        "Green/red text indicates cuDNN has been enabled/disabled by an Ovum cuDNN node.",
+        "Timing data can be retrieved via the <code>/ovum/get-timing</code> endpoint.",
+        "Timing history is stored in your browser\'s LocalStorage."
+    ];
+}
+
 export function html_impl(scope) {
     const searchInput = $el("input", {
         type: "text",
@@ -420,10 +431,28 @@ export function html_impl(scope) {
         $el("div", {
             className: "cg-timer-status-bar",
         }, [
-            $el("div", {
-                className: "cg-status-left",
-                textContent: "Miss Katie, where have you gone, why have you gone so far away from here", // Replace with actual content if needed
-            }),
+            (function(){
+                // Create status-left and initialize rotating tips
+                const statusLeft = $el("div", { className: "cg-status-left" });
+                function setTipNow() {
+                    try {
+                        const tips = Array.isArray(window.OVUM_TIPS) ? window.OVUM_TIPS : [];
+                        if (!tips.length) return;
+                        const idxRaw = (typeof window.OVUM_TIPS_INDEX === "number" ? window.OVUM_TIPS_INDEX : 0);
+                        const idx = ((idxRaw % tips.length) + tips.length) % tips.length;
+                        const el = document.querySelector('.cg-status-left') || statusLeft;
+                        el.innerHTML = String(tips[idx]);
+                        window.OVUM_TIPS_INDEX = (idx + 1) % tips.length;
+                    } catch (_) { /* noop */ }
+                }
+                // Set immediately
+                setTipNow();
+                // Ensure a single global interval updates the tip roughly every minute
+                if (!window.OVUM_TIPS_INTERVAL) {
+                    window.OVUM_TIPS_INTERVAL = setInterval(setTipNow, 60 * 1000);
+                }
+                return statusLeft;
+            })(),
             $el("div", {
                 className: "cg-status-middle",
             }),
@@ -432,7 +461,7 @@ export function html_impl(scope) {
             }),
             $el("div", {
                 className: "cg-status-right",
-                textContent: "sfinktah made this", // Replace with actual content
+                textContent: "\u00a0",
             })
         ])
     ]);
