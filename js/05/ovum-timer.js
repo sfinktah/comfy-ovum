@@ -148,9 +148,9 @@ app.registerExtension({
                     Logger.log({class:'Timer',method:'onExecuted',severity:'info',tag:'background'}, "[Timer] onExecuted: bg_image", bg_image);
                     this.properties.currentRunning = {data : bg_image };
                 }
-                if (message["queued_run_notes"]) {
+                if (message["notes"]) {
                     // Set JS field "Notes from queue"
-                    const queuedText = message["queued_run_notes"];
+                    const queuedText = message["notes"];
                     // Ensure we have a run id
                     if (!Timer.current_run_id) {
                         Timer.current_run_id = Date.now().toString();
@@ -176,75 +176,75 @@ app.registerExtension({
 
                 // ComfyNode
 
-                this.addWidget("button", "clear", "", Timer.clear);
+                // this.addWidget("button", "clear", "", Timer.clear);
 
 
                 // Add Storage button
-                this.addWidget("button", "store", "", () => {
-                    Timer.saveToStorage();
-                });
+                // this.addWidget("button", "store", "", () => {
+                //     Timer.saveToStorage();
+                // });
 
-                // Add Clear Storage button
-                this.addWidget("button", "clear storage", "", () => {
-                    Timer.clearStorage();
+                // Add Clear Storage button (with confirmation)
+                this.addWidget("button", "clear", "", async () => {
+                    await Timer.confirmAndClear();
                 });
 
                 // Add a number input to control how many last runs to display
-                this.addWidget("number", "Last runs to show", Timer.last_n_runs, (v) => {
+                this.addWidget("number", "history", Timer.last_n_runs, (v) => {
                     return Timer.setLastNRuns(v);
                 }, { min: 1, max: Timer.maxRuns, step: 10, precision: 0 });
 
                 // Add the multiline run notes textarea (active run)
-                const textareaWidget = this.addWidget("text", "Run notes (for active run)", "", (v) => {
-                    // Save the note to the current run if available
-                    if (Timer.current_run_id) {
-                        Timer.run_notes[Timer.current_run_id] = v;
-                    }
-                    return v;
-                }, { multiline: true });  // Enable multiline for textarea
-
-                // Store references for later use
-                Timer.activeNotesWidget = textareaWidget;
+                // const textareaWidget = this.addWidget("text", "Run notes (for active run)", "", (v) => {
+                //     // Save the note to the current run if available
+                //     if (Timer.current_run_id) {
+                //         Timer.run_notes[Timer.current_run_id] = v;
+                //     }
+                //     return v;
+                // }, { multiline: true });  // Enable multiline for textarea
+                //
+                // // Store references for later use
+                // Timer.activeNotesWidget = textareaWidget;
 
                 // ---- Dynamic inputs: arg1, arg2, ... ----
-                const ensureDynamicInputs = (isConnecting = true) => {
-                    ensureDynamicInputsImpl(node, isConnecting);
-                };
+                // const ensureDynamicInputs = (isConnecting = true) => {
+                //     ensureDynamicInputsImpl(node, isConnecting);
+                // };
 
                 // Initialize dynamic inputs
                 // ensureDynamicInputs();
 
                 // Update labels/types and manage dynamic slots on connect/disconnect
-                chainCallback(node, "onConnectionsChange", function (slotType, slot, isConnecting, linkInfo, output) {
-                    try {
-                        if (slotType !== LiteGraph.INPUT) return;
-                        const input = this.inputs?.[slot];
-                        if (!input || !/^arg\d+$/.test(input.name)) {
-                            // Only react to argN inputs
-                            ensureDynamicInputs(isConnecting);
-                            return;
-                        }
-
-                        if (isConnecting && linkInfo) {
-                            const fromNode = graphGetNodeById(linkInfo.origin_id) || app.graph?.getNodeById?.(linkInfo.origin_id);
-                            const type = fromNode?.outputs?.[linkInfo.origin_slot]?.type ?? "*";
-                            input.type = type || "*";
-                            if (input.type !== "*") {
-                                input.label = input.name + ` ${input.type.toLowerCase()}`
-                            } else {
-                                input.label = input.name;
-                            }
-                        } else if (!isConnecting) {
-                            // Reset to wildcard on disconnect
-                            input.type = "*";
-                            input.label = input.name;
-                        }
-
-                        ensureDynamicInputs(isConnecting);
-                    } catch (err) {
-                        Logger.log({class:'Timer',method:'onConnectionsChange',severity:'warn',tag:'error'}, "[formatter] onConnectionsChange error:", err);
-                    }
-                });
+                // chainCallback(node, "onConnectionsChange", function (slotType, slot, isConnecting, linkInfo, output) {
+                //     try {
+                //         if (slotType !== LiteGraph.INPUT) return;
+                //         const input = this.inputs?.[slot];
+                //         if (!input || !/^arg\d+$/.test(input.name)) {
+                //             // Only react to argN inputs
+                //             ensureDynamicInputs(isConnecting);
+                //             return;
+                //         }
+                //
+                //         if (isConnecting && linkInfo) {
+                //             const fromNode = graphGetNodeById(linkInfo.origin_id) || app.graph?.getNodeById?.(linkInfo.origin_id);
+                //             const type = fromNode?.outputs?.[linkInfo.origin_slot]?.type ?? "*";
+                //             input.type = type || "*";
+                //             if (input.type !== "*") {
+                //                 input.label = input.name + ` ${input.type.toLowerCase()}`
+                //             } else {
+                //                 input.label = input.name;
+                //             }
+                //         } else if (!isConnecting) {
+                //             // Reset to wildcard on disconnect
+                //             input.type = "*";
+                //             input.label = input.name;
+                //         }
+                //
+                //         ensureDynamicInputs(isConnecting);
+                //     } catch (err) {
+                //         Logger.log({class:'Timer',method:'onConnectionsChange',severity:'warn',tag:'error'}, "[formatter] onConnectionsChange error:", err);
+                //     }
+                // });
                 // ---- End dynamic inputs ----
 
                 const inputEl = html_impl();
