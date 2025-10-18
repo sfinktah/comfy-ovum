@@ -96,7 +96,7 @@ app.registerExtension({
         const onDrawForeground = nodeType.prototype.onDrawForeground;
         nodeType.prototype.onDrawForeground = function(ctx) {
             onDrawForeground?.apply(this, arguments);
-            drawNodeStatus.call(this, ctx, this.status, this.size, this.flags);
+            drawNodeStatus.call(this, ctx, this.status, this.size, this.collapsed);
         };
     },
 });
@@ -138,7 +138,7 @@ app.registerExtension({
         const onDrawForeground = nodeType.prototype.onDrawForeground;
         nodeType.prototype.onDrawForeground = function(ctx) {
             onDrawForeground?.apply(this, arguments);
-            drawNodeStatus.call(this, ctx, this.status, this.size, this.flags);
+            drawNodeStatus.call(this, ctx, this.status, this.size, this.collapsed);
         };
     },
 });
