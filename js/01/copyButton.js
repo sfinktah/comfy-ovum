@@ -188,9 +188,11 @@ export async function onUploadGraphData(e = null) {
         });
 
         if (!res.ok) {
-            throw new Error(`Upload failed: ${res.status}`);
+            console.log("[Timer] Sync failed: ", res.status)
+            return;
+            // throw new Error(`[Timer] Sync failed: ${res.status}`);
         }
-        console.log("[Timer] Upload successful: ", res.status)
+        // console.log("[Timer] Upload successful: ", res.status)
 
         // Optional: read response to ensure completion
         // const result = await res.json().catch(() => ({}));

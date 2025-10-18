@@ -53,10 +53,6 @@ class LMStudioPromptOvum:
                         'max': 65535,
                         'tooltip': 'LM Studio server port number. Default is 1234 which is the standard LM Studio server port.'
                     }),
-                    'dynamic_loading': ('BOOLEAN', {
-                        'default': False,
-                        'tooltip': 'Enable automatic model loading/unloading. When enabled, the selected model will be loaded before each request and the model list will be refreshed.'
-                    }),
                     'selected_model': (available_models, {
                         'default': available_models[0] if available_models else 'No models available',
                         'tooltip': 'Choose which model to use for generation. List is automatically populated from LM Studio and cached between sessions. Enable dynamic loading to automatically load the selected model.'
@@ -64,7 +60,7 @@ class LMStudioPromptOvum:
                     'unload_timeout_seconds': ('INT', {
                         'default': 0, 
                         'min': 0,
-                        'tooltip': 'Automatic model unload timeout in seconds. Set to 0 to disable. When > 0, the model will be automatically unloaded after this many seconds of inactivity to free up memory.'
+                        'tooltip': 'You MUST have the liquid/lfm2-1.2b model installed for this to work. Automatic model unload timeout in seconds. Set to 0 to disable. When > 0, the model will be automatically unloaded after this many seconds of inactivity to free up memory.'
                     }),
                     'seed': ('INT', {
                         'default': 0, 
@@ -331,7 +327,7 @@ Requirements:
                 LMStudioPromptOvum._unload_timer = threading.Timer(timeout_seconds, auto_unload)
                 LMStudioPromptOvum._unload_timer.start()
 
-    def api_request(self, prompt, server_address, server_port, seed, mode, custom_history, image=None, dynamic_loading=False, selected_model=None, unload_timeout_seconds=0):
+    def api_request(self, prompt, server_address, server_port, seed, mode, custom_history, image=None, selected_model=None, unload_timeout_seconds=0):
         # check if json file in root comfy directory called oooba.json
         history = self.history(mode, custom_history)
         if mode == 'prompt':
@@ -439,12 +435,20 @@ Requirements:
         else:
             return 'Error'
 
-    def process(self, input_prompt, mode, custom_history, server_address, server_port, dynamic_loading, selected_model, unload_timeout_seconds, seed, image=None, prompt=None, unique_id=None, extra_pnginfo=None):
+    def process(self, input_prompt, mode, custom_history, server_address, server_port, selected_model, unload_timeout_seconds, seed, image=None, prompt=None, unique_id=None, extra_pnginfo=None):
         # Refresh model list if dynamic loading is enabled
-        if dynamic_loading:
-            server_models = self.fetch_models_from_server(server_address, server_port)
-            if server_models:
-                self.save_cached_models(server_models)
+        server_models = self.fetch_models_from_server(server_address, server_port)
+        if server_models:
+            self.save_cached_models(server_models)
+
+        # If automatic unload is requested, ensure the tiny model exists to fake unloading
+        if unload_timeout_seconds and unload_timeout_seconds != 0:
+            required_model = 'liquid/lfm2-1.2b'
+            if required_model not in server_models:
+                raise Exception(
+                    "Automatic unload requires the 'liquid/lfm2-1.2b' model to be installed in LM Studio to fake unloading. "
+                    "In developer settings, JIT Model Loading and Auto unload JIT models should be enabled with 1 minute TTL."
+                )
 
         # search and replace
         input_prompt = find_and_replace_wildcards(input_prompt, seed, debug=True)
@@ -456,7 +460,7 @@ Requirements:
             return random.choice(m.group(1).split('|'))
         for m in wc_re.finditer(input_prompt):
             input_prompt = input_prompt.replace(m.group(0), repl(m))
-        result = self.api_request(input_prompt, server_address, server_port, seed, mode, custom_history, image, dynamic_loading, selected_model, unload_timeout_seconds)
+        result = self.api_request(input_prompt, server_address, server_port, seed, mode, custom_history, image, selected_model, unload_timeout_seconds)
         prompt.get(str(unique_id))['inputs']['output_text'] = result
         return (result,)
 CLAZZES = [LMStudioPromptOvum]
