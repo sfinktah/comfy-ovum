@@ -95,8 +95,8 @@ class OvumRegexStringBase:
                 "string": (STRING, {"default": "", "tooltip": "The string to search. Used if `string_in` is not connected."}),
             },
             "optional": {
-                "flags": (RE_FLAGS_T, {"default": re.IGNORECASE, "tooltip": "Regex compilation flags."}),
                 "string_in": (STRING, {"forceInput": True, "tooltip": "Input string or list of strings. Overrides `string` widget if connected."}),  # can be STRING or LIST; normalization handles both
+                "flags": (RE_FLAGS_T, {"default": re.IGNORECASE, "tooltip": "Regex compilation flags."}),
             },
         }
 
