@@ -49,7 +49,7 @@ def resolve_effective_value(wrapped_value: Any, source_output_is_sequence: bool 
     return effective, is_comfy_wrapped_list
 
 def _inspect_upstream(
-    prompt: Any,
+    _prompt: Any,
     my_unique_id: Any,
     input_name: str,
     *,
@@ -61,7 +61,7 @@ def _inspect_upstream(
     Returns a dict with keys:
       - this_node_id, source_output_is_list, source_node_id, source_node_output_slot, source_node_class_name
     """
-    workflow_graph = None
+    prompt = None
     this_node_id: Optional[str] = None
     source_node_id: Optional[str] = None
     source_node_output_slot: Optional[int] = None
@@ -69,9 +69,9 @@ def _inspect_upstream(
 
     # Unwrap prompt and unique id if they are lists
     try:
-        workflow_graph = prompt[0]
+        prompt = _prompt[0]
     except Exception:
-        workflow_graph = prompt
+        prompt = _prompt
     try:
         uid = my_unique_id[0]
     except Exception:
@@ -83,9 +83,9 @@ def _inspect_upstream(
 
     source_output_is_list = False
     try:
-        if workflow_graph and this_node_id and "inputs" in workflow_graph.get(this_node_id, {}):
-            source_node_id, source_node_output_slot = workflow_graph[this_node_id]["inputs"][input_name]
-            source_node_class_name = workflow_graph[source_node_id]["class_type"]
+        if prompt and this_node_id and "inputs" in prompt.get(this_node_id, {}):
+            source_node_id, source_node_output_slot = prompt[this_node_id]["inputs"][input_name]
+            source_node_class_name = prompt[source_node_id]["class_type"]
             source_node_class = ALL_NODE_CLASS_MAPPINGS[source_node_class_name]
             if hasattr(source_node_class, "OUTPUT_IS_LIST"):
                 oisl = source_node_class.OUTPUT_IS_LIST

@@ -8,6 +8,7 @@ import { app } from "../../../scripts/app.js";
 import { chainCallback } from "../01/utility.js";
 import { ensureDynamicInputsImpl } from "../01/dynamicInputHelpers.js";
 import get from "/ovum/node_modules/lodash-es/get.js";
+import { inspectUpstream } from "../common/ovum_helpers.js";
 
 // This extension adapts the generic argN dynamic-input helper to MakeFlatImageList,
 // mapping UI argN inputs to backend kwargs image_1, image_2, ...
@@ -139,6 +140,36 @@ app.registerExtension({
                 // Run generic logic; pass true for connect events, false for disconnect
                 refresh(!!connected);
                 relabel();
+
+                // Handle changeInputs rules when a new link is connected
+                try {
+                    if (!connected) return;
+                    const cfg = node.getParsedDynamicInputs?.();
+                    const changeInputs = Array.isArray(cfg?.changeInputs) ? cfg.changeInputs : [];
+                    if (!changeInputs.length) return;
+
+                    const inp = (node.inputs || [])[index];
+                    const inputName = inp?.name;
+                    if (!inputName) return;
+
+                    for (const rule of changeInputs) {
+                        const re = rule?.nameRegex ? new RegExp(rule.nameRegex) : null;
+                        if (!re || !re.test(String(inputName))) continue;
+                        if (String(rule?.condition) !== "OUTPUT_IS_LIST") continue;
+
+                        // Inspect upstream to see if the connected output is a list
+                        app.graphToPrompt().then((_prompt) => {
+                            return inspectUpstream(_prompt, node.id, inputName);
+                        }).then((info) => {
+                            const isList = !!info?.source_output_is_list;
+                            const shapeArr = Array.isArray(rule?.shape) ? rule.shape : [];
+                            let newShape = isList ? shapeArr?.[0] : shapeArr?.[1];
+                            if (newShape == null) newShape = undefined;
+                            try { inp.shape = newShape; } catch (_e) {}
+                            try { node.setDirtyCanvas(true, true); } catch (_e) {}
+                        }).catch(() => {});
+                    }
+                } catch (_e) {}
             });
 
             // Also relabel right away

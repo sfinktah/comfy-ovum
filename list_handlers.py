@@ -21,7 +21,7 @@ class OvumLength:
     INPUT_IS_LIST = True
 
     FUNCTION = "getLength"
-    CATEGORY = "EasyUse/Logic"
+    CATEGORY = "ovum/lists/python"
 
     @staticmethod
     def getLength(any, prompt=None, my_unique_id=None):
@@ -47,7 +47,14 @@ class MakeFlatImageList:
             "labelIndex": 1,
             "type": "*",
         },
-        "version": "1.2.3",
+        "version": "1.3.0",
+        "changeInputs": [
+            {
+                "nameRegex": r"arg\d+",
+                "condition": "OUTPUT_IS_LIST",
+                "shape": [6, None],
+            }
+        ],
         "flags": ["alpha", "beta"],
         "limits": {"maxBatch": 8, "timeoutSec": 30},
         "ui": {"badge": "Experimental", "color": "#8A2BE2"},
@@ -78,7 +85,7 @@ class MakeFlatImageList:
     INPUT_IS_LIST = True
     OUTPUT_IS_LIST = (False, True)
 
-    CATEGORY = "ovum/images"
+    CATEGORY = "ovum/lists/python"
 
     def doit(self, prompt=None, my_unique_id=None, **kwargs):
         images = []
@@ -150,6 +157,14 @@ class MakeFlatStringList:
             "labelIndex": 1,
             "type": "*",
         },
+        "version": "1.3.0",
+        "changeInputs": [
+            {
+                "nameRegex": r"arg\d+",
+                "condition": "OUTPUT_IS_LIST",
+                "shape": [6, None],
+            }
+        ],
     }
     @classmethod
     def INPUT_TYPES(cls):
@@ -176,7 +191,7 @@ class MakeFlatStringList:
     INPUT_IS_LIST = True
     OUTPUT_IS_LIST = (False, True)
 
-    CATEGORY = "ovum/strings"
+    CATEGORY = "ovum/lists/python"
 
     def doit(self, prompt=None, my_unique_id=None, **kwargs):
         strings = []
@@ -221,7 +236,7 @@ class GetByIndex(NewPointer):
     """
     RETURN_TYPES = (ANYTYPE,)
     INPUT_IS_LIST = True
-    CATEGORY = "Data"
+    CATEGORY = "ovum/lists/python"
     custom_name = "Get by Index (List)"
 
     @staticmethod
@@ -247,7 +262,7 @@ class GetByIndex(NewPointer):
 class ListSliceOvum(NewPointer):
     FUNCTION = "list_slice"
     RETURN_TYPES = (ANYTYPE,)
-    CATEGORY = "Data"
+    CATEGORY = "ovum/lists/python"
 
     @staticmethod
     def list_slice(py_list, start=None, end=None):
@@ -289,7 +304,7 @@ class ListSliceOvum(NewPointer):
 class ReverseListOvum(NewPointer):
     FUNCTION = "list_reverse"
     RETURN_TYPES = (ANYTYPE,)
-    CATEGORY = "Data"
+    CATEGORY = "ovum/lists/python"
 
     @staticmethod
     def list_reverse(py_list):
@@ -305,7 +320,7 @@ class ReverseListOvum(NewPointer):
 class IndexOfOvum(NewPointer):
     FUNCTION = "list_index_of"
     RETURN_TYPES = ("INT",)
-    CATEGORY = "Data"
+    CATEGORY = "ovum/lists/python"
 
     @staticmethod
     def list_index_of(py_list, search_element, start=None):
@@ -333,7 +348,7 @@ class IndexOfOvum(NewPointer):
 class ListSpliceOvum(NewPointer):
     FUNCTION = "list_splice"
     RETURN_TYPES = (ANYTYPE, ANYTYPE)
-    CATEGORY = "Data"
+    CATEGORY = "ovum/lists/python"
 
     @staticmethod
     def list_splice(py_list, start=None, delete_count=None, insert_list=None):
@@ -373,7 +388,7 @@ class ListSpliceOvum(NewPointer):
 class RepeatItemOvum(NewPointer):
     FUNCTION = "repeat_item"
     RETURN_TYPES = (ANYTYPE,)
-    CATEGORY = "Data"
+    CATEGORY = "ovum/lists/python"
 
     @staticmethod
     def repeat_item(item, count):
@@ -394,7 +409,7 @@ class ConcatListsOvum(NewPointer):
     FUNCTION = "list_concat"
     RETURN_TYPES = (ANYTYPE,)
     RETURN_NAMES = ("list",)
-    CATEGORY = "Data"
+    CATEGORY = "ovum/lists/python"
 
     @staticmethod
     def list_concat(list_a=None, list_b=None):
@@ -410,7 +425,7 @@ class ConcatListsOvum(NewPointer):
 class JoinListOvum(NewPointer):
     FUNCTION = "list_join"
     RETURN_TYPES = ("STRING",)
-    CATEGORY = "Data"
+    CATEGORY = "ovum/lists/python"
 
     @staticmethod
     def list_join(py_list, separator=None):
@@ -427,7 +442,7 @@ class JoinListOvum(NewPointer):
 class UniqueListOvum(NewPointer):
     FUNCTION = "list_unique"
     RETURN_TYPES = (ANYTYPE,)
-    CATEGORY = "Data"
+    CATEGORY = "ovum/lists/python"
 
     @staticmethod
     def list_unique(py_list):
@@ -453,7 +468,7 @@ class UniqueListOvum(NewPointer):
 class StringListEditorOvum(NewPointer):
     FUNCTION = "string_list_editor"
     RETURN_TYPES = (ANYTYPE,)
-    CATEGORY = "Data"
+    CATEGORY = "ovum/lists/python"
 
     @staticmethod
     def string_list_editor(items_text=""):
@@ -476,7 +491,7 @@ class StringListEditorOvum(NewPointer):
 class FromListTypeNodeOvum(NewPointer):
     FUNCTION = "from_list_type"
     RETURN_TYPES = (ANYTYPE,)
-    CATEGORY = "Data"
+    CATEGORY = "ovum/lists/python"
 
     @staticmethod
     def from_list_type(py_list, target_type="tuple"):
@@ -513,7 +528,7 @@ class ListExtendOvum(NewPointer):
     FUNCTION = "list_extend"
     RETURN_TYPES = (ANYTYPE,)
     RETURN_NAMES = ("list",)
-    CATEGORY = "Data"
+    CATEGORY = "ovum/lists/python"
 
     @staticmethod
     def list_extend(list_a, list_b):

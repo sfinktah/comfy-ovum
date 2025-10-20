@@ -553,7 +553,8 @@ export class Timer {
 
     static executionError(e) {}
     static executionInterrupted(e) {}
-    static executionStart(e) {}
+    static executionStart(e) {
+    }
     // When all nodes from the prompt have been successfully executed	prompt_id, timestamp
     static executionSuccess(e) {
         const t = LiteGraph.getTime();

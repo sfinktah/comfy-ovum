@@ -31,7 +31,7 @@ class ListSlice(NewPointer):
     RETURN_TYPES = (ANYTYPE,)
     INPUT_IS_LIST = True
     OUTPUT_IS_LIST = (True,)
-    CATEGORY = "Data"
+    CATEGORY = "ovum/lists/any"
 
 
     @staticmethod
@@ -112,7 +112,7 @@ class ListSplice(NewPointer):
     RETURN_TYPES = (ANYTYPE, ANYTYPE)  # (modified_list, removed_elements)
     INPUT_IS_LIST = True
     OUTPUT_IS_LIST = (True, True)
-    CATEGORY = "Data"
+    CATEGORY = "ovum/lists/any"
 
 
     @staticmethod
@@ -181,7 +181,7 @@ class RepeatItem(NewPointer):
     FUNCTION = "repeat_item"
     RETURN_TYPES = (ANYTYPE,)
     OUTPUT_IS_LIST = (True,)
-    CATEGORY = "Data"
+    CATEGORY = "ovum/lists/any"
 
 
     @staticmethod
@@ -214,7 +214,7 @@ class ReverseList(NewPointer):
     RETURN_TYPES = (ANYTYPE,)
     INPUT_IS_LIST = True
     OUTPUT_IS_LIST = (True,)
-    CATEGORY = "Data"
+    CATEGORY = "ovum/lists/any"
 
 
     @staticmethod
@@ -246,7 +246,7 @@ class ConcatLists(NewPointer):
     RETURN_NAMES = ("list",)
     INPUT_IS_LIST = True
     OUTPUT_IS_LIST = (True,)
-    CATEGORY = "Data"
+    CATEGORY = "ovum/lists/any"
 
 
     @staticmethod
@@ -277,7 +277,7 @@ class IndexOf(NewPointer):
     FUNCTION = "list_index_of"
     INPUT_IS_LIST = True
     RETURN_TYPES = ("INT",)
-    CATEGORY = "Data"
+    CATEGORY = "ovum/lists/any"
 
 
     @staticmethod
@@ -321,7 +321,7 @@ class JoinList(NewPointer):
     FUNCTION = "list_join"
     INPUT_IS_LIST = True
     RETURN_TYPES = ("STRING",)
-    CATEGORY = "Data"
+    CATEGORY = "ovum/lists/any"
 
 
     @staticmethod
@@ -351,7 +351,7 @@ class UniqueList(NewPointer):
     RETURN_TYPES = (ANYTYPE,)
     INPUT_IS_LIST = True
     OUTPUT_IS_LIST = (True,)
-    CATEGORY = "Data"
+    CATEGORY = "ovum/lists/any"
 
 
     @staticmethod
@@ -397,7 +397,7 @@ class StringListEditor(NewPointer):
     FUNCTION = "string_list_editor"
     RETURN_TYPES = (ANYTYPE,)
     OUTPUT_IS_LIST = (True,)
-    CATEGORY = "Data"
+    CATEGORY = "ovum/lists/any"
 
 
     @staticmethod
@@ -432,7 +432,7 @@ class FromListTypeNode(NewPointer):
     """
     FUNCTION = "from_list_type"
     RETURN_TYPES = (ANYTYPE,)
-    CATEGORY = "Data"
+    CATEGORY = "ovum/lists/any"
 
 
     @staticmethod
@@ -487,7 +487,7 @@ class ListExtend(NewPointer):
     OUTPUT_IS_LIST = (True,)
     RETURN_TYPES = (ANYTYPE,)
     RETURN_NAMES = ("list",)
-    CATEGORY = "Data"
+    CATEGORY = "ovum/lists/any"
 
 
     @staticmethod

@@ -26,84 +26,9 @@ INT_T = "INT"
 CATEGORY = "ovum/underscore"
 
 # Attempt to import GraphBuilder from bundled ComfyUI. If unavailable, provide a minimal fallback.
-try:
-    from comfy_execution.graph_utils import GraphBuilder as _GB, is_link as _is_link
-    GraphBuilder = _GB
-    is_link = _is_link
-except Exception:
-    def is_link(obj):
-        if not isinstance(obj, list):
-            return False
-        if len(obj) != 2:
-            return False
-        if not isinstance(obj[0], str):
-            return False
-        if not isinstance(obj[1], int) and not isinstance(obj[1], float):
-            return False
-        return True
-
-    class _Node:
-        def __init__(self, id: str, class_type: str, inputs: Dict[str, Any]):
-            self.id = id
-            self.class_type = class_type
-            self.inputs = inputs
-            self.override_display_id = None
-        def out(self, index: int):
-            return [self.id, index]
-        def set_input(self, key: str, value: Any):
-            self.inputs[key] = value
-        def set_override_display_id(self, display_id: Optional[str]):
-            self.override_display_id = display_id
-        def serialize(self):
-            s = {"class_type": self.class_type, "inputs": self.inputs}
-            if self.override_display_id is not None:
-                s["override_display_id"] = self.override_display_id
-            return s
-
-    class GraphBuilder:  # minimal compatible subset
-        _default_prefix_root = ""
-        _default_prefix_call_index = 0
-        _default_prefix_graph_index = 0
-        @classmethod
-        def set_default_prefix(cls, prefix_root, call_index, graph_index=0):
-            cls._default_prefix_root = prefix_root
-            cls._default_prefix_call_index = call_index
-            cls._default_prefix_graph_index = graph_index
-        @classmethod
-        def alloc_prefix(cls, root=None, call_index=None, graph_index=None):
-            if root is None:
-                root = GraphBuilder._default_prefix_root
-            if call_index is None:
-                call_index = GraphBuilder._default_prefix_call_index
-            if graph_index is None:
-                graph_index = GraphBuilder._default_prefix_graph_index
-            result = f"{root}.{call_index}.{graph_index}."
-            GraphBuilder._default_prefix_graph_index += 1
-            return result
-        def __init__(self, prefix=None):
-            self.prefix = prefix or GraphBuilder.alloc_prefix()
-            self.nodes: Dict[str, _Node] = {}
-            self.id_gen = 1
-        def _nid(self, id: str) -> str:
-            return id if id.startswith(self.prefix) else (self.prefix + id)
-        def node(self, class_type: str, id: Optional[str] = None, **kwargs):
-            if id is None:
-                id = str(self.id_gen)
-                self.id_gen += 1
-            nid = self._nid(id)
-            if nid in self.nodes:
-                return self.nodes[nid]
-            n = _Node(nid, class_type, kwargs)
-            self.nodes[nid] = n
-            return n
-        def lookup_node(self, id: str) -> _Node:
-            nid = self._nid(id)
-            return self.nodes[nid]
-        def finalize(self) -> Dict[str, Any]:
-            out: Dict[str, Any] = {}
-            for node_id, node in self.nodes.items():
-                out[node_id] = node.serialize()
-            return out
+from comfy_execution.graph_utils import GraphBuilder as _GB, is_link as _is_link
+GraphBuilder = _GB
+is_link = _is_link
 
 
 def _wrap_text_60(s: str) -> str:
@@ -195,13 +120,9 @@ class UnderscoreValue:
 
 
 # Excluded method names (function manipulation / internals / non-node-friendly)
-_EXCLUDE = set([
-    "__init__", "__str__", "__repr__", "obj", "_wrap", "_clean", "_toOriginal",
-    "Namespace", "items", "_flatten", "_group", "_lookupIterator",
-    "chain", "value", "makeStatic",
-    "bind", "partial", "bindAll", "memoize", "delay", "defer",
-    "throttle", "debounce", "once", "wrap", "compose", "after",
-])
+_EXCLUDE = {"__init__", "__str__", "__repr__", "obj", "_wrap", "_clean", "_toOriginal", "Namespace", "items",
+            "_flatten", "_group", "_lookupIterator", "chain", "value", "makeStatic", "bind", "partial", "bindAll",
+            "memoize", "delay", "defer", "throttle", "debounce", "once", "wrap", "compose", "after"}
 
 ITERATEE_PARAM_NAMES = {"func", "iterator", "iteratee", "predicate", "callback"}
 
@@ -674,5 +595,21 @@ for name, fn in _methods:
         pass
 
 
+class UnderscoreExports:
+    NAME = "underscore function"
+    CATEGORY = CATEGORY
+    FUNCTION = "run"
+    DESCRIPTION = "Output the underscore factory function `_`"
+    RETURN_TYPES = (ANYTYPE,)
+    RETURN_NAMES = ("_",)
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {"required": {}, "optional": {}}
+
+    def run(self):
+        return (_underscore_factory,)
+
+
 # Export CLAZZES for auto-registration
-CLAZZES = [UnderscoreChain, UnderscoreValue, ] + _generated_classes
+CLAZZES = [UnderscoreChain, UnderscoreValue, UnderscoreExports] + _generated_classes

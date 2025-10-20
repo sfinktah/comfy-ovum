@@ -1,9 +1,50 @@
 /** @typedef {import("@comfyorg/comfyui-frontend-types").LGraphNode} LGraphNode */
 
 import { app } from "../../../scripts/app.js";
+import { api } from "../../../scripts/api.js";
 import {chainCallback} from "../01/utility.js";
 import { Logger } from "../common/logger.js";
 import { drawNodeStatus } from "../common/ui_helpers.js";
+
+// Shared helpers to DRY status handling and drawing
+/**
+ * Adds a one-time listener to clear node.status on the next execution_start.
+ * @param {LGraphNode} node
+ */
+const addOneTimeExecutionStart = (node) => {
+    const clearStatusOnNextRun = function () {
+        node.status = undefined;
+        node.setDirtyCanvas(true, true);
+        api.removeEventListener("execution_start", clearStatusOnNextRun);
+    };
+    api.addEventListener("execution_start", clearStatusOnNextRun);
+};
+
+/**
+ * Unified status update with logging and optional scheduling of clear.
+ * @param {LGraphNode} node
+ * @param {any} message
+ * @param {(msg:any)=>string|undefined} formatter
+ */
+const setStatusAndMaybeScheduleClear = (node, message, formatter) => {
+    const statusText = formatter ? formatter(message) : (message?.status ? message.status.join("\n") : undefined);
+    node.status = statusText;
+
+    if (statusText) {
+        addOneTimeExecutionStart(node);
+    }
+
+    node.setDirtyCanvas(true, true);
+};
+
+/**
+ * Attach foreground drawing of node status in a DRY way.
+ */
+const attachDrawForeground = (nodeType) => {
+    chainCallback(nodeType.prototype, "onDrawForeground", function(ctx) {
+        drawNodeStatus.call(this, ctx, this.status, this.size, this.collapsed);
+    });
+};
 
 const ovumRegexCategory = "ovum/regex";
 
@@ -39,16 +80,12 @@ app.registerExtension({
         };
 
         // 1. When string_in is connected, disable string widget
-        const onConnectionsChange = nodeType.prototype.onConnectionsChange;
-        nodeType.prototype.onConnectionsChange = function (type, index, connected, link_info) {
-            onConnectionsChange?.apply(this, arguments);
+        chainCallback(nodeType.prototype, "onConnectionsChange", function (type, index, connected, link_info) {
             this.ovumUpdateWidgetState();
-        };
+        });
 
         // When the node is added, check connections to set initial widget state
-        const onAdded = nodeType.prototype.onAdded;
-        nodeType.prototype.onAdded = function () {
-            onAdded?.apply(this, arguments);
+        chainCallback(nodeType.prototype, "onAdded", function () {
             this.ovumUpdateWidgetState();
 
             if (this.type === "re.Match.__repr__ (Regex Match View)") {
@@ -68,36 +105,27 @@ app.registerExtension({
                     }
                 }
             }
-        };
+        });
 
-        // 2. Display status text from python `ui` return
-        const onExecuted = nodeType.prototype.onExecuted;
-        nodeType.prototype.onExecuted = function (message) {
-            onExecuted?.apply(this, arguments);
-
-            Logger.log({
-                class: 'ovum.regex.ui',
-                method: 'onExecuted',
-                severity: 'trace',
-            }, {message});
-            this.status = message?.status ? message.status.join("\n") : undefined;
+        // 2. Display status text from python `ui` return (DRY via helper)
+        chainCallback(nodeType.prototype, "onExecuted", function (message) {
+            setStatusAndMaybeScheduleClear(
+                this,
+                message,
+                (msg) => (msg?.status ? msg.status.join("\n") : undefined)
+            );
 
             if (this.type === "re.Match.__repr__ (Regex Match View)" && message?.text) {
                 const widget = this.widgets.find(w => w.name === "text");
                 if (widget) {
                     widget.value = message.text.join("\n");
+                    this.setDirtyCanvas(true, true);
                 }
             }
+        });
 
-            /** @this {LGraphNode} */
-            this.setDirtyCanvas(true, true);
-        };
-
-        const onDrawForeground = nodeType.prototype.onDrawForeground;
-        nodeType.prototype.onDrawForeground = function(ctx) {
-            onDrawForeground?.apply(this, arguments);
-            drawNodeStatus.call(this, ctx, this.status, this.size, this.collapsed);
-        };
+        // Draw status in foreground
+        attachDrawForeground(nodeType);
     },
 });
 
@@ -108,37 +136,20 @@ app.registerExtension({
      * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} app
      */
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
-        // if (!nodeData.category.match(ovumCategory) && !nodeData.name.startsWith("Ovum") && !nodeData.name.endsWith("Ovum")) {
-        //     return;
-        // }
+        if (!nodeData.category.match(ovumCategory) && !nodeData.name.startsWith("Ovum") && !nodeData.name.endsWith("Ovum")) {
+            return;
+        }
 
-        // 2. Display status text from python `ui` return
-        const onExecuted = nodeType.prototype.onExecuted;
-        nodeType.prototype.onExecuted = function (message) {
-            onExecuted?.apply(this, arguments);
+        // 2. Display status text from python `ui` return (DRY via helper)
+        chainCallback(nodeType.prototype, "onExecuted", function (message) {
+            setStatusAndMaybeScheduleClear(
+                this,
+                message,
+                (msg) => (msg?.status ? msg.status.slice(0,5).join("⏎\n") : undefined)
+            );
+        });
 
-            Logger.log({
-                class: 'ovum.*',
-                method: 'onExecuted',
-                severity: 'trace',
-            }, {message});
-            if (message?.status) {
-                if ((this.status = message.status.slice(0,5).join("⏎\n"))) {
-                    /** @this {LGraphNode} */
-                    this.setDirtyCanvas(true, true);
-                }
-            } else {
-                if ((this.status = undefined)) {
-                    /** @this {LGraphNode} */
-                    this.setDirtyCanvas(true, true);
-                }
-            }
-        };
-
-        const onDrawForeground = nodeType.prototype.onDrawForeground;
-        nodeType.prototype.onDrawForeground = function(ctx) {
-            onDrawForeground?.apply(this, arguments);
-            drawNodeStatus.call(this, ctx, this.status, this.size, this.collapsed);
-        };
+        // Draw status in foreground
+        attachDrawForeground(nodeType);
     },
 });

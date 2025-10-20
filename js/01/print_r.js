@@ -180,3 +180,5 @@ function getAllKeys(obj) {
     }
     return Array.from(keys);
 }
+
+window.print_r = print_r;

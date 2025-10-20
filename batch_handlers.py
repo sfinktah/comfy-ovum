@@ -6,7 +6,7 @@ class BatchSliceOvum(NewPointer):
     RETURN_TYPES = (ANYTYPE,)
     INPUT_IS_LIST = True
     OUTPUT_IS_LIST = (True,)
-    CATEGORY = "Data"
+    CATEGORY = "ovum/lists/comfy"
 
     @staticmethod
     def list_slice(py_list, start=None, end=None):
@@ -45,7 +45,7 @@ class BatchSpliceOvum(NewPointer):
     RETURN_TYPES = (ANYTYPE, ANYTYPE)
     INPUT_IS_LIST = True
     OUTPUT_IS_LIST = (True, True)
-    CATEGORY = "Data"
+    CATEGORY = "ovum/lists/comfy"
 
     @staticmethod
     def list_splice(py_list, start=None, delete_count=None, insert_list=None):
@@ -88,7 +88,7 @@ class RepeatItemBatchOvum(NewPointer):
     FUNCTION = "repeat_item"
     RETURN_TYPES = (ANYTYPE,)
     OUTPUT_IS_LIST = (True,)
-    CATEGORY = "Data"
+    CATEGORY = "ovum/lists/comfy"
 
     @staticmethod
     def repeat_item(item, count):
@@ -110,7 +110,7 @@ class ReverseBatchOvum(NewPointer):
     RETURN_TYPES = (ANYTYPE,)
     INPUT_IS_LIST = True
     OUTPUT_IS_LIST = (True,)
-    CATEGORY = "Data"
+    CATEGORY = "ovum/lists/comfy"
 
     @staticmethod
     def list_reverse(py_list):
@@ -128,7 +128,7 @@ class ConcatBatchesOvum(NewPointer):
     RETURN_TYPES = (ANYTYPE,)
     INPUT_IS_LIST = True
     OUTPUT_IS_LIST = (True,)
-    CATEGORY = "Data"
+    CATEGORY = "ovum/lists/comfy"
     RETURN_NAMES = ("list",)
 
     @staticmethod
@@ -146,7 +146,7 @@ class IndexOfBatchOvum(NewPointer):
     FUNCTION = "list_index_of"
     INPUT_IS_LIST = True
     RETURN_TYPES = ("INT",)
-    CATEGORY = "Data"
+    CATEGORY = "ovum/lists/comfy"
 
     @staticmethod
     def list_index_of(py_list, search_element, start=None):
@@ -176,7 +176,7 @@ class JoinBatchOvum(NewPointer):
     FUNCTION = "list_join"
     INPUT_IS_LIST = True
     RETURN_TYPES = ("STRING",)
-    CATEGORY = "Data"
+    CATEGORY = "ovum/lists/comfy"
 
     @staticmethod
     def list_join(py_list, separator=None):
@@ -195,7 +195,7 @@ class UniqueBatchOvum(NewPointer):
     RETURN_TYPES = (ANYTYPE,)
     INPUT_IS_LIST = True
     OUTPUT_IS_LIST = (True,)
-    CATEGORY = "Data"
+    CATEGORY = "ovum/lists/comfy"
 
     @staticmethod
     def list_unique(py_list):
@@ -222,7 +222,7 @@ class StringBatchEditorOvum(NewPointer):
     FUNCTION = "string_list_editor"
     RETURN_TYPES = (ANYTYPE,)
     OUTPUT_IS_LIST = (True,)
-    CATEGORY = "Data"
+    CATEGORY = "ovum/lists/comfy"
 
     @staticmethod
     def string_list_editor(items_text=""):
@@ -245,7 +245,7 @@ class StringBatchEditorOvum(NewPointer):
 class FromBatchTypeNodeOvum(NewPointer):
     FUNCTION = "from_list_type"
     RETURN_TYPES = (ANYTYPE,)
-    CATEGORY = "Data"
+    CATEGORY = "ovum/lists/comfy"
 
     @staticmethod
     def from_list_type(py_list, target_type="tuple"):
@@ -284,7 +284,7 @@ class BatchExtendOvum(NewPointer):
     OUTPUT_IS_LIST = (True,)
     RETURN_TYPES = (ANYTYPE,)
     RETURN_NAMES = ("list",)
-    CATEGORY = "Data"
+    CATEGORY = "ovum/lists/comfy"
 
     @staticmethod
     def list_extend(list_a, list_b):
