@@ -57,7 +57,7 @@ export function attachTooltip(el, textOrFn, delay = 1000) {
     ensureTooltipLib().then(() => {
         if (!el || !window.tippy) return;
         window.tippy(el, {
-            content: '',
+            content: "🥚 ",
             delay: [delay, 0],
             allowHTML: true,
             theme: 'light-border',

@@ -144,6 +144,11 @@ app.registerExtension({
     /**
      * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} appInstance
      */
+    /**
+     * @param {import("../../typings/ComfyNode").ComfyNode} nodeType
+     * @param {import("@comfyorg/comfyui-frontend-types").ComfyNodeDef} nodeData
+     * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} appInstance
+     */
     async beforeRegisterNodeDef(nodeType, nodeData, appInstance) {
         if (!nodeData || nodeData.name !== "LoadImagesListWithCallback") return;
         /** @type {LGraphNode} */

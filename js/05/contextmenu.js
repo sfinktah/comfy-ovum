@@ -18,16 +18,21 @@
 import {app} from "../../../scripts/app.js";
 import {GraphHelpers} from "../common/graphHelpersForTwinNodes.js";
 import {LinkUtils} from "../common/linkUtils.js";
+import {chainCallback} from "../01/utility.js";
 // import {setWidgetValue, setWidgetValueWithValidation} from "../01/twinnodeHelpers.js";
 
 // Stolen from Kijai
 // Adds context menu entries, code partly from pyssssscustom-scripts
 
-function addContextMenuHandler(nodeType, cb) {
-    const getOpts = nodeType.prototype.getExtraMenuOptions;
-    nodeType.prototype.getExtraMenuOptions = function () {
-        const r = getOpts.apply(this, arguments);
-        cb.apply(this, arguments);
+/**
+ * @param {import("../../typings/ComfyNode").ComfyNode} nodeType
+ * @param callback
+ */
+function addContextMenuHandler(nodeType, callback) {
+    const getExtraMenuOptions = nodeType.prototype.getExtraMenuOptions;
+    nodeType.prototype.getExtraMenuOptions = function (canvas, options) {
+        const r = getExtraMenuOptions.apply(this, arguments);
+        callback.apply(this, arguments);
         return r;
     };
 }
@@ -99,9 +104,184 @@ const updateSlots = (value) => {
         }
     }
 };
+
+/**
+ * Inserts a PassthruOvum node between every outgoing link of a given node and its target,
+ * unless the target node's type starts with "Passthru".
+ * The created node's title is unique and, for each output index x, is based on widget[x].value if
+ * it is a scalar or a non-empty, non-space-only string; otherwise it uses `${node.title}canvas${x}`.
+ * @param {LGraphNode} sourceNode
+ */
+const insertPassthruBetweenOutputs = (sourceNode) => {
+    if (!sourceNode) return;
+
+    const graph = app.graph;
+    const allLinks = graph.links ?? {};
+
+    const getWidgetValue = (node, index = 0) => {
+        if (!node) return undefined;
+        const w = node.widgets?.[index];
+        if (w && w.value !== undefined) return w.value;
+        if (Array.isArray(node.widgets_values)) return node.widgets_values[index];
+        return undefined;
+    };
+
+    const isValidTitleValue = (val) => {
+        const t = typeof val;
+        if (t === 'number' || t === 'boolean') return true;
+        if (t === 'string') return val.trim().length > 0; // must contain non-spacing chars
+        return false;
+    };
+
+    // Iterate outputs and their links
+    for (let outIdx = 0; outIdx < (sourceNode.outputs?.length ?? 0); outIdx++) {
+        const links = sourceNode.outputs?.[outIdx]?.links;
+        if (!Array.isArray(links) || links.length === 0) continue;
+
+        // Determine the base title once per output index
+        let baseTitle;
+        const widgetVal = getWidgetValue(sourceNode, outIdx);
+        if (isValidTitleValue(widgetVal)) {
+            baseTitle = String(widgetVal);
+        } else {
+            baseTitle = `${sourceNode.title}_${outIdx}`;
+        }
+
+        for (const linkId of [...links]) { // clone as we will mutate links
+            /** @type {LLink} */
+            const link = allLinks[linkId];
+            if (!link) continue;
+
+            // Resolve origin/target and reroutes similar to convertLinkToGetSetNode
+            let { origin_id: originId, target_id: targetId, origin_slot: originSlot, target_slot: targetSlot, type } = link;
+            let originNode = app.graph.getNodeById(originId);
+            let targetNode = app.graph.getNodeById(targetId);
+            if (!originNode || !targetNode) continue;
+
+            if (originNode.type === 'Reroute') {
+                let resolvedSlot;
+                [originNode, resolvedSlot] = LinkUtils.traverseInputReroute(graph, originNode);
+                originId = originNode?.id;
+                originSlot = resolvedSlot ?? 0;
+                if (originSlot === undefined || originSlot === -1) originSlot = 0;
+            }
+
+            if (targetNode.type === 'Reroute') {
+                targetNode = LinkUtils.traverseOutputReroute(graph, targetNode);
+                targetId = targetNode?.id;
+                // best effort to find matching input slot by type
+                const idxByType = targetNode?.inputs?.findIndex(inp => inp.type === type);
+                targetSlot = (idxByType == null || idxByType === -1) ? (targetSlot ?? 0) : idxByType;
+            }
+
+            if (!originNode || !targetNode) continue;
+
+            // Skip if target already a Passthru*
+            if (typeof targetNode.type === 'string' && targetNode.type.startsWith('Passthru')) {
+                continue;
+            }
+
+            // Remove the original link first
+            try {
+                GraphHelpers.removeLink(graph, linkId);
+            } catch (_) {}
+
+            // Create passthru and insert
+            const passthru = LiteGraph.createNode('PassthruOvum');
+            const [ox, oy] = originNode.getConnectionPos(false, originSlot);
+            const [tx, ty] = targetNode.getConnectionPos(true, targetSlot);
+            // Position midway with slight offset
+            const px = Math.round((ox + tx) / 2) - 40;
+            const py = Math.round((oy + ty) / 2) - 10;
+            passthru.pos = [px, py];
+
+            // Assign unique title
+            const safeBase = LinkUtils.formatVariables(String(baseTitle));
+            passthru.title = LinkUtils.uniqueTitle(graph, safeBase);
+
+            graph.add(passthru);
+
+            // Connect origin -> passthru (input 0), passthru -> target
+            try { originNode.connect(originSlot, passthru, 0); } catch (_) {}
+            try { passthru.connect(0, targetNode, targetSlot); } catch (_) {}
+        }
+    }
+};
+
+// Returns true if any output of the node connects directly to a Passthru* node
+const hasPassthruOutputs = (sourceNode) => {
+    if (!sourceNode?.outputs?.length) return false;
+    const graph = app.graph;
+    const allLinks = graph.links ?? graph._links ?? {};
+    for (let outIdx = 0; outIdx < sourceNode.outputs.length; outIdx++) {
+        const links = sourceNode.outputs[outIdx]?.links;
+        if (!Array.isArray(links)) continue;
+        for (const linkId of links) {
+            const link = allLinks[linkId];
+            if (!link) continue;
+            const target = graph.getNodeById ? graph.getNodeById(link.target_id) : app.graph._nodes_by_id?.[link.target_id];
+            if (target && typeof target.type === 'string' && target.type.startsWith('Passthru')) {
+                return true;
+            }
+        }
+    }
+    return false;
+};
+
+// Removes Passthru* nodes that are directly attached to the outputs of sourceNode
+// Reconnects origin outputs directly to the downstream targets of those passthru nodes
+const removePassthruFromOutputs = (sourceNode) => {
+    if (!sourceNode) return;
+    const graph = app.graph;
+    const allLinks = graph.links ?? graph._links ?? {};
+
+    // Collect operations per output slot to avoid mutating while iterating
+    for (let outIdx = 0; outIdx < (sourceNode.outputs?.length ?? 0); outIdx++) {
+        const links = sourceNode.outputs?.[outIdx]?.links;
+        if (!Array.isArray(links) || links.length === 0) continue;
+
+        // clone link ids, we will mutate
+        for (const linkId of [...links]) {
+            const link = allLinks[linkId];
+            if (!link) continue;
+            const originSlot = link.origin_slot ?? outIdx;
+            const passthruNode = graph.getNodeById ? graph.getNodeById(link.target_id) : app.graph._nodes_by_id?.[link.target_id];
+            if (!passthruNode) continue;
+            if (!(typeof passthruNode.type === 'string' && passthruNode.type.startsWith('Passthru'))) continue;
+
+            // Get all outgoing links of the passthru
+            const outLinks = passthruNode.outputs?.[0]?.links;
+            const downstreamLinkIds = Array.isArray(outLinks) ? [...outLinks] : [];
+
+            // Remove origin -> passthru link first
+            try { GraphHelpers.removeLink(graph, linkId); } catch (_) {}
+
+            // For every passthru -> downstream link, remove it and reconnect origin directly
+            for (const downLinkId of downstreamLinkIds) {
+                const downLink = allLinks[downLinkId];
+                if (!downLink) continue;
+                const targetNode = graph.getNodeById ? graph.getNodeById(downLink.target_id) : app.graph._nodes_by_id?.[downLink.target_id];
+                const targetSlot = downLink.target_slot ?? 0;
+                try { GraphHelpers.removeLink(graph, downLinkId); } catch (_) {}
+                if (targetNode) {
+                    try { sourceNode.connect(originSlot, targetNode, targetSlot); } catch (_) {}
+                }
+            }
+
+            // Finally, remove the passthru node from graph
+            try { graph.remove(passthruNode); } catch (_) {
+                try { graph.removeNode(passthruNode); } catch (_) {}
+            }
+        }
+    }
+};
+
+
 app.registerExtension({
     name: "ovum.contextmenu",
     /**
+     * @param {import("../../typings/ComfyNode").ComfyNode} nodeType
+     * @param {import("@comfyorg/comfyui-frontend-types").ComfyNodeDef} nodeData
      * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} app
      */
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
@@ -116,32 +296,42 @@ app.registerExtension({
                 severity: 'trace',
                 tag: '',
                 nodeName: 'ovum.contextmenu'
-            }, "Adding context menu entries to universal nodes: ", universalNodesToAddToOutput);
+            }, "Adding context menu entries to universal nodes: ", Array.from(universalNodesToAddToOutput).join(", "));
         }
 
         if (nodeData.output) {
-            addContextMenuHandler(nodeType, function (_, options) {
-                options.unshift(
-                    {
-                        content: "Add PassthruOvums to outputs",
+            // Logger.log({ class: 'ovum.contextmenu', method: 'beforeRegisterNodeDef', severity: 'trace', tag: '', nodeName: 'ovum.contextmenu' }, "Adding PassthruOvums context menu option");
+            chainCallback(nodeType.prototype, "getExtraMenuOptions", function (canvas, options) {
+                // Always offer to add PassthruOvums to outputs
+                options.push({
+                    content: "🥚 Add PassthruOvums to outputs",
+                    callback: () => {
+                        insertPassthruBetweenOutputs(this);
+                    }
+                });
+
+                // Offer inverse option only if there are Passthru* nodes attached to outputs
+                if (hasPassthruOutputs(this)) {
+                    options.push({
+                        content: "🥚 Remove PassthruOvums from outputs",
                         callback: () => {
-                            insertPassthruBetweenOutputs(this);
+                            removePassthruFromOutputs(this);
                         }
-                    },
-                    );
+                    });
+                }
             });
         }
         // if (nodeData.input && nodeData.input.required) {
-        //     addContextMenuHandler(nodeType, function (_, options) {
-        //         options.unshift(
+        //     addContextMenuHandler(nodeType, function (canvas, options) {
+        //         options.push(
         //             {
-        //                 content: "Add GetTwinNodes",
+        //                 content: "🥚 Add GetTwinNodes",
         //                 callback: () => {
         //                     addNode("GetTwinNodes", this, {side: "left", offset: 30});
         //                 }
         //             },
         //             {
-        //                 content: "Add SetTwinNodes",
+        //                 content: "🥚 Add SetTwinNodes",
         //                 callback: () => {
         //                     addNode("SetTwinNodes", this, {side: "right", offset: 30});
         //                 },
@@ -179,6 +369,12 @@ app.registerExtension({
             name: "ovum: Disable automatic 'set ' and 'get ' prefix for TwinNodes titles",
             defaultValue: true,
             type: "boolean",
+        });
+        app.ui.settings.addSetting({
+            id: "ovum.makeTwinNodesLinkClick",
+            name: "ovum: Turn links into Get/SetTwinNodes by clicking the center-circle of links",
+            type: "boolean",
+            defaultValue: false,
         });
     },
     init() {
@@ -227,7 +423,7 @@ app.registerExtension({
         const getLinks = () => graph.links ?? [];
         const getLinkById = (id, links = getLinks()) => links[id];
         const getAllNodes = () => graph._nodes ?? [];
-        // const formatVariables = (text) => text.toLowerCase().replace(/_./g, m => m.replace("_", "").toUpperCase());
+        // const formatVariables = (text) => text.toLowerCase().replace(/canvas./g, m => m.replace("canvas", "").toUpperCase());
         const formatVariables = (text) => LinkUtils.formatVariables(text);
         const isGetTwinNode = (node) => node.type === "GetTwinNodes";
         const isSetTwinNode = (node) => node.type === "SetTwinNodes";
@@ -562,111 +758,6 @@ app.registerExtension({
             getNode.connect(0, targetNode, targetSlot);
         };
 
-        /**
-         * Inserts a PassthruOvum node between every outgoing link of a given node and its target,
-         * unless the target node's type starts with "Passthru".
-         * The created node's title is unique and, for each output index x, is based on widget[x].value if
-         * it is a scalar or a non-empty, non-space-only string; otherwise it uses `${node.title}_${x}`.
-         * @param {LGraphNode} sourceNode
-         */
-        const insertPassthruBetweenOutputs = (sourceNode) => {
-            if (!sourceNode) return;
-
-            const graph = app.graph;
-            const allLinks = graph.links ?? {};
-
-            const getWidgetValue = (node, index = 0) => {
-                if (!node) return undefined;
-                const w = node.widgets?.[index];
-                if (w && w.value !== undefined) return w.value;
-                if (Array.isArray(node.widgets_values)) return node.widgets_values[index];
-                return undefined;
-            };
-
-            const isValidTitleValue = (val) => {
-                const t = typeof val;
-                if (t === 'number' || t === 'boolean') return true;
-                if (t === 'string') return val.trim().length > 0; // must contain non-spacing chars
-                return false;
-            };
-
-            // Iterate outputs and their links
-            for (let outIdx = 0; outIdx < (sourceNode.outputs?.length ?? 0); outIdx++) {
-                const links = sourceNode.outputs?.[outIdx]?.links;
-                if (!Array.isArray(links) || links.length === 0) continue;
-
-                // Determine the base title once per output index
-                let baseTitle;
-                const widgetVal = getWidgetValue(sourceNode, outIdx);
-                if (isValidTitleValue(widgetVal)) {
-                    baseTitle = String(widgetVal);
-                } else {
-                    baseTitle = `${sourceNode.title}_${outIdx}`;
-                }
-
-                for (const linkId of [...links]) { // clone as we will mutate links
-                    /** @type {LLink} */
-                    const link = allLinks[linkId];
-                    if (!link) continue;
-
-                    // Resolve origin/target and reroutes similar to convertLinkToGetSetNode
-                    let { origin_id: originId, target_id: targetId, origin_slot: originSlot, target_slot: targetSlot, type } = link;
-                    let originNode = getNodeById(originId);
-                    let targetNode = getNodeById(targetId);
-                    if (!originNode || !targetNode) continue;
-
-                    if (originNode.type === 'Reroute') {
-                        let resolvedSlot;
-                        [originNode, resolvedSlot] = LinkUtils.traverseInputReroute(graph, originNode);
-                        originId = originNode?.id;
-                        originSlot = resolvedSlot ?? 0;
-                        if (originSlot === undefined || originSlot === -1) originSlot = 0;
-                    }
-
-                    if (targetNode.type === 'Reroute') {
-                        targetNode = LinkUtils.traverseOutputReroute(graph, targetNode);
-                        targetId = targetNode?.id;
-                        // best effort to find matching input slot by type
-                        const idxByType = targetNode?.inputs?.findIndex(inp => inp.type === type);
-                        targetSlot = (idxByType == null || idxByType === -1) ? (targetSlot ?? 0) : idxByType;
-                    }
-
-                    if (!originNode || !targetNode) continue;
-
-                    // Skip if target already a Passthru*
-                    if (typeof targetNode.type === 'string' && targetNode.type.startsWith('Passthru')) {
-                        continue;
-                    }
-
-                    // Remove the original link first
-                    try {
-                        GraphHelpers.removeLink(graph, linkId);
-                    } catch (_) {}
-
-                    // Create passthru and insert
-                    const passthru = LiteGraph.createNode('PassthruOvum');
-                    const [ox, oy] = originNode.getConnectionPos(false, originSlot);
-                    const [tx, ty] = targetNode.getConnectionPos(true, targetSlot);
-                    // Position midway with slight offset
-                    const px = Math.round((ox + tx) / 2) - 40;
-                    const py = Math.round((oy + ty) / 2) - 10;
-                    passthru.pos = [px, py];
-
-                    // Assign unique title
-                    const safeBase = LinkUtils.formatVariables(String(baseTitle));
-                    passthru.title = LinkUtils.uniqueTitle(graph, safeBase);
-
-                    graph.add(passthru);
-
-                    // Connect origin -> passthru (input 0), passthru -> target
-                    try { originNode.connect(originSlot, passthru, 0); } catch (_) {}
-                    try { passthru.connect(0, targetNode, targetSlot); } catch (_) {}
-                }
-            }
-        };
-
-        // Expose for external usage (e.g., console)
-        window.insertPassthruBetweenOutputs = insertPassthruBetweenOutputs;
 
         const originalHandler = LGraphCanvas.prototype.showLinkMenu;
 
@@ -684,7 +775,7 @@ app.registerExtension({
                 return p;
             }, {});
             options.push({
-                content: "Select all nodes of type",
+                content: "🥚 Select all nodes of type",
                 has_submenu: true,
                 submenu: {
                     options: Object.keys(types)
@@ -721,12 +812,13 @@ app.registerExtension({
                     // Firstly, if the shift key is pressed, showLinkMenu won't even
                     // get called.  All the modifier keys have this result.
                     // TODO: Do something like that fancy alignment node I used that hijacks (configurable) ~ key
-                    if (1 || event.shiftKey) {
+                    const enabled = app?.ui?.settings?.getSettingValue?.("ovum.makeTwinNodesLinkClick");
+                    if (enabled) {
                         convertLinkToGetSetNode(link);
                         return false;
                     }
 
-                    // Otherwise, execute the original handler
+                    // Otherwise, execute the original handler (default link context menu)
                     originalHandler.apply(this, [link, event]);
                     return false;
                 }

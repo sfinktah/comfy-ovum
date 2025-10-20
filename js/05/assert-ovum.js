@@ -16,6 +16,8 @@ import { setupDynamicConnections, setupDynamicIOMixin } from "../mtb/utils/dynam
 app.registerExtension({
     name: "ovum.assertovum.dynamicio",
     /**
+     * @param {import("../../typings/ComfyNode").ComfyNode} nodeType
+     * @param {import("@comfyorg/comfyui-frontend-types").ComfyNodeDef} nodeData
      * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} appInstance
      */
     async beforeRegisterNodeDef(nodeType, nodeData, appInstance) {

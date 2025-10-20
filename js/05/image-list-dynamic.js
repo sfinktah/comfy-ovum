@@ -14,6 +14,11 @@ import { inspectUpstream } from "../common/ovum_helpers.js";
 // mapping UI argN inputs to backend kwargs image_1, image_2, ...
 app.registerExtension({
     name: "ovum.image_list.dynamic_inputs",
+    /**
+     * @param {import("../../typings/ComfyNode").ComfyNode} nodeType
+     * @param {import("@comfyorg/comfyui-frontend-types").ComfyNodeDef} nodeData
+     * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} appInstance
+     */
     async beforeRegisterNodeDef (nodeType, nodeData, appInstance) {
 
         // 1) Cheap presence check without parsing

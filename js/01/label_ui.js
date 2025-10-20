@@ -1,5 +1,5 @@
 // copied from ComfyUI_XISER_Nodes/web/xis_label_ui.js
-import { app } from "/scripts/app.js";
+import { app } from "../../../scripts/app.js";
 
 // Set of loaded resources to prevent duplicate loading
 const loadedResources = new Set();
@@ -530,7 +530,7 @@ app.registerExtension({
          */
         nodeType.prototype.getExtraMenuOptions = function (graphCanvas, options) {
             options.push({
-                content: "编辑文本",
+                content: "🥚 编辑文本",
                 callback: async () => {
                     try {
                         const modal = document.createElement("div");

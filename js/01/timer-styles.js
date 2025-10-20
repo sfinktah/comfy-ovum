@@ -258,6 +258,22 @@ textarea.comfy-multiline-input[placeholder=pattern] {
     overflow: auto;
     white-space: pre;
 }
+
+/* Ovum kbd styling for tooltip key hints (PrimeVue theme variables) */
+.ovum-kbd {
+    display: inline-block;
+    margin: 0 .1em;
+    padding: .1em .6em;
+    font-family: var(--p-font-family, system-ui, Arial, sans-serif);
+    font-size: var(--p-text-sm, 12px);
+    line-height: 1.4;
+    color: var(--p-text-color, inherit);
+    background-color: var(--p-content-background, #2b2b2b);
+    border: 1px solid var(--p-content-border-color, #555);
+    border-radius: 3px;
+    box-shadow: var(--p-overlay-shadow, 0 1px 1px hsla(210, 8%, 5%, 0.15)), inset 0 1px 0 0 rgba(255,255,255,0.06);
+    white-space: nowrap;
+}
 `;
 
 /**

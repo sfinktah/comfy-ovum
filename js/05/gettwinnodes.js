@@ -822,7 +822,7 @@ app.registerExtension({
                 // noinspection UnnecessaryLocalVariableJS
                 /** @type {IContextMenuValue<string>[]} */
                 const options = [{
-                    content: "Doohickey 1",
+                    content: "🥚 Doohickey 1",
                     callback: () => {
                         // link_pos: (2) [1830.3707275390625, -4726]
                         // output: NodeOutputSlot {name: 'STRING', localized_name: undefined, #node: GetTwinNodes, #node: GetTwinNodes, …}
@@ -844,15 +844,15 @@ app.registerExtension({
 
                 let menuEntry = node.drawConnection ? "Hide connections" : "Show connections";
 
-                options.unshift(
+                options.push(
                     {
-                        content: "Add another entry",
+                        content: "🥚 Add another entry",
                         callback: () => {
                             node.addAnotherWidget();
                         },
                     },
                     {
-                        content: "Restore constants from prevNames",
+                        content: "🥚 Restore constants from prevNames",
                         callback: () => {
                             const count = Math.min(node.properties.numberOfWidgets, node.properties.previousNames.length);
                             for (let i = 0; i < count; i++) {
@@ -866,25 +866,25 @@ app.registerExtension({
                         }
                     },
                     {
-                        content: "Go to setter",
+                        content: "🥚 Go to setter",
                         callback: () => {
                             node.goToSetter();
                         },
                     },
                     {
-                        content: "Update title",
+                        content: "🥚 Update title",
                         callback: () => {
                             node.updateTitle(true);
                         },
                     },
                     {
-                        content: "Update colors",
+                        content: "🥚 Update colors",
                         callback: () => {
                             node.updateColors();
                         },
                     },
                     {
-                        content: "Check connections",
+                        content: "🥚 Check connections",
                         callback: () => {
                             node.checkConnections();
                             console.log('connections', this.currentSetters)

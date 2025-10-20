@@ -27,6 +27,8 @@ export function showDialog(opts = {}) {
             className = "ovum-dialog",
             zIndex = 99999,
             position = "center",
+            showOkButton = true,
+            showCloseIcon = false,
         } = opts;
 
         // Prevent duplicate dialogs of the same class
@@ -80,11 +82,40 @@ export function showDialog(opts = {}) {
             wrap.__backdrop = backdrop;
         }
 
+        let cb = null;
+
         const titleEl = document.createElement("div");
         titleEl.textContent = title || "";
         titleEl.style.fontWeight = "600";
         titleEl.style.marginBottom = title ? "8px" : "0";
         titleEl.style.fontSize = "14px";
+
+        // Optional top-right close icon (macOS-style)
+        let closeBtn = null;
+        if (showCloseIcon) {
+            closeBtn = document.createElement("button");
+            closeBtn.textContent = "×"; // times symbol
+            closeBtn.setAttribute("aria-label", "Close");
+            closeBtn.style.position = "absolute";
+            closeBtn.style.top = "6px";
+            closeBtn.style.right = "6px";
+            closeBtn.style.width = "32px";
+            closeBtn.style.height = "32px";
+            closeBtn.style.border = "none";
+            closeBtn.style.borderRadius = "50%";
+            closeBtn.style.background = "transparent";
+            closeBtn.style.color = "inherit";
+            closeBtn.style.fontSize = "24px";
+            closeBtn.style.opacity = "0.7";
+            closeBtn.style.cursor = "pointer";
+            closeBtn.onmouseenter = () => closeBtn.style.opacity = "1";
+            closeBtn.onmouseleave = () => closeBtn.style.opacity = "0.7";
+            closeBtn.onclick = () => {
+                cleanup();
+                resolve({ confirmed: false, checkboxChecked: cb?.checked || false });
+            };
+            wrap.appendChild(closeBtn);
+        }
 
         const body = document.createElement("div");
         body.innerHTML = message || "";
@@ -95,7 +126,6 @@ export function showDialog(opts = {}) {
         row.style.alignItems = "center";
         row.style.gap = "10px";
 
-        let cb = null;
         if (showCheckbox) {
             cb = document.createElement("input");
             cb.type = "checkbox";
@@ -111,8 +141,9 @@ export function showDialog(opts = {}) {
         spacer.style.flex = "1";
         row.appendChild(spacer);
 
-        const cancelBtn = cancelText ? document.createElement("button") : null;
-        if (cancelBtn) {
+        let cancelBtn = null;
+        if (cancelText) {
+            cancelBtn = document.createElement("button");
             cancelBtn.textContent = cancelText;
             cancelBtn.onclick = () => {
                 cleanup();
@@ -121,23 +152,26 @@ export function showDialog(opts = {}) {
             row.appendChild(cancelBtn);
         }
 
-        const okBtn = document.createElement("button");
-        okBtn.textContent = confirmText;
-        okBtn.style.fontWeight = "600";
-        okBtn.onclick = () => {
-            cleanup();
-            resolve({ confirmed: true, checkboxChecked: cb?.checked || false });
-        };
-        row.appendChild(okBtn);
+        let okBtn = null;
+        if (showOkButton) {
+            okBtn = document.createElement("button");
+            okBtn.textContent = confirmText;
+            okBtn.style.fontWeight = "600";
+            okBtn.onclick = () => {
+                cleanup();
+                resolve({ confirmed: true, checkboxChecked: cb?.checked || false });
+            };
+            row.appendChild(okBtn);
+        }
 
         function onKey(e){
-            if (e.key === "Escape" && cancelText) {
+            if (e.key === "Escape" && (cancelBtn || showCloseIcon)) {
                 e.stopPropagation();
                 e.preventDefault();
                 cleanup();
                 resolve({ confirmed: false, checkboxChecked: cb?.checked || false });
             }
-            if (e.key === "Enter") {
+            if (e.key === "Enter" && okBtn) {
                 e.stopPropagation();
                 e.preventDefault();
                 cleanup();
@@ -157,7 +191,7 @@ export function showDialog(opts = {}) {
         document.body.appendChild(wrap);
 
         // Focus OK for quick Enter
-        setTimeout(() => okBtn.focus?.(), 0);
+        if (okBtn) setTimeout(() => okBtn.focus?.(), 0);
         document.addEventListener("keydown", onKey, true);
     });
 }
@@ -180,12 +214,13 @@ export function showTipWithCheckbox({ storageKey, title, message, okText = "OK" 
     showDialog({
         title,
         message,
-        confirmText: okText,
         showCheckbox: true,
         checkboxLabel: "Don't show me this again",
         className: "ovum-tip",
         position: "top-right",
         zIndex: 99999,
+        showOkButton: false,
+        showCloseIcon: true,
     }).then(({ checkboxChecked }) => {
         if (checkboxChecked) {
             try { localStorage.setItem(storageKey, "1"); } catch (_) {}

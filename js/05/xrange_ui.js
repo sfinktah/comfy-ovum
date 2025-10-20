@@ -143,6 +143,11 @@ function advanceAllXRangeCursors(app) {
 
 app.registerExtension({
     name: "pyobjects.xrange.ui",
+    /**
+     * @param {import("../../typings/ComfyNode").ComfyNode} nodeType
+     * @param {import("@comfyorg/comfyui-frontend-types").ComfyNodeDef} nodeData
+     * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} appInstance
+     */
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
         // Target the specific node by its displayed name or class name (support both).
         if (nodeData.name !== "XRangeNode") return;

@@ -55,6 +55,8 @@ function setWidgetValue(node, name, value) {
 app.registerExtension({
     name: "ovum.ui.knob",
     /**
+     * @param {import("../../typings/ComfyNode").ComfyNode} nodeType
+     * @param {import("@comfyorg/comfyui-frontend-types").ComfyNodeDef} nodeData
      * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} appInstance
      */
     async beforeRegisterNodeDef(nodeType, nodeData, appInstance) {

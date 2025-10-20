@@ -3,9 +3,9 @@
  */
 import { app } from "../../../scripts/app.js";
 import { showTipWithCheckbox } from "../04/dialog-helper.js";
+import { formatKeybindingAsKbd } from "../01/keybinding.js";
 
 const NAV_STORAGE_KEY = "ovum.twinnodes.navTip.hidden";
-const DEFAULT_HOTKEY = "Shift+T";
 
 // Simple in-memory stack; persists across jumps during session
 const navStack = [];
@@ -77,10 +77,13 @@ export function popAndRestoreView() {
 }
 
 export function showTwinTipIfNeeded() {
+    const kbdHtml = formatKeybindingAsKbd("ovum.twinnodes.backtrack");
+    const msg = `After using \"Go to setter/getter\", press ${kbdHtml} to jump back. You can press it repeatedly to step back through all previous locations.`;
+
     showTipWithCheckbox({
         storageKey: NAV_STORAGE_KEY,
         title: "Useful tip",
-        message: `After using \"Go to setter/getter\", press <b>${DEFAULT_HOTKEY}</b> to jump back. You can press it repeatedly to step back through all previous locations.`,
+        message: msg,
         okText: "OK",
     });
 }
@@ -88,15 +91,22 @@ export function showTwinTipIfNeeded() {
 // Register command with default hotkey
 app.registerExtension({
     name: "ovum.twinnodes.navstack",
+    // Register commands
+    // https://docs.comfy.org/custom-nodes/js/javascript_commands_keybindings
     commands: [
         {
             id: "ovum.twinnodes.backtrack",
-            icon: "pi pi-arrow-left",
             label: "Return to previous TwinNodes location",
-            hotkey: DEFAULT_HOTKEY,
             function: () => {
                 popAndRestoreView();
             }
+        }
+    ],
+    // Associate keybindings with commands
+    keybindings: [
+        {
+            combo: { key: "t", shift: true },
+            commandId: "ovum.twinnodes.backtrack"
         }
     ]
 });

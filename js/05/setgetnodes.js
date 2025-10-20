@@ -497,7 +497,7 @@ class SetTwinNodes extends TwinNodes {
         //     - Rationale: sampling the first getter’s first output only. Probably fine for a quick color, but could be generalized to first connected/typed output
         const node = this;
         let menuEntry = node.drawConnection ? "Hide connections" : "Show connections";
-        options.unshift(
+        options.push(
             {
                 content: menuEntry,
                 callback: () => {
@@ -519,25 +519,25 @@ class SetTwinNodes extends TwinNodes {
                 },
             },
             {
-                content: "Update title",
+                content: "🥚 Update title",
                 callback: () => {
                     node.updateTitle(true);
                 },
             },
             {
-                content: "Update colors",
+                content: "🥚 Update colors",
                 callback: () => {
                     node.updateColors();
                 },
             },
             {
-                content: "Check connections",
+                content: "🥚 Check connections",
                 callback: () => {
                     node.checkConnections();
                 },
             },
             {
-                content: "Hide all connections",
+                content: "🥚 Hide all connections",
                 callback: () => {
                     const allGetters = GraphHelpers.getNodesByType(node.graph, ["GetTwinNodes", "SetTwinNodes"]);
                     allGetters.forEach(otherNode => {
@@ -568,8 +568,8 @@ class SetTwinNodes extends TwinNodes {
                 },
             }));
 
-            options.unshift({
-                content: "Getters",
+            options.push({
+                content: "🥚 Getters",
                 has_submenu: true,
                 submenu: {
                     title: "GetTwinNodes",

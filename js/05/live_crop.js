@@ -88,6 +88,11 @@ function getCursorForDragType(dragType) {
 
 app.registerExtension({
     name: "ovum.live-crop",
+    /**
+     * @param {import("../../typings/ComfyNode").ComfyNode} nodeType
+     * @param {import("@comfyorg/comfyui-frontend-types").ComfyNodeDef} nodeData
+     * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} appInstance
+     */
     async beforeRegisterNodeDef(nodeType, nodeData) {
         if (nodeData?.name !== "LiveCrop") {
             return;
