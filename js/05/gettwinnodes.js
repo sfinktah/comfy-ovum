@@ -332,7 +332,12 @@ app.registerExtension({
                                     .filter(n => n && n !== "(unset)");
                                 const known = new Set(knownNames);
                                 const needsUnlinked = !known.has(preferred);
-                                setWidgetValue(this, 0, needsUnlinked ? makeUnlinkedName(preferred) : preferred);
+                                const resolvedName = needsUnlinked ? makeUnlinkedName(preferred) : preferred;
+                                setWidgetValue(this, 0, resolvedName);
+                                // If the auto-derived name is a valid, existing constant, mirror manual selection behavior
+                                if (!needsUnlinked) {
+                                    try { this.onRename?.(0); } catch (_) {}
+                                }
                             }
                         }
                     }
@@ -344,7 +349,10 @@ app.registerExtension({
                         allSetters.map(s => s.widgets?.[idx]?.value).filter(Boolean)
                     ));
                     if ((!val || val === '*') && options.length === 1) {
-                        if (this.widgets?.[idx]) setWidgetValue(this, idx, options[0]);
+                        if (this.widgets?.[idx]) {
+                            setWidgetValue(this, idx, options[0]);
+                            try { this.onRename?.(idx); } catch (_) {}
+                        }
                     }
 
                     // Attempt to auto-pair remaining constants from a matched setter
@@ -356,6 +364,7 @@ app.registerExtension({
                         for (let i = 0; i < needed; i++) {
                             if (!safeStringTrim(this.widgets?.[i]?.value) && safeStringTrim(matched.node.widgets?.[i]?.value)) {
                                 setWidgetValue(this, i, safeStringTrim(matched.node.widgets[i].value));
+                                try { this.onRename?.(i); } catch (_) {}
                             }
                         }
                     }
