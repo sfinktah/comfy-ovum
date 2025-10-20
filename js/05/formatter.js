@@ -39,15 +39,15 @@ app.registerExtension({
      *
      * @param {Object} nodeType - The type definition of the node being registered.
      * @param {Object} nodeData - The data associated with the node being registered.
-     * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} appInstance - The application instance where the node is being registered.
+     * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} app - The application instance where the node is being registered.
      * @return {Promise<void>} Resolves when the dynamic input management is set up for the specified node type.
      */
     /**
      * @param {import("../../typings/ComfyNode").ComfyNode} nodeType
      * @param {import("@comfyorg/comfyui-frontend-types").ComfyNodeDef} nodeData
-     * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} appInstance
+     * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} app
      */
-    async beforeRegisterNodeDef(nodeType, nodeData, appInstance) {
+    async beforeRegisterNodeDef(nodeType, nodeData, app) {
         // Target the Python class that supports many dynamic inputs
         if (nodeType?.comfyClass !== "PythonStringFormat") {
             return;

@@ -11,14 +11,14 @@ import { setupDynamicIOMixin } from "../mtb/utils/dynamic_connections.js";
 app.registerExtension({
     name: "ovum.amdnvidia.dynamicio",
     /**
-     * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} appInstance
+     * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} app
      */
     /**
      * @param {import("../../typings/ComfyNode").ComfyNode} nodeType
      * @param {import("@comfyorg/comfyui-frontend-types").ComfyNodeDef} nodeData
-     * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} appInstance
+     * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} app
      */
-    async beforeRegisterNodeDef(nodeType, nodeData, appInstance) {
+    async beforeRegisterNodeDef(nodeType, nodeData, app) {
         if (nodeType.comfyClass !== "AmdNvidiaIfElseOvum") return;
 
         // Use generic mixin to provide two independent dynamic input groups

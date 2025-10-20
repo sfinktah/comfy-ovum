@@ -53,7 +53,7 @@ app.registerExtension({
     /**
      * @param {import("../../typings/ComfyNode").ComfyNode} nodeType
      * @param {import("@comfyorg/comfyui-frontend-types").ComfyNodeDef} nodeData
-     * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} appInstance
+     * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} app
      */
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
         if (nodeData.category !== ovumRegexCategory && !nodeData.name.startsWith("OvumRe")) {
@@ -137,7 +137,7 @@ app.registerExtension({
     /**
      * @param {import("../../typings/ComfyNode").ComfyNode} nodeType
      * @param {import("@comfyorg/comfyui-frontend-types").ComfyNodeDef} nodeData
-     * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} appInstance
+     * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} app
      */
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
         if (!nodeData.category.match(ovumCategory) && !nodeData.name.startsWith("Ovum") && !nodeData.name.endsWith("Ovum")) {

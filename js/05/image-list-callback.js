@@ -142,14 +142,14 @@ app.registerExtension({
 
     // Hook into the backend node so we can add UI later
     /**
-     * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} appInstance
+     * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} app
      */
     /**
      * @param {import("../../typings/ComfyNode").ComfyNode} nodeType
      * @param {import("@comfyorg/comfyui-frontend-types").ComfyNodeDef} nodeData
-     * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} appInstance
+     * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} app
      */
-    async beforeRegisterNodeDef(nodeType, nodeData, appInstance) {
+    async beforeRegisterNodeDef(nodeType, nodeData, app) {
         if (!nodeData || nodeData.name !== "LoadImagesListWithCallback") return;
         /** @type {LGraphNode} */
         // const node = this;

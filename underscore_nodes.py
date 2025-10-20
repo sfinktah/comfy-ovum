@@ -405,7 +405,18 @@ def _make_node_for_method(method_name: str, fn: Any) -> Type:
 
         if chain is not None and not _is_underscore_instance(chain):
             raise TypeError(f"{class_name}: 'chain' must be an underscore instance")
-        base_obj = obj_in if obj_in is not None else obj
+        # Determine primary input value based on category-specific input name
+        try:
+            pin = primary_input_name  # from closure
+        except Exception:
+            pin = "obj"
+        primary_from_named = None
+        try:
+            primary_from_named = named_args.get(pin)
+        except Exception:
+            primary_from_named = None
+        base_fallback = obj if obj is not None else primary_from_named
+        base_obj = obj_in if obj_in is not None else base_fallback
         us = _ensure_us(chain, base_obj, start_chain=True)
 
         # If an iteratee is declared for this method and iteratee_class provided, build dynamic graph
@@ -511,7 +522,7 @@ def _make_node_for_method(method_name: str, fn: Any) -> Type:
         cd["RETURN_TYPES"] = (CHAIN_T, LIST_T)
         sec_name = "result" if method_name == "map" else "result"
         # cd["RETURN_NAMES"] = ("chain", sec_name)
-        cd["OUTPUT_IS_LIST"] = (False, True)
+        # cd["OUTPUT_IS_LIST"] = (False, True)
     else:
         # Chain + immediate value; specialize common known methods
         boolean_returns = {
@@ -528,7 +539,7 @@ def _make_node_for_method(method_name: str, fn: Any) -> Type:
             cd["RETURN_TYPES"] = (CHAIN_T, BOOLEAN_T)
         elif method_name in list_returns:
             cd["RETURN_TYPES"] = (CHAIN_T, LIST_T)
-            cd["OUTPUT_IS_LIST"] = (False, True)
+            # cd["OUTPUT_IS_LIST"] = (False, True)
         elif method_name in dict_returns:
             cd["RETURN_TYPES"] = (CHAIN_T, DICT_T)
         elif method_name in int_returns:
@@ -537,13 +548,58 @@ def _make_node_for_method(method_name: str, fn: Any) -> Type:
             cd["RETURN_TYPES"] = (CHAIN_T, ANYTYPE)
         # cd["RETURN_NAMES"] = ("chain", "result")
 
+        # Input category sets derived from underscorejs.org
+        collection_inputs = {
+            "each","map","reduce","reduceRight","find","filter","where","findWhere","reject","every","some","contains","invoke","pluck","max","min","sortBy","groupBy","indexBy","countBy","shuffle","sample","toArray","size","partition"
+        }
+        array_inputs = {
+            "first","initial","last","rest","compact","flatten","without","union","intersection","difference","uniq","zip","unzip","object","chunk","indexOf","lastIndexOf","sortedIndex","findIndex","findLastIndex","range"
+        }
+        function_inputs = {
+            "bind","bindAll","partial","memoize","delay","defer","throttle","debounce","once","after","before","wrap","negate","compose","restArguments"
+        }
+        object_inputs = {
+            "keys","allKeys","values","mapObject","pairs","invert","create","functions","findKey","extend","extendOwn","pick","omit","defaults","clone","tap","toPath","has","get","property","propertyOf","matcher","isEqual","isMatch","isEmpty","isElement","isArray","isObject","isArguments","isFunction","isString","isNumber","isFinite","isBoolean","isDate","isRegExp","isError","isSymbol","isMap","isWeakMap","isSet","isWeakSet","isArrayBuffer","isDataView","isTypedArray","isNaN","isNull","isUndefined"
+        }
+        # Compose a lookup for this method
+        if method_name in collection_inputs:
+            input_category = "collection"
+        elif method_name in array_inputs:
+            input_category = "array"
+        elif method_name in function_inputs:
+            input_category = "function"
+        elif method_name in object_inputs:
+            input_category = "object"
+        else:
+            input_category = "any"
+
+        # Determine the primary input name based on category
+        if input_category == "array":
+            primary_input_name = "py_list"
+        elif input_category == "object":
+            primary_input_name = "py_dict"
+        elif input_category == "collection":
+            primary_input_name = "list_or_dict"
+        elif input_category == "function":
+            primary_input_name = "py_func"
+        else:
+            primary_input_name = "obj"
+
     @classmethod
     def INPUT_TYPES(cls):
         required: Dict[str, Tuple[str, Dict[str, Any]]] = {}
+        # compute tooltip mentioning expected input category
+        obj_tip = "Object to operate on when chain input is not connected."
+        try:
+            cat = input_category  # from closure
+        except Exception:
+            cat = "any"
+        if cat != "any":
+            obj_tip = f"Primary input object (expected {cat}). You can still pass any JSON-serializable value."
         optional: Dict[str, Tuple[str, Dict[str, Any]]] = {
-            "chain": (CHAIN_T, {"forceInput": True, "tooltip": "Optional existing _.CHAIN. If provided, obj is ignored."}),
-            "obj": (ANYTYPE, {"default": None, "tooltip": "Object to operate on when chain input is not connected."}),
-            "obj_in": (ANYTYPE, {"forceInput": True, "tooltip": "Alternative object input overriding the 'obj' widget when connected."}),
+            "chain": (CHAIN_T, {"forceInput": True, "tooltip": "Optional existing _.CHAIN. If provided, the primary input is ignored."}),
+            primary_input_name: (ANYTYPE, {"default": None, "tooltip": obj_tip}),
+            "obj_in": (ANYTYPE, {"forceInput": True, "tooltip": "Alternative primary input overriding the widget value when connected."}),
             "args_json": (STRING_T, {"default": "", "multiline": True, "tooltip": "Positional args as JSON array."}),
             "kwargs_json": (STRING_T, {"default": "", "multiline": True, "tooltip": "Keyword args as JSON object."}),
         }
@@ -556,15 +612,15 @@ def _make_node_for_method(method_name: str, fn: Any) -> Type:
         else:
             for lbl in labels:
                 optional[lbl] = (ANYTYPE, {"tooltip": f"{lbl}: JSON allowed for arrays/objects where applicable."})
-        if iteratee_present:
-            optional.update({
-                "iteratee_class": (STRING_T, {"default": "", "tooltip": "Class type of the iteratee node to apply (e.g., 'TextNodes/Lowercase')."}),
-                "iteratee_input": (STRING_T, {"default": "value", "tooltip": "Name of the iteratee node input that receives each element/value."}),
-                "iteratee_output_index": (INT_T, {"default": 0, "min": 0, "tooltip": "Index of the iteratee node output to collect."}),
-                "iteratee_index_name": (STRING_T, {"default": "index", "tooltip": "Name of the iteratee node input that receives index/key."}),
-                "iteratee_list_name": (STRING_T, {"default": "list", "tooltip": "Name of the iteratee node input that receives the full collection."}),
-                "iteratee_kwargs_json": (STRING_T, {"default": "", "multiline": True, "tooltip": "Extra inputs for the iteratee node as JSON object. Values may be literals or links like [node_id, index]."}),
-            })
+        # if iteratee_present:
+        #     optional.update({
+        #         "iteratee_class": (STRING_T, {"default": "", "tooltip": "Class type of the iteratee node to apply (e.g., 'TextNodes/Lowercase')."}),
+        #         "iteratee_input": (STRING_T, {"default": "value", "tooltip": "Name of the iteratee node input that receives each element/value."}),
+        #         "iteratee_output_index": (INT_T, {"default": 0, "min": 0, "tooltip": "Index of the iteratee node output to collect."}),
+        #         "iteratee_index_name": (STRING_T, {"default": "index", "tooltip": "Name of the iteratee node input that receives index/key."}),
+        #         "iteratee_list_name": (STRING_T, {"default": "list", "tooltip": "Name of the iteratee node input that receives the full collection."}),
+        #         "iteratee_kwargs_json": (STRING_T, {"default": "", "multiline": True, "tooltip": "Extra inputs for the iteratee node as JSON object. Values may be literals or links like [node_id, index]."}),
+        #     })
         return {"required": required, "optional": optional}
 
     cd["INPUT_TYPES"] = INPUT_TYPES
@@ -599,8 +655,8 @@ class UnderscoreExports:
     NAME = "underscore function"
     CATEGORY = CATEGORY
     FUNCTION = "run"
-    DESCRIPTION = "Output the underscore factory function `_`"
-    RETURN_TYPES = (ANYTYPE,)
+    DESCRIPTION = "Output the underscore factory function `_` for Power-Puter"
+    RETURN_TYPES = ("PY_FUNC",)
     RETURN_NAMES = ("_",)
 
     @classmethod

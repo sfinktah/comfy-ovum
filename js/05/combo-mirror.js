@@ -27,9 +27,9 @@ app.registerExtension({
     /**
      * @param {import("../../typings/ComfyNode").ComfyNode} nodeType
      * @param {import("@comfyorg/comfyui-frontend-types").ComfyNodeDef} nodeData
-     * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} appInstance
+     * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} app
      */
-    beforeRegisterNodeDef: async function (nodeType, nodeData, appInstance) {
+    beforeRegisterNodeDef: async function (nodeType, nodeData, app) {
         if (nodeType?.comfyClass !== "ComboMirrorOvum") {
             return;
         }
