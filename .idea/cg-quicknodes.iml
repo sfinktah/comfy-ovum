@@ -8,6 +8,7 @@
       <excludeFolder url="file://$MODULE_DIR$/venv" />
       <excludeFolder url="file://$MODULE_DIR$/modules" />
     </content>
+    <content url="file://$MODULE_DIR$/web/dist/node_modules" />
     <orderEntry type="jdk" jdkName="Python 3.11 (ovum)" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
     <orderEntry type="module" module-name="ovum-spotlight" />

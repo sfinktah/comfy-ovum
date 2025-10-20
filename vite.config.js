@@ -124,6 +124,49 @@ function externalizeOutsideRootPlugin() {
 
 /** Vite plugin */
 function copyUsedNodeModulesPlugin() {
+  // Recursively collect relative file deps within the same package
+  async function collectRelativeDeps(entryFileAbs, packageRootAbs, collected) {
+    const norm = (p) => p.replace(/\\/g, '/');
+    const q = [entryFileAbs];
+    while (q.length) {
+      const cur = q.pop();
+      const curNorm = norm(cur);
+      if (collected.has(curNorm)) continue;
+      collected.add(curNorm);
+      let code = '';
+      try { code = await fsp.readFile(cur, 'utf8'); } catch { continue; }
+      const specs = findImportSpecifiers(code);
+      for (const s of specs) {
+        if (!(s.startsWith('./') || s.startsWith('../'))) continue;
+        const nextAbs = path.resolve(path.dirname(cur), s);
+        // Only follow files that remain inside the same package root
+        const inPkg = norm(nextAbs).startsWith(norm(packageRootAbs) + '/');
+        if (!inPkg) continue;
+        // Resolve extensions if import omits it
+        let candidate = nextAbs;
+        try {
+          const st = await fsp.stat(candidate);
+          if (st.isFile()) {
+            q.push(candidate);
+            continue;
+          }
+        } catch {}
+        // Try adding .js
+        try {
+          const withJs = candidate + '.js';
+          const st2 = await fsp.stat(withJs);
+          if (st2.isFile()) { q.push(withJs); continue; }
+        } catch {}
+        // Try index.js in folder
+        try {
+          const idx = path.join(candidate, 'index.js');
+          const st3 = await fsp.stat(idx);
+          if (st3.isFile()) { q.push(idx); continue; }
+        } catch {}
+      }
+    }
+  }
+
   return {
     name: 'ovum-copy-used-node-modules',
     apply: 'build',
@@ -133,11 +176,22 @@ function copyUsedNodeModulesPlugin() {
       const outRoot = path.join(root, 'web', 'dist');
       const nodeModulesRoot = path.join(root, 'node_modules');
 
+      // Clean the output directory to avoid stale files left from previous runs
+      try {
+        await fs.promises.rm(outRoot, { recursive: true, force: true });
+      } catch {}
+      await fs.promises.mkdir(outRoot, { recursive: true });
+
       // Find all JS files under ./js
       const files = (await walk(jsRoot)).filter(p => p.endsWith('.js'));
 
       /** @type {Set<string>} */
       const pkgs = new Set();
+      /** @type {Set<string>} absolute file paths to copy */
+      const filesToCopy = new Set();
+
+      // helper to normalize
+      const norm = (p) => p.replace(/\\+/g, '/');
 
       for (const file of files) {
         let code = '';
@@ -148,6 +202,31 @@ function copyUsedNodeModulesPlugin() {
           if (!nm) continue;
           const pkg = packageNameFromNodeModulesPath(nm);
           if (pkg) pkgs.add(pkg);
+
+          // Attempt to resolve to a concrete file in node_modules
+          const absFromNm = path.join(root, nm); // starts with node_modules/...
+          const absCandidate = absFromNm; // could be file or folder
+          // If it's a file that exists, collect its relative deps within the package
+          try {
+            const st = await fsp.stat(absCandidate);
+            if (st.isFile()) {
+              const packageRootAbs = path.join(nodeModulesRoot, pkg);
+              await collectRelativeDeps(absCandidate, packageRootAbs, filesToCopy);
+              continue;
+            }
+          } catch {
+            // Try with .js if missing
+            try {
+              const withJs = absCandidate + '.js';
+              const st2 = await fsp.stat(withJs);
+              if (st2.isFile()) {
+                const packageRootAbs = path.join(nodeModulesRoot, pkg);
+                await collectRelativeDeps(withJs, packageRootAbs, filesToCopy);
+                continue;
+              }
+            } catch {}
+          }
+          // Fallback: copy whole package later
         }
       }
 
@@ -156,20 +235,52 @@ function copyUsedNodeModulesPlugin() {
         return;
       }
 
-      // Copy each package directory into web/dist/node_modules/<pkg>
+      // Copy strategy:
+      // - If we discovered specific files to copy for a package, copy only those (and their folders)
+      // - Otherwise, copy the entire package as before
+      // Group files by package
+      /** @type {Map<string, string[]>} */
+      const filesByPkg = new Map();
+      for (const absFile of filesToCopy) {
+        // Determine package name by finding segment after node_modules
+        const parts = norm(absFile).split('/');
+        const nmIdx = parts.lastIndexOf('node_modules');
+        if (nmIdx === -1 || nmIdx + 1 >= parts.length) continue;
+        const pkgName = parts[nmIdx + 1].startsWith('@') ? parts[nmIdx + 1] + '/' + parts[nmIdx + 2] : parts[nmIdx + 1];
+        if (!filesByPkg.has(pkgName)) filesByPkg.set(pkgName, []);
+        filesByPkg.get(pkgName).push(absFile);
+      }
+
       for (const pkg of pkgs) {
-        const srcDir = path.join(nodeModulesRoot, pkg);
-        const destDir = path.join(outRoot, 'node_modules', pkg);
-        try {
-          const stat = await fsp.stat(srcDir);
-          if (!stat.isDirectory()) {
-            this.warn(`[ovum] Skipping ${pkg}: not a directory at ${srcDir}`);
-            continue;
+        const specificFiles = filesByPkg.get(pkg);
+        if (specificFiles && specificFiles.length) {
+          // Copy only specific files
+          for (const srcFile of specificFiles) {
+            const relFromNm = norm(srcFile).split('/node_modules/')[1];
+            const destFile = path.join(outRoot, 'node_modules', relFromNm);
+            await fs.promises.mkdir(path.dirname(destFile), { recursive: true });
+            try {
+              await fs.promises.copyFile(srcFile, destFile);
+              this.info(`[ovum] Copied file ${path.relative(root, srcFile)} -> ${path.relative(root, destFile)}`);
+            } catch (e) {
+              this.warn(`[ovum] Failed to copy file ${srcFile}: ${e?.message || e}`);
+            }
           }
-          await copyDir(srcDir, destDir);
-          this.info(`[ovum] Copied ${pkg} -> ${path.relative(root, destDir)}`);
-        } catch (e) {
-          this.warn(`[ovum] Failed to copy ${pkg}: ${e?.message || e}`);
+        } else {
+          // Fallback to whole package copy
+          const srcDir = path.join(nodeModulesRoot, pkg);
+          const destDir = path.join(outRoot, 'node_modules', pkg);
+          try {
+            const stat = await fsp.stat(srcDir);
+            if (!stat.isDirectory()) {
+              this.warn(`[ovum] Skipping ${pkg}: not a directory at ${srcDir}`);
+              continue;
+            }
+            await copyDir(srcDir, destDir);
+            this.info(`[ovum] Copied ${pkg} -> ${path.relative(root, destDir)}`);
+          } catch (e) {
+            this.warn(`[ovum] Failed to copy ${pkg}: ${e?.message || e}`);
+          }
         }
       }
     },
