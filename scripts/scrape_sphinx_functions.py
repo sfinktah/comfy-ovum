@@ -28,7 +28,7 @@ from urllib.parse import urljoin
 
 try:
     import requests
-    from bs4 import BeautifulSoup, NavigableString, Tag
+    from bs4 import BeautifulSoup, Tag
 except Exception as e:
     print("This script requires 'requests' and 'beautifulsoup4'. Please install them:", file=sys.stderr)
     print("    pip install requests beautifulsoup4", file=sys.stderr)
@@ -210,6 +210,35 @@ def main(argv: Optional[List[str]] = None) -> int:
             module_id = sec.get("id")
 
     items = parse_functions(soup, base_url=url, module_section_id=module_id)
+
+    # If an output file already exists, load it and preserve existing 'returns' values
+    # for items where the newly scraped value is missing.
+    existing_items_by_id = {}
+    try:
+        with open(out_path, "r", encoding="utf-8") as f_old:
+            old_payload = json.load(f_old)
+            if isinstance(old_payload, dict) and isinstance(old_payload.get("items"), list):
+                for it in old_payload.get("items", []):
+                    if isinstance(it, dict):
+                        iid = it.get("id") or it.get("qualname")
+                        if iid:
+                            existing_items_by_id[iid] = it
+    except FileNotFoundError:
+        pass
+    except Exception:
+        # If parsing old file fails, just ignore and proceed
+        existing_items_by_id = {}
+
+    # Apply preservation logic
+    if existing_items_by_id:
+        for idx, item in enumerate(items):
+            iid = item.id or item.qualname
+            old = existing_items_by_id.get(iid)
+            if old is not None:
+                old_ret = old.get("returns") if isinstance(old, dict) else None
+                if (item.returns is None or (isinstance(item.returns, str) and item.returns.strip() == "")) and old_ret:
+                    # preserve non-empty existing returns
+                    items[idx].returns = old_ret
 
     result = ScrapeResult(
         source_url=url,
