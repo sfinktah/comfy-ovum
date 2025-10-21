@@ -2256,7 +2256,7 @@ class underscore(object):
         """
         return self._wrap(lambda obj, *args: obj[self.obj])
 
-    def matches(self):
+    def matcher(self):
         """
         Returns a predicate for checking whether an object has a given
         set of `key:value` pairs.
@@ -2266,12 +2266,34 @@ class underscore(object):
                 return True  # avoid comparing an object to itself.
 
             for key in self.obj:
-                if self.obj[key] != obj[key]:
+                if self.obj[key] != obj.get(key) if isinstance(obj, dict) else _oget(obj, key):
                     return False
 
             return True
 
         return self._wrap(ret)
+
+    def iteratee(self):
+        """
+        Generates a callback that can be applied to each element in a collection.
+        Mirrors Underscore.js _.iteratee shorthand behavior:
+        - No value: returns an identity function (lambda x: x)
+        - Function: returns the function itself
+        - Object (dict): returns a matcher predicate for key:value pairs
+        - Anything else: returns a property accessor for the given key/path
+        """
+        val = self.obj
+        # No value -> identity function
+        if val is None:
+            return self._wrap(lambda x, *args: x)
+        # If value itself is a callable, return it directly
+        if _.isCallable(val):
+            return self._wrap(val)
+        # If a dict/object was provided, return a matcher predicate
+        if _(val).isDict():
+            return _(val).matcher()
+        # Otherwise treat as property name/path and return accessor
+        return _(val).property()
 
     def times(self, func, *args):
         """ Run a function **n** times.
