@@ -236,28 +236,28 @@ _DESCRIPTION_OVERRIDES: Dict[str, str] = {
 
 # Preferred Underscore.js argument labels for UI, excluding the first collection arg.
 _METHOD_ARG_LABELS: Dict[str, List[str]] = {
-    "map": ["iteratee", "context"],
-    "reduce": ["iteratee", "memo", "context"],
-    "reduceRight": ["iteratee", "memo", "context"],
-    "find": ["predicate", "context"],
-    "filter": ["predicate", "context"],
-    "reject": ["predicate", "context"],
-    "every": ["predicate", "context"],
-    "some": ["predicate", "context"],
-    "all": ["predicate", "context"],
-    "any": ["predicate", "context"],
+    "map": ["iteratee"],
+    "reduce": ["iteratee", "memo"],
+    "reduceRight": ["iteratee", "memo"],
+    "find": ["predicate"],
+    "filter": ["predicate"],
+    "reject": ["predicate"],
+    "every": ["predicate"],
+    "some": ["predicate"],
+    "all": ["predicate"],
+    "any": ["predicate"],
     "contains": ["value", "fromIndex"],
     "pluck": ["propertyName"],
     "include": ["value"],
     "where": ["properties"],
     "findWhere": ["properties"],
     "invoke": ["methodName", "arguments"],
-    "max": ["iteratee", "context"],
-    "min": ["iteratee", "context"],
-    "sortBy": ["iteratee", "context"],
-    "groupBy": ["iteratee", "context"],
-    "indexBy": ["iteratee", "context"],
-    "countBy": ["iteratee", "context"],
+    "max": ["iteratee"],
+    "min": ["iteratee"],
+    "sortBy": ["iteratee"],
+    "groupBy": ["iteratee"],
+    "indexBy": ["iteratee"],
+    "countBy": ["iteratee"],
     "shuffle": [],
     "sample": ["n"],
     "toArray": [],
@@ -280,19 +280,19 @@ _METHOD_ARG_LABELS: Dict[str, List[str]] = {
     "chunk": ["length"],
     "indexOf": ["value", "isSorted"],
     "lastIndexOf": ["value", "fromIndex"],
-    "sortedIndex": ["value", "iteratee", "context"],
-    "findIndex": ["predicate", "context"],
-    "findLastIndex": ["predicate", "context"],
+    "sortedIndex": ["value", "iteratee"],
+    "findIndex": ["predicate"],
+    "findLastIndex": ["predicate"],
     "range": ["start", "stop", "step"],
     "keys": [],
     "allKeys": [],
     "values": [],
-    "mapObject": ["iteratee", "context"],
+    "mapObject": ["iteratee"],
     "pairs": [],
     "invert": [],
     "create": ["prototype", "props"],
     "functions": [],
-    "findKey": ["predicate", "context"],
+    "findKey": ["predicate"],
     "extend": ["sources"],
     "extendOwn": ["sources"],
     "pick": ["keys"],
@@ -339,7 +339,6 @@ _LABEL_TO_PARAM_CANDIDATES: Dict[str, List[str]] = {
     "iteratee": ["iteratee", "iterator", "func", "val"],
     "predicate": ["predicate", "iteratee", "func", "iterator"],
     "memo": ["memo", "initial", "start"],
-    "context": ["context"],
     "value": ["value", "val", "item", "obj", "target"],
     "fromIndex": ["fromIndex", "start"],
     "propertyName": ["propertyName", "key", "prop", "attr"],
@@ -389,63 +388,49 @@ def _make_node_for_method(method_name: str, fn: Any) -> Type:
     param_names = [p.name for p in params]
     param_kinds = {p.name: p.kind for p in params}
 
-    is_map = (method_name == "map")
-    iteratee_present = any(p in ITERATEE_PARAM_NAMES for p in param_names)
-
-    def run(self, chain: Optional[underscore] = None, obj: Any = None, obj_in: Any = None,
+    def run(self, obj: Any = None,
             args_json: Optional[str] = None, kwargs_json: Optional[str] = None,
-            iteratee_class: Optional[str] = None, iteratee_input: str = "value",
-            iteratee_output_index: int = 0, iteratee_kwargs_json: Optional[str] = None,
-            iteratee_index_name: str = "index", iteratee_list_name: str = "list",
             **named_args):
         # Merge json args/kwargs
         extra_args = _parse_json(args_json, [])
         extra_kwargs = _parse_json(kwargs_json, {})
-        it_kwargs = _parse_json(iteratee_kwargs_json, {})
 
-        if chain is not None and not _is_underscore_instance(chain):
-            raise TypeError(f"{class_name}: 'chain' must be an underscore instance")
         # Determine primary input value based on category-specific input name
         try:
-            pin = primary_input_name  # from closure
+            pin = primary_input_name  # from closure, if available
         except Exception:
-            pin = "obj"
-        primary_from_named = None
+            # Fallback: derive from method category
+            collection_inputs = {
+                "each","map","reduce","reduceRight","find","filter","where","findWhere","reject","every","some","contains","invoke","pluck","max","min","sortBy","groupBy","indexBy","countBy","shuffle","sample","toArray","size","partition"
+            }
+            array_inputs = {
+                "first","initial","last","rest","compact","flatten","without","union","intersection","difference","uniq","zip","unzip","object","chunk","indexOf","lastIndexOf","sortedIndex","findIndex","findLastIndex","range"
+            }
+            function_inputs = {
+                "bind","bindAll","partial","memoize","delay","defer","throttle","debounce","once","after","before","wrap","negate","compose","restArguments"
+            }
+            object_inputs = {
+                "keys","allKeys","values","mapObject","pairs","invert","create","functions","findKey","extend","extendOwn","pick","omit","defaults","clone","tap","toPath","has","get","property","propertyOf","matcher","isEqual","isMatch","isEmpty","isElement","isArray","isObject","isArguments","isFunction","isString","isNumber","isFinite","isBoolean","isDate","isRegExp","isError","isSymbol","isMap","isWeakMap","isSet","isWeakSet","isArrayBuffer","isDataView","isTypedArray","isNaN","isNull","isUndefined"
+            }
+            if method_name in array_inputs:
+                pin = "py_list"
+            elif method_name in object_inputs:
+                pin = "py_dict"
+            elif method_name in collection_inputs:
+                pin = "list_or_dict"
+            elif method_name in function_inputs:
+                pin = "py_func"
+            else:
+                pin = "obj"
         try:
             primary_from_named = named_args.get(pin)
         except Exception:
             primary_from_named = None
-        base_fallback = obj if obj is not None else primary_from_named
-        base_obj = obj_in if obj_in is not None else base_fallback
-        us = _ensure_us(chain, base_obj, start_chain=True)
+        base_val = obj if obj is not None else primary_from_named
+        chain_in = base_val if _is_underscore_instance(base_val) else None
+        base_obj = None if chain_in is not None else base_val
+        us = _ensure_us(chain_in, base_obj, start_chain=True)
 
-        # If an iteratee is declared for this method and iteratee_class provided, build dynamic graph
-        if iteratee_present and iteratee_class and GraphBuilder is not None:
-            coll_orig = us.obj if _is_underscore_instance(us) else base_obj
-            # Create a deep copy to avoid mutation
-            coll = copy.deepcopy(coll_orig)
-            graph = GraphBuilder()
-            results = []
-            if hasattr(coll, 'items') and callable(coll.items):
-                items_iter = list(coll.items())
-                for idx, (k, val) in enumerate(items_iter):
-                    inputs = {iteratee_input: val, iteratee_index_name: k, iteratee_list_name: coll}
-                    if isinstance(it_kwargs, dict):
-                        inputs.update(it_kwargs)
-                    node = graph.node(iteratee_class, **inputs)
-                    results.append(node.out(int(iteratee_output_index)))
-            else:
-                seq = _as_iterable(coll)
-                for idx, val in enumerate(seq):
-                    inputs = {iteratee_input: val, iteratee_index_name: idx, iteratee_list_name: seq}
-                    if isinstance(it_kwargs, dict):
-                        inputs.update(it_kwargs)
-                    node = graph.node(iteratee_class, **inputs)
-                    results.append(node.out(int(iteratee_output_index)))
-            return {
-                "result": (us, results),
-                "expand": graph.finalize(),
-            }
 
         # Translate UI-labeled args back to internal parameter names
         ui_labels = _METHOD_ARG_LABELS.get(method_name)
@@ -494,17 +479,13 @@ def _make_node_for_method(method_name: str, fn: Any) -> Type:
 
         m = getattr(us, method_name)
         result_value = m(*call_args, **call_kwargs)
-        # Always return both the chain (for further chaining) and the immediate value
-        if iteratee_present:
-            # When iteratee is present but not using graph expansion, the method may
-            # return a list or other structure. Expose it as the second output in addition
-            # to the chain, to keep consistency with non-graph path.
-            # Extract the actual value if it's a chained instance
-            actual_value = result_value.value() if _is_underscore_instance(result_value) else result_value
-            return (us, actual_value if actual_value is not None else [])
+        # Decide single return based on whether a CHAIN was provided through the primary input
+        if chain_in is not None:
+            chain_out = result_value if _is_underscore_instance(result_value) else us
+            return (chain_out,)
         # Extract the actual value if it's a chained instance
         actual_value = result_value.value() if _is_underscore_instance(result_value) else result_value
-        return (us, actual_value)
+        return (actual_value,)
 
     # Build class dict
     cd = {
@@ -517,36 +498,28 @@ def _make_node_for_method(method_name: str, fn: Any) -> Type:
     }
 
     # Outputs: add iteratee result list when iteratee is present
-    if iteratee_present:
-        # Chain + immediate value (list for map-like), expose as 'result'
-        cd["RETURN_TYPES"] = (CHAIN_T, LIST_T)
-        sec_name = "result" if method_name == "map" else "result"
-        # cd["RETURN_NAMES"] = ("chain", sec_name)
-        # cd["OUTPUT_IS_LIST"] = (False, True)
+    # Determine base return type (single output); when a CHAIN is provided via the primary input, the node will return a CHAIN dynamically.
+    boolean_returns = {
+        "isEqual","isMatch","isEmpty","isElement","isArray","isObject","isArguments","isFunction","isString","isNumber","isFinite","isBoolean","isDate","isRegExp","isError","isSymbol","isMap","isWeakMap","isSet","isWeakSet","isArrayBuffer","isDataView","isTypedArray","isNaN","isNull","isUndefined",
+        "every","some","all","any","contains","include","has"
+    }
+    list_returns = {
+        "map","filter","reject","pluck","toArray","shuffle","sample","sampleSize","partition","compact","initial","rest","flatten","without","union","intersection","difference","uniq","zip","unzip","keys","allKeys","values","pairs","range","chunk"
+    }
+    dict_returns = {"groupBy","indexBy","countBy","mapObject","invert","create","extend","extendOwn","pick","omit","defaults"}
+    string_returns = set()
+    int_returns = {"size","indexOf","lastIndexOf","sortedIndex","findIndex","findLastIndex"}
+    if method_name in boolean_returns:
+        cd["RETURN_TYPES"] = (BOOLEAN_T,)
+    elif method_name in list_returns:
+        cd["RETURN_TYPES"] = (LIST_T,)
+        # cd["OUTPUT_IS_LIST"] = (True,)
+    elif method_name in dict_returns:
+        cd["RETURN_TYPES"] = (DICT_T,)
+    elif method_name in int_returns:
+        cd["RETURN_TYPES"] = (INT_T,)
     else:
-        # Chain + immediate value; specialize common known methods
-        boolean_returns = {
-            "isEqual","isMatch","isEmpty","isElement","isArray","isObject","isArguments","isFunction","isString","isNumber","isFinite","isBoolean","isDate","isRegExp","isError","isSymbol","isMap","isWeakMap","isSet","isWeakSet","isArrayBuffer","isDataView","isTypedArray","isNaN","isNull","isUndefined",
-            "every","some","all","any","contains","include","has"
-        }
-        list_returns = {
-            "map","filter","reject","pluck","toArray","shuffle","sample","sampleSize","partition","compact","initial","rest","flatten","without","union","intersection","difference","uniq","zip","unzip","keys","allKeys","values","pairs","range","chunk"
-        }
-        dict_returns = {"groupBy","indexBy","countBy","mapObject","invert","create","extend","extendOwn","pick","omit","defaults"}
-        string_returns = set()
-        int_returns = {"size","indexOf","lastIndexOf","sortedIndex","findIndex","findLastIndex"}
-        if method_name in boolean_returns:
-            cd["RETURN_TYPES"] = (CHAIN_T, BOOLEAN_T)
-        elif method_name in list_returns:
-            cd["RETURN_TYPES"] = (CHAIN_T, LIST_T)
-            # cd["OUTPUT_IS_LIST"] = (False, True)
-        elif method_name in dict_returns:
-            cd["RETURN_TYPES"] = (CHAIN_T, DICT_T)
-        elif method_name in int_returns:
-            cd["RETURN_TYPES"] = (CHAIN_T, INT_T)
-        else:
-            cd["RETURN_TYPES"] = (CHAIN_T, ANYTYPE)
-        # cd["RETURN_NAMES"] = ("chain", "result")
+        cd["RETURN_TYPES"] = (ANYTYPE,)
 
         # Input category sets derived from underscorejs.org
         collection_inputs = {
@@ -588,18 +561,46 @@ def _make_node_for_method(method_name: str, fn: Any) -> Type:
     @classmethod
     def INPUT_TYPES(cls):
         required: Dict[str, Tuple[str, Dict[str, Any]]] = {}
-        # compute tooltip mentioning expected input category
-        obj_tip = "Object to operate on when chain input is not connected."
-        try:
-            cat = input_category  # from closure
-        except Exception:
+        # Determine expected input category and primary input name locally (robust against closure issues)
+        collection_inputs = {
+            "each","map","reduce","reduceRight","find","filter","where","findWhere","reject","every","some","contains","invoke","pluck","max","min","sortBy","groupBy","indexBy","countBy","shuffle","sample","toArray","size","partition"
+        }
+        array_inputs = {
+            "first","initial","last","rest","compact","flatten","without","union","intersection","difference","uniq","zip","unzip","object","chunk","indexOf","lastIndexOf","sortedIndex","findIndex","findLastIndex","range"
+        }
+        function_inputs = {
+            "bind","bindAll","partial","memoize","delay","defer","throttle","debounce","once","after","before","wrap","negate","compose","restArguments"
+        }
+        object_inputs = {
+            "keys","allKeys","values","mapObject","pairs","invert","create","functions","findKey","extend","extendOwn","pick","omit","defaults","clone","tap","toPath","has","get","property","propertyOf","matcher","isEqual","isMatch","isEmpty","isElement","isArray","isObject","isArguments","isFunction","isString","isNumber","isFinite","isBoolean","isDate","isRegExp","isError","isSymbol","isMap","isWeakMap","isSet","isWeakSet","isArrayBuffer","isDataView","isTypedArray","isNaN","isNull","isUndefined"
+        }
+        if method_name in collection_inputs:
+            cat = "collection"
+        elif method_name in array_inputs:
+            cat = "array"
+        elif method_name in function_inputs:
+            cat = "function"
+        elif method_name in object_inputs:
+            cat = "object"
+        else:
             cat = "any"
+
+        if cat == "array":
+            pin = "py_list"
+        elif cat == "object":
+            pin = "py_dict"
+        elif cat == "collection":
+            pin = "list_or_dict"
+        elif cat == "function":
+            pin = "py_func"
+        else:
+            pin = "obj"
+
+        obj_tip = "Primary input object."
         if cat != "any":
             obj_tip = f"Primary input object (expected {cat}). You can still pass any JSON-serializable value."
         optional: Dict[str, Tuple[str, Dict[str, Any]]] = {
-            "chain": (CHAIN_T, {"forceInput": True, "tooltip": "Optional existing _.CHAIN. If provided, the primary input is ignored."}),
-            primary_input_name: (ANYTYPE, {"default": None, "tooltip": obj_tip}),
-            "obj_in": (ANYTYPE, {"forceInput": True, "tooltip": "Alternative primary input overriding the widget value when connected."}),
+            pin: (ANYTYPE, {"default": None, "tooltip": obj_tip + " Also accepts _.CHAIN to continue chaining."}),
             "args_json": (STRING_T, {"default": "", "multiline": True, "tooltip": "Positional args as JSON array."}),
             "kwargs_json": (STRING_T, {"default": "", "multiline": True, "tooltip": "Keyword args as JSON object."}),
         }
@@ -612,15 +613,6 @@ def _make_node_for_method(method_name: str, fn: Any) -> Type:
         else:
             for lbl in labels:
                 optional[lbl] = (ANYTYPE, {"tooltip": f"{lbl}: JSON allowed for arrays/objects where applicable."})
-        # if iteratee_present:
-        #     optional.update({
-        #         "iteratee_class": (STRING_T, {"default": "", "tooltip": "Class type of the iteratee node to apply (e.g., 'TextNodes/Lowercase')."}),
-        #         "iteratee_input": (STRING_T, {"default": "value", "tooltip": "Name of the iteratee node input that receives each element/value."}),
-        #         "iteratee_output_index": (INT_T, {"default": 0, "min": 0, "tooltip": "Index of the iteratee node output to collect."}),
-        #         "iteratee_index_name": (STRING_T, {"default": "index", "tooltip": "Name of the iteratee node input that receives index/key."}),
-        #         "iteratee_list_name": (STRING_T, {"default": "list", "tooltip": "Name of the iteratee node input that receives the full collection."}),
-        #         "iteratee_kwargs_json": (STRING_T, {"default": "", "multiline": True, "tooltip": "Extra inputs for the iteratee node as JSON object. Values may be literals or links like [node_id, index]."}),
-        #     })
         return {"required": required, "optional": optional}
 
     cd["INPUT_TYPES"] = INPUT_TYPES
