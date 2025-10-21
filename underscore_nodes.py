@@ -95,7 +95,13 @@ class UnderscoreChain:
     def run(self, obj: Any):
         # Create a deep copy to avoid mutation
         obj_copy = copy.deepcopy(obj)
-        return (_underscore_factory(obj_copy).chain(),)
+        chain_out = _underscore_factory(obj_copy).chain()
+        ui = {
+            "status": [f"type:{type(obj).__name__}\n{repr(obj)[:200]}"],
+            "inputType": ["object"],
+            "outputType": ["chained"],
+        }
+        return {"ui": ui, "result": (chain_out,)}
 
 
 class UnderscoreValue:
@@ -116,7 +122,13 @@ class UnderscoreValue:
     def run(self, chain: underscore):
         if not _is_underscore_instance(chain):
             raise TypeError("UnderscoreValue: 'chain' must be an underscore instance")
-        return (chain.value(),)
+        value = chain.value()
+        ui = {
+            "status": [f"type:{type(value).__name__}\n{repr(value)[:200]}"],
+            "inputType": ["chained"],
+            "outputType": ["object"],
+        }
+        return {"ui": ui, "result": (value,)}
 
 
 # Excluded method names (function manipulation / internals / non-node-friendly)
@@ -125,6 +137,43 @@ _EXCLUDE = {"__init__", "__str__", "__repr__", "obj", "_wrap", "_clean", "_toOri
             "memoize", "delay", "defer", "throttle", "debounce", "once", "wrap", "compose", "after"}
 
 ITERATEE_PARAM_NAMES = {"func", "iterator", "iteratee", "predicate", "callback"}
+
+# Shared categorizations for primary input type by underscore method
+_COLLECTION_INPUTS = {
+    "each","map","reduce","reduceRight","find","filter","where","findWhere","reject","every","some","contains","invoke","pluck","max","min","sortBy","groupBy","indexBy","countBy","shuffle","sample","toArray","size","partition"
+}
+_ARRAY_INPUTS = {
+    "first","initial","last","rest","compact","flatten","without","union","intersection","difference","uniq","zip","unzip","object","chunk","indexOf","lastIndexOf","sortedIndex","findIndex","findLastIndex","range"
+}
+_FUNCTION_INPUTS = {
+    "bind","bindAll","partial","memoize","delay","defer","throttle","debounce","once","after","before","wrap","negate","compose","restArguments"
+}
+_OBJECT_INPUTS = {
+    "keys","allKeys","values","mapObject","pairs","invert","create","functions","findKey","extend","extendOwn","pick","omit","defaults","clone","tap","toPath","has","get","property","propertyOf","matcher","isEqual","isMatch","isEmpty","isElement","isArray","isObject","isArguments","isFunction","isString","isNumber","isFinite","isBoolean","isDate","isRegExp","isError","isSymbol","isMap","isWeakMap","isSet","isWeakSet","isArrayBuffer","isDataView","isTypedArray","isNaN","isNull","isUndefined"
+}
+
+def _method_input_category(method_name: str) -> str:
+    if method_name in _COLLECTION_INPUTS:
+        return "collection"
+    if method_name in _ARRAY_INPUTS:
+        return "array"
+    if method_name in _FUNCTION_INPUTS:
+        return "function"
+    if method_name in _OBJECT_INPUTS:
+        return "object"
+    return "any"
+
+def _primary_input_name_for_method(method_name: str) -> str:
+    cat = _method_input_category(method_name)
+    if cat == "array":
+        return "py_list"
+    if cat == "object":
+        return "py_dict"
+    if cat == "collection":
+        return "list_or_dict"
+    if cat == "function":
+        return "py_func"
+    return "obj"
 
 
 def _camelize(name: str) -> str:
@@ -399,29 +448,8 @@ def _make_node_for_method(method_name: str, fn: Any) -> Type:
         try:
             pin = primary_input_name  # from closure, if available
         except Exception:
-            # Fallback: derive from method category
-            collection_inputs = {
-                "each","map","reduce","reduceRight","find","filter","where","findWhere","reject","every","some","contains","invoke","pluck","max","min","sortBy","groupBy","indexBy","countBy","shuffle","sample","toArray","size","partition"
-            }
-            array_inputs = {
-                "first","initial","last","rest","compact","flatten","without","union","intersection","difference","uniq","zip","unzip","object","chunk","indexOf","lastIndexOf","sortedIndex","findIndex","findLastIndex","range"
-            }
-            function_inputs = {
-                "bind","bindAll","partial","memoize","delay","defer","throttle","debounce","once","after","before","wrap","negate","compose","restArguments"
-            }
-            object_inputs = {
-                "keys","allKeys","values","mapObject","pairs","invert","create","functions","findKey","extend","extendOwn","pick","omit","defaults","clone","tap","toPath","has","get","property","propertyOf","matcher","isEqual","isMatch","isEmpty","isElement","isArray","isObject","isArguments","isFunction","isString","isNumber","isFinite","isBoolean","isDate","isRegExp","isError","isSymbol","isMap","isWeakMap","isSet","isWeakSet","isArrayBuffer","isDataView","isTypedArray","isNaN","isNull","isUndefined"
-            }
-            if method_name in array_inputs:
-                pin = "py_list"
-            elif method_name in object_inputs:
-                pin = "py_dict"
-            elif method_name in collection_inputs:
-                pin = "list_or_dict"
-            elif method_name in function_inputs:
-                pin = "py_func"
-            else:
-                pin = "obj"
+            # Fallback: derive from method category using shared helper
+            pin = _primary_input_name_for_method(method_name)
         try:
             primary_from_named = named_args.get(pin)
         except Exception:
@@ -482,10 +510,20 @@ def _make_node_for_method(method_name: str, fn: Any) -> Type:
         # Decide single return based on whether a CHAIN was provided through the primary input
         if chain_in is not None:
             chain_out = result_value if _is_underscore_instance(result_value) else us
-            return (chain_out,)
+            ui = {
+                "status": [f"chain({type(result_value.value())})"],
+                "inputType": ["chained"],
+                "outputType": ["chained"],
+            }
+            return {"ui": ui, "result": (chain_out,)}
         # Extract the actual value if it's a chained instance
         actual_value = result_value.value() if _is_underscore_instance(result_value) else result_value
-        return (actual_value,)
+        ui = {
+            "status": [f"type:{type(actual_value).__name__}\n{repr(actual_value)[:32]}"],
+            "inputType": ["object"],
+            "outputType": ["object"],
+        }
+        return {"ui": ui, "result": (actual_value,)}
 
     # Build class dict
     cd = {
@@ -509,6 +547,10 @@ def _make_node_for_method(method_name: str, fn: Any) -> Type:
     dict_returns = {"groupBy","indexBy","countBy","mapObject","invert","create","extend","extendOwn","pick","omit","defaults"}
     string_returns = set()
     int_returns = {"size","indexOf","lastIndexOf","sortedIndex","findIndex","findLastIndex"}
+
+    accepts_iteratee = {'countBy', 'every', 'filter', 'find', 'findIndex', 'findKey', 'findLastIndex', 'groupBy',
+                        'indexBy', 'map', 'mapObject', 'max', 'min', 'partition', 'reject', 'some', 'sortBy',
+                        'sortedIndex', 'uniq'}
     if method_name in boolean_returns:
         cd["RETURN_TYPES"] = (BOOLEAN_T,)
     elif method_name in list_returns:
@@ -521,80 +563,15 @@ def _make_node_for_method(method_name: str, fn: Any) -> Type:
     else:
         cd["RETURN_TYPES"] = (ANYTYPE,)
 
-        # Input category sets derived from underscorejs.org
-        collection_inputs = {
-            "each","map","reduce","reduceRight","find","filter","where","findWhere","reject","every","some","contains","invoke","pluck","max","min","sortBy","groupBy","indexBy","countBy","shuffle","sample","toArray","size","partition"
-        }
-        array_inputs = {
-            "first","initial","last","rest","compact","flatten","without","union","intersection","difference","uniq","zip","unzip","object","chunk","indexOf","lastIndexOf","sortedIndex","findIndex","findLastIndex","range"
-        }
-        function_inputs = {
-            "bind","bindAll","partial","memoize","delay","defer","throttle","debounce","once","after","before","wrap","negate","compose","restArguments"
-        }
-        object_inputs = {
-            "keys","allKeys","values","mapObject","pairs","invert","create","functions","findKey","extend","extendOwn","pick","omit","defaults","clone","tap","toPath","has","get","property","propertyOf","matcher","isEqual","isMatch","isEmpty","isElement","isArray","isObject","isArguments","isFunction","isString","isNumber","isFinite","isBoolean","isDate","isRegExp","isError","isSymbol","isMap","isWeakMap","isSet","isWeakSet","isArrayBuffer","isDataView","isTypedArray","isNaN","isNull","isUndefined"
-        }
-        # Compose a lookup for this method
-        if method_name in collection_inputs:
-            input_category = "collection"
-        elif method_name in array_inputs:
-            input_category = "array"
-        elif method_name in function_inputs:
-            input_category = "function"
-        elif method_name in object_inputs:
-            input_category = "object"
-        else:
-            input_category = "any"
-
-        # Determine the primary input name based on category
-        if input_category == "array":
-            primary_input_name = "py_list"
-        elif input_category == "object":
-            primary_input_name = "py_dict"
-        elif input_category == "collection":
-            primary_input_name = "list_or_dict"
-        elif input_category == "function":
-            primary_input_name = "py_func"
-        else:
-            primary_input_name = "obj"
+        # Determine the primary input name based on category via shared helper
+        primary_input_name = _primary_input_name_for_method(method_name)
 
     @classmethod
     def INPUT_TYPES(cls):
         required: Dict[str, Tuple[str, Dict[str, Any]]] = {}
-        # Determine expected input category and primary input name locally (robust against closure issues)
-        collection_inputs = {
-            "each","map","reduce","reduceRight","find","filter","where","findWhere","reject","every","some","contains","invoke","pluck","max","min","sortBy","groupBy","indexBy","countBy","shuffle","sample","toArray","size","partition"
-        }
-        array_inputs = {
-            "first","initial","last","rest","compact","flatten","without","union","intersection","difference","uniq","zip","unzip","object","chunk","indexOf","lastIndexOf","sortedIndex","findIndex","findLastIndex","range"
-        }
-        function_inputs = {
-            "bind","bindAll","partial","memoize","delay","defer","throttle","debounce","once","after","before","wrap","negate","compose","restArguments"
-        }
-        object_inputs = {
-            "keys","allKeys","values","mapObject","pairs","invert","create","functions","findKey","extend","extendOwn","pick","omit","defaults","clone","tap","toPath","has","get","property","propertyOf","matcher","isEqual","isMatch","isEmpty","isElement","isArray","isObject","isArguments","isFunction","isString","isNumber","isFinite","isBoolean","isDate","isRegExp","isError","isSymbol","isMap","isWeakMap","isSet","isWeakSet","isArrayBuffer","isDataView","isTypedArray","isNaN","isNull","isUndefined"
-        }
-        if method_name in collection_inputs:
-            cat = "collection"
-        elif method_name in array_inputs:
-            cat = "array"
-        elif method_name in function_inputs:
-            cat = "function"
-        elif method_name in object_inputs:
-            cat = "object"
-        else:
-            cat = "any"
-
-        if cat == "array":
-            pin = "py_list"
-        elif cat == "object":
-            pin = "py_dict"
-        elif cat == "collection":
-            pin = "list_or_dict"
-        elif cat == "function":
-            pin = "py_func"
-        else:
-            pin = "obj"
+        # Determine expected input category and primary input name via shared helpers
+        cat = _method_input_category(method_name)
+        pin = _primary_input_name_for_method(method_name)
 
         obj_tip = "Primary input object."
         if cat != "any":
