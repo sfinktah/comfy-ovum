@@ -659,6 +659,7 @@ class underscore(object):
     def mapObject(self, func):
         """ Return the results of applying the iterator to each element.
         """
+        func = _.iteratee(func)
         newlist = {}
         for k, v in self._clean.items():
             # if k not in values:  # use indexof to check identity
@@ -670,8 +671,7 @@ class underscore(object):
     def map(self, func=None):
         """ Return the results of applying the iterator to each element.
         """
-        if func is None:
-            func = lambda x, *a: x
+        func = _.iteratee(func)
 
         ns = self.Namespace()
         ns.results = []
@@ -723,6 +723,7 @@ class underscore(object):
         Return the first value which passes a truth test.
         Aliased as `detect`.
         """
+        func = _.iteratee(func)
         self.ftmp = None
 
         # noinspection PyShadowingBuiltins
@@ -738,6 +739,7 @@ class underscore(object):
     detect = find
     
     def findKey(self, predicate):
+        predicate = _.iteratee(predicate)
         keys = self._clean.keys()
         for key in keys:
             if predicate(self.obj[key], key, self.obj):
@@ -747,6 +749,7 @@ class underscore(object):
     def filterObject(self, func):
         """ Return all the items that pass a truth test
         """
+        func = _.iteratee(func)
 
         if self._clean.isDictlike():
             # https://stackoverflow.com/questions/2844516/how-to-filter-a-dictionary-according-to-an-arbitrary-condition-function
@@ -760,8 +763,7 @@ class underscore(object):
     def filter(self, func=None):
         """ Return all the elements that pass a truth test.
         """
-        if func is None:
-            func = lambda x, *a: x
+        func = _.iteratee(func)
 
         return self._wrap(list(filter(func, self.obj)))
 
@@ -841,13 +843,13 @@ class underscore(object):
     def reject(self, func):
         """ Return all the elements for which a truth test fails.
         """
+        func = _.iteratee(func)
         return self._wrap(list(filter(lambda val: not func(val), self.obj)))
 
     def all(self, func=None):
         """ Determine whether all of the elements match a truth test.
         """
-        if func is None:
-            func = lambda x, *args: x
+        func = _.iteratee(func)
         self.altmp = True
 
         def testEach(value, index, *args):
@@ -895,8 +897,7 @@ class underscore(object):
         Determine if at least one element in the object
         matches a truth test.
         """
-        if func is None:
-            func = lambda x, *args: x
+        func = _.iteratee(func)
         self.antmp = False
 
         def testEach(value, index, *args):
@@ -1025,12 +1026,16 @@ class underscore(object):
         """
         return self._wrap(self._clean.where(attrs, True))
 
-    def max(self):
+    def max(self, iteratee=None):
         """ Return the maximum element or (element-based computation).
+        Accepts an optional iteratee which is normalized via _.iteratee.
         """
         if self._clean.isDict():
             return self._wrap(list())
-        return self._wrap(max(self.obj))
+        if iteratee is None:
+            return self._wrap(max(self.obj))
+        keyfn = _.iteratee(iteratee)
+        return self._wrap(max(self.obj, key=lambda x: keyfn(x)))
 
     def maxBy(self, key):
         """ Return the maximum element or (element-based computation).
@@ -1040,12 +1045,16 @@ class underscore(object):
         return self._wrap(max(self.obj, key=key))
 
 
-    def min(self):
+    def min(self, iteratee=None):
         """ Return the minimum element (or element-based computation).
+        Accepts an optional iteratee which is normalized via _.iteratee.
         """
         if self._clean.isDict():
             return self._wrap(list())
-        return self._wrap(min(self.obj))
+        if iteratee is None:
+            return self._wrap(min(self.obj))
+        keyfn = _.iteratee(iteratee)
+        return self._wrap(min(self.obj, key=lambda x: keyfn(x)))
 
     def minBy(self, key):
         """ Return the minimum element or (element-based computation).
@@ -1111,16 +1120,9 @@ class underscore(object):
         Sort the object's values by a criterion produced by an iterator or
         attribute name.
         """
-        #  def get(obj, key):
-            #  if callable(getattr(obj, 'get', None)):
-                #  return obj.get(key)
-            #  return getattr(obj, key)
-
         if val is not None:
-            if _(val).isString():
-                return self._wrap(sorted(self.obj, key=lambda x: _oget(x, val)))
-            else:
-                return self._wrap(sorted(self.obj, key=val))
+            keyfn = _.iteratee(val)
+            return self._wrap(sorted(self.obj, key=lambda x: keyfn(x)))
         else:
             return self._wrap(sorted(self.obj))
 
@@ -1141,7 +1143,8 @@ class underscore(object):
         """
         if val is None:
             return lambda el, *args: el
-        return val if _.isCallable(val) else lambda obj, *args: obj[val]
+        # Normalize through _.iteratee to support functions, dict matchers, and property names
+        return _.iteratee(val)
 
     def _group(self, obj, val, behavior):
         """ An internal function used for aggregate "group by" operations.
@@ -1234,6 +1237,7 @@ class underscore(object):
         Uses binary search.
         """
         array = self.obj
+        iterator = _.iteratee(iterator)
         value = iterator(obj)
         low = 0
         high = len(array)
@@ -1394,6 +1398,8 @@ class underscore(object):
         """
         #return self._wrap(_uniq(self.obj))
 
+        iterator = _.iteratee(iterator) if iterator is not None else None
+
         # Use value-based keys for hashable primitives and identity for unhashables (like list, dict).
         def _key(v):
             try:
@@ -1438,8 +1444,7 @@ class underscore(object):
         will be removed, not the later ones.
         """
         #return self._wrap(_uniq(self.obj))
-        if iterator is None:
-             def iterator(x): return x
+        iterator = _.iteratee(iterator) if iterator is not None else (lambda x, *a: x)
         seen = {}
         result = []
         for item in self.obj:
@@ -1627,6 +1632,32 @@ class underscore(object):
             if array[i] is item:
                 return self._wrap(i)
             i -= 1
+        return self._wrap(-1)
+
+    def findIndex(self, predicate=None):
+        """
+        Return the index of the first element that satisfies the predicate, or -1 if none.
+        The predicate is normalized via _.iteratee and invoked with (value, index, list).
+        """
+        if not (self._clean.isList() or self._clean.isTuple()):
+            return self._wrap(-1)
+        pred = _.iteratee(predicate)
+        for idx, val in enumerate(self.obj):
+            if pred(val, idx, self.obj):
+                return self._wrap(idx)
+        return self._wrap(-1)
+
+    def findLastIndex(self, predicate=None):
+        """
+        Return the index of the last element that satisfies the predicate, or -1 if none.
+        The predicate is normalized via _.iteratee and invoked with (value, index, list).
+        """
+        if not (self._clean.isList() or self._clean.isTuple()):
+            return self._wrap(-1)
+        pred = _.iteratee(predicate)
+        for idx in range(len(self.obj) - 1, -1, -1):
+            if pred(self.obj[idx], idx, self.obj):
+                return self._wrap(idx)
         return self._wrap(-1)
 
     def range(self, *args):
@@ -2253,8 +2284,9 @@ class underscore(object):
         """
         For easy creation of iterators that pull
         specific properties from objects.
+        In Python, support both dict-style keys and object attributes.
         """
-        return self._wrap(lambda obj, *args: obj[self.obj])
+        return self._wrap(lambda obj, *args: _oget(obj, self.obj))
 
     def matcher(self):
         """
