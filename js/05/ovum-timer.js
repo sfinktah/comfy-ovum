@@ -5,7 +5,7 @@
 import {api} from "../../../scripts/api.js";
 /** @type {ComfyApp} */
 import {app} from "../../../scripts/app.js";
-import {$el} from "../../../scripts/ui.js";
+import {$el} from "../common/ui.js";
 
 import { graphGetNodeById  } from '../01/graphHelpers.js';
 import { chainCallback, debounce} from '../01/utility.js';

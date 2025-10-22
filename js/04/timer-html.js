@@ -1,4 +1,4 @@
-import {$el} from "../../../scripts/ui.js";
+import {$el} from "../common/ui.js";
 import {onCopyButton, onCopyGraphData, onUploadGraphData} from "../01/copyButton.js";
 import {Logger} from "../common/logger.js";
 import {attachTooltip} from "../01/tooltipHelpers.js";

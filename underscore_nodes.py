@@ -1,6 +1,7 @@
 import inspect
 import json
 import copy
+import os
 from typing import Any, Dict, List, Optional, Tuple, Type
 
 # External underscore3 implementation
@@ -145,121 +146,7 @@ ITERATEE_PARAM_NAMES = {"func", "iterator", "iteratee", "predicate", "callback",
 # - Some methods accept variable arguments (e.g., invoke, union); here they are summarized.
 # - For this project, we intentionally keep our node UI labels in _METHOD_ARG_LABELS, which may
 #   differ slightly where the Python port diverges (e.g., flatten uses `depth` instead of `shallow`).
-_UNDERSCORE_SIGNATURE: Dict[str, List[str]] = {
-    # Collections
-    "each": ["list", "iteratee"],
-    "forEach": ["list", "iteratee"],
-    "map": ["list", "iteratee"],
-    "collect": ["list", "iteratee"],
-    "reduce": ["list", "iteratee", "memo"],
-    "foldl": ["list", "iteratee", "memo"],
-    "inject": ["list", "iteratee", "memo"],
-    "reduceRight": ["list", "iteratee", "memo"],
-    "foldr": ["list", "iteratee", "memo"],
-    "find": ["list", "predicate"],
-    "detect": ["list", "predicate"],
-    "filter": ["list", "predicate"],
-    "select": ["list", "predicate"],
-    "reject": ["list", "predicate"],
-    "where": ["list", "properties"],
-    "findWhere": ["list", "properties"],
-    "every": ["list", "predicate"],
-    "all": ["list", "predicate"],
-    "some": ["list", "predicate"],
-    "any": ["list", "predicate"],
-    "contains": ["list", "value", "fromIndex"],
-    "include": ["list", "value", "fromIndex"],
-    "invoke": ["list", "methodName", "arguments"],
-    "pluck": ["list", "propertyName"],
-    "max": ["list", "iteratee"],
-    "min": ["list", "iteratee"],
-    "sortBy": ["list", "iteratee"],
-    "groupBy": ["list", "iteratee"],
-    "indexBy": ["list", "iteratee"],
-    "countBy": ["list", "iteratee"],
-    "shuffle": ["list"],
-    "sample": ["list", "n"],
-    "toArray": ["list"],
-    "size": ["list"],
-    "partition": ["list", "predicate"],
-
-    # Arrays
-    "first": ["array", "n"],
-    "head": ["array", "n"],
-    "take": ["array", "n"],
-    "initial": ["array", "n"],
-    "last": ["array", "n"],
-    "rest": ["array", "index"],
-    "tail": ["array", "index"],
-    "compact": ["array"],
-    # Official Underscore uses `shallow`; our Python port uses `depth` for flatten.
-    "flatten": ["array", "shallow"],
-    "without": ["array", "values"],
-    "union": ["arrays"],
-    "intersection": ["arrays"],
-    "difference": ["array", "others"],
-    "uniq": ["array", "isSorted", "iteratee"],
-    "unique": ["array", "isSorted", "iteratee"],
-    "zip": ["arrays"],
-    "unzip": ["array"],
-    "object": ["list", "values"],
-    "chunk": ["array", "length"],
-    "indexOf": ["array", "value", "isSorted"],
-    "lastIndexOf": ["array", "value", "fromIndex"],
-    "sortedIndex": ["array", "value", "iteratee"],
-    "findIndex": ["array", "predicate"],
-    "findLastIndex": ["array", "predicate"],
-    "range": ["start", "stop", "step"],
-
-    # Objects
-    "keys": ["object"],
-    "allKeys": ["object"],
-    "values": ["object"],
-    "mapObject": ["object", "iteratee"],
-    "pairs": ["object"],
-    "invert": ["object"],
-    "create": ["prototype", "props"],
-    "functions": ["object"],
-    "findKey": ["object", "predicate"],
-    "extend": ["object", "sources"],
-    "extendOwn": ["object", "sources"],
-    "pick": ["object", "keys"],
-    "omit": ["object", "keys"],
-    "defaults": ["object", "defaults"],
-    "clone": ["object"],
-    "tap": ["object", "interceptor"],
-    "has": ["object", "key"],
-    # Utility/Predicates
-    "property": ["path"],
-    "propertyOf": ["object"],
-    "matcher": ["attrs"],
-    "isEqual": ["object", "other"],
-    "isMatch": ["object", "properties"],
-    "isEmpty": ["object"],
-    "isElement": ["object"],
-    "isArray": ["object"],
-    "isObject": ["object"],
-    "isArguments": ["object"],
-    "isFunction": ["object"],
-    "isString": ["object"],
-    "isNumber": ["object"],
-    "isFinite": ["object"],
-    "isBoolean": ["object"],
-    "isDate": ["object"],
-    "isRegExp": ["object"],
-    "isError": ["object"],
-    "isSymbol": ["object"],
-    "isMap": ["object"],
-    "isWeakMap": ["object"],
-    "isSet": ["object"],
-    "isWeakSet": ["object"],
-    "isArrayBuffer": ["object"],
-    "isDataView": ["object"],
-    "isTypedArray": ["object"],
-    "isNaN": ["object"],
-    "isNull": ["object"],
-    "isUndefined": ["object"],
-}
+_UNDERSCORE_SIGNATURE: Dict[str, List[str]] = {}
 
 # Shared categorizations for primary input type by underscore method
 _COLLECTION_INPUTS = {
@@ -306,105 +193,47 @@ def _camelize(name: str) -> str:
 
 # Partial DESCRIPTION overrides from Underscore.js text provided in the issue.
 # Keys are method names as used on underscore instances.
-_DESCRIPTION_OVERRIDES: Dict[str, str] = {
-    "map": "Produces a new array of values by mapping each value in list through a transformation function (iteratee). The iteratee is passed three arguments: the value, then the index (or key) of the iteration, and finally a reference to the entire list.",
-    "reduce": "Also known as inject and foldl, reduce boils down a list of values into a single value. Memo is the initial state of the reduction, and each successive step of it should be returned by iteratee. The iteratee is passed four arguments: the memo, then the value and index (or key) of the iteration, and finally a reference to the entire list. If no memo is passed to the initial invocation of reduce, the iteratee is not invoked on the first element of the list. The first element is instead passed as the memo in the invocation of the iteratee on the next element in the list.",
-    "reduceRight": "The right-associative version of reduce. Foldr is not as useful in JavaScript as it would be in a language with lazy evaluation.",
-    "find": "Looks through each value in the list, returning the first one that passes a truth test (predicate), or undefined if no value passes the test. The function returns as soon as it finds an acceptable element, and doesn't traverse the entire list. predicate is transformed through iteratee to facilitate shorthand syntaxes.",
-    "filter": "Looks through each value in the list, returning an array of all the values that pass a truth test (predicate). predicate is transformed through iteratee to facilitate shorthand syntaxes.",
-    "reject": "Returns the values in list without the elements that the truth test (predicate) passes. The opposite of filter. predicate is transformed through iteratee to facilitate shorthand syntaxes.",
-    "every": "Returns true if all of the values in the list pass the predicate truth test. Short-circuits and stops traversing the list if a false element is found. predicate is transformed through iteratee to facilitate shorthand syntaxes.",
-    "all": "Returns true if all of the values in the list pass the predicate truth test. Short-circuits and stops traversing the list if a false element is found. predicate is transformed through iteratee to facilitate shorthand syntaxes.",
-    "some": "Returns true if any of the values in the list pass the predicate truth test. Short-circuits and stops traversing the list if a true element is found. predicate is transformed through iteratee to facilitate shorthand syntaxes.",
-    "any": "Returns true if any of the values in the list pass the predicate truth test. Short-circuits and stops traversing the list if a true element is found. predicate is transformed through iteratee to facilitate shorthand syntaxes.",
-    "contains": "Returns true if the value is present in the list. Uses indexOf internally, if list is an Array. Use fromIndex to start your search at a given index.",
-    "include": "Returns true if the value is present in the list. Uses indexOf internally, if list is an Array. Use fromIndex to start your search at a given index.",
-    "pluck": "A convenient version of what is perhaps the most common use-case for map: extracting a list of property values.",
-    "findWhere": "Looks through the list and returns the first value that matches all of the key-value pairs listed in properties. If no match is found, or if list is empty, undefined will be returned.",
-    "where": "Looks through each value in the list, returning an array of all the values that matches the key-value pairs listed in properties.",
-    "invoke": "Calls the method named by methodName on each value in the list. Any extra arguments passed to invoke will be forwarded on to the method invocation.",
-    "max": "Returns the maximum value in list. If an iteratee function is provided, it will be used on each value to generate the criterion by which the value is ranked. -Infinity is returned if list is empty, so an isEmpty guard may be required. This function can currently only compare numbers reliably. This function uses operator < (note).",
-    "min": "Returns the minimum value in list. If an iteratee function is provided, it will be used on each value to generate the criterion by which the value is ranked. Infinity is returned if list is empty, so an isEmpty guard may be required. This function can currently only compare numbers reliably. This function uses operator < (note).",
-    "sortBy": "Returns a (stably) sorted copy of list, ranked in ascending order by the results of running each value through iteratee. iteratee may also be the string name of the property to sort by (eg. length). This function uses operator < (note).",
-    "groupBy": "Splits a collection into sets, grouped by the result of running each value through iteratee. If iteratee is a string instead of a function, groups by the property named by iteratee on each of the values.",
-    "indexBy": "Given a list, and an iteratee function that returns a key for each element in the list (or a property name), returns an object with an index of each item. Just like groupBy, but for when you know your keys are unique.",
-    "countBy": "Sorts a list into groups and returns a count for the number of objects in each group. Similar to groupBy, but instead of returning a list of values, returns a count for the number of values in that group.",
-    "shuffle": "Returns a shuffled copy of the list, using a version of the Fisher-Yates shuffle.",
-    "sample": "Produce a random sample from the list. Pass a number to return n random elements from the list. Otherwise a single random item will be returned.",
-    "sampleSize": "Produce a random sample from the list. Pass a number to return n random elements from the list. Otherwise a single random item will be returned.",
-    "toArray": "Creates a real Array from the list (anything that can be iterated over). Useful for transmuting the arguments object.",
-    "size": "Return the number of values in the list.",
-    "partition": "Split list into two arrays: one whose elements all satisfy predicate and one whose elements all do not satisfy predicate. predicate is transformed through iteratee to facilitate shorthand syntaxes.",
-    "compact": "Returns a copy of the list with all falsy values removed. In JavaScript, false, null, 0, \"\", undefined and NaN are all falsy.",
-    "first": "Returns the first element of an array. Passing n will return the first n elements of the array.",
-    "initial": "Returns everything but the last entry of the array. Especially useful on the arguments object. Pass n to exclude the last n elements from the result.",
-    "last": "Returns the last element of an array. Passing n will return the last n elements of the array.",
-    "rest": "Returns the rest of the elements in an array. Pass an index to return the values of the array from that index onward.",
-    "flatten": "Flattens a nested array. If you pass true or 1 as the depth, the array will only be flattened a single level. Passing a greater number will cause the flattening to descend deeper into the nesting hierarchy. Omitting the depth argument, or passing false or Infinity, flattens the array all the way to the deepest nesting level.",
-    "without": "Returns a copy of the array with all instances of the values removed.",
-    "union": "Computes the union of the passed-in arrays: the list of unique items, in order, that are present in one or more of the arrays.",
-    "intersection": "Computes the list of values that are the intersection of all the arrays. Each value in the result is present in each of the arrays.",
-    "difference": "Similar to without, but returns the values from array that are not present in the other arrays.",
-    "uniq": "Produces a duplicate-free version of the array, using === to test object equality. In particular only the first occurrence of each value is kept. If you know in advance that the array is sorted, passing true for isSorted will run a much faster algorithm. If you want to compute unique items based on a transformation, pass an iteratee function.",
-    "zip": "Merges together the values of each of the arrays with the values at the corresponding position. Useful when you have separate data sources that are coordinated through matching array indexes.",
-    "unzip": "The opposite of zip. Given an array of arrays, returns a series of new arrays, the first of which contains all of the first elements in the input arrays, the second of which contains all of the second elements, and so on. If you're working with a matrix of nested arrays, this can be used to transpose the matrix.",
-    "object": "Converts arrays into objects. Pass either a single list of [key, value] pairs, or a list of keys, and a list of values. Passing by pairs is the reverse of pairs. If duplicate keys exist, the last value wins.",
-    "chunk": "Chunks an array into multiple arrays, each containing length or fewer items.",
-    "indexOf": "Returns the index at which value can be found in the array, or -1 if value is not present in the array. If you're working with a large array, and you know that the array is already sorted, pass true for isSorted to use a faster binary search ... or, pass a number as the third argument in order to look for the first matching value in the array after the given index. If isSorted is true, this function uses operator < (note).",
-    "lastIndexOf": "Returns the index of the last occurrence of value in the array, or -1 if value is not present. Pass fromIndex to start your search at a given index.",
-    "sortedIndex": "Uses a binary search to determine the smallest index at which the value should be inserted into the array in order to maintain the array's sorted order. If an iteratee function is provided, it will be used to compute the sort ranking of each value, including the value you pass. The iteratee may also be the string name of the property to sort by (eg. length). This function uses operator < (note).",
-    "findIndex": "Similar to _.indexOf, returns the first index where the predicate truth test passes; otherwise returns -1.",
-    "findLastIndex": "Like _.findIndex but iterates the array in reverse, returning the index closest to the end where the predicate truth test passes.",
-    "range": "A function to create flexibly-numbered lists of integers, handy for each and map loops. start, if omitted, defaults to 0; step defaults to 1 if start is before stop, otherwise -1. Returns a list of integers from start (inclusive) to stop (exclusive), incremented (or decremented) by step.",
-    "keys": "Retrieve all the names of the object's own enumerable properties.",
-    "allKeys": "Retrieve all the names of object's own and inherited properties.",
-    "values": "Return all of the values of the object's own properties.",
-    "mapObject": "Like map, but for objects. Transform the value of each property in turn.",
-    "pairs": "Convert an object into a list of [key, value] pairs. The opposite of object.",
-    "invert": "Returns a copy of the object where the keys have become the values and the values the keys. For this to work, all of your object's values should be unique and string serializable.",
-    "create": "Creates a new object with the given prototype, optionally attaching props as own properties. Basically, Object.create, but without all of the property descriptor jazz.",
-    "functions": "Returns a sorted list of the names of every method in an object — that is to say, the name of every function property of the object.",
-    "findKey": "Similar to _.findIndex but for keys in objects. Returns the key where the predicate truth test passes or undefined. predicate is transformed through iteratee to facilitate shorthand syntaxes.",
-    "extend": "Shallowly copy all of the properties in the source objects over to the destination object, and return the destination object. Any nested objects or arrays will be copied by reference, not duplicated. It's in-order, so the last source will override properties of the same name in previous arguments.",
-    "extendOwn": "Like extend, but only copies own properties over to the destination object.",
-    "pick": "Return a copy of the object, filtered to only have values for the allowed keys (or array of valid keys). Alternatively accepts a predicate indicating which keys to pick.",
-    "omit": "Return a copy of the object, filtered to omit the disallowed keys (or array of keys). Alternatively accepts a predicate indicating which keys to omit.",
-    "defaults": "Returns object after filling in its undefined properties with the first value present in the following list of defaults objects.",
-    "clone": "Create a shallow-copied clone of the provided plain object. Any nested objects or arrays will be copied by reference, not duplicated.",
-    "tap": "Invokes interceptor with the object, and then returns object. The primary purpose of this method is to \"tap into\" a method chain, in order to perform operations on intermediate results within the chain.",
-    "toPath": "Ensures that path is an array. If path is a string, it is wrapped in a single-element array; if it is an array already, it is returned unmodified.",
-    "get": "Returns the specified property of object. path may be specified as a simple key, or as an array of object keys or array indexes, for deep property fetching. If the property does not exist or is undefined, the optional default is returned.",
-    "has": "Does the object contain the given key? Identical to object.hasOwnProperty(key), but uses a safe reference to the hasOwnProperty function, in case it's been overridden accidentally.",
-    "property": "Returns a function that will return the specified property of any passed-in object. path may be specified as a simple key, or as an array of object keys or array indexes, for deep property fetching.",
-    "propertyOf": "Inverse of _.property. Takes an object and returns a function which will return the value of a provided property.",
-    "matcher": "Returns a predicate function that will tell you if a passed in object contains all of the key/value properties present in attrs.",
-    "isEqual": "Performs an optimized deep comparison between the two objects, to determine if they should be considered equal.",
-    "isMatch": "Tells you if the keys and values in properties are contained in object.",
-    "isEmpty": "Returns true if collection has no elements. For strings and array-like objects _.isEmpty checks if the length property is 0. For other objects, it returns true if the object has no enumerable own-properties. Note that primitive numbers, booleans and symbols are always empty by this definition.",
-    "isElement": "Returns true if object is a DOM element.",
-    "isArray": "Returns true if object is an Array.",
-    "isObject": "Returns true if value is an Object. Note that JavaScript arrays and functions are objects, while (normal) strings and numbers are not.",
-    "isArguments": "Returns true if object is an Arguments object.",
-    "isFunction": "Returns true if object is a Function.",
-    "isString": "Returns true if object is a String.",
-    "isNumber": "Returns true if object is a Number (including NaN).",
-    "isFinite": "Returns true if object is a finite Number.",
-    "isBoolean": "Returns true if object is either true or false.",
-    "isDate": "Returns true if object is a Date.",
-    "isRegExp": "Returns true if object is a RegExp.",
-    "isError": "Returns true if object inherits from an Error.",
-    "isSymbol": "Returns true if object is a Symbol.",
-    "isMap": "Returns true if object is a Map.",
-    "isWeakMap": "Returns true if object is a WeakMap.",
-    "isSet": "Returns true if object is a Set.",
-    "isWeakSet": "Returns true if object is a WeakSet.",
-    "isArrayBuffer": "Returns true if object is an ArrayBuffer.",
-    "isDataView": "Returns true if object is a DataView.",
-    "isTypedArray": "Returns true if object is a TypedArray.",
-    "isNaN": "Returns true if object is NaN. Note: this is not the same as the native isNaN function, which will also return true for many other not-number values, such as undefined.",
-    "isNull": "Returns true if the value of object is null.",
-    "isUndefined": "Returns true if value is undefined.",
-}
+_DESCRIPTION_OVERRIDES: Dict[str, str] = {}
+
+# Code examples for underscore.js methods (JavaScript). Where possible, these mirror the official docs.
+# Keys are underscore instance method names; values are JS snippets demonstrating usage.
+_CODE_EXAMPLES: Dict[str, str] = {}
+
+# Load shared methods metadata from web/underscore/methods.json to keep backend in sync with frontend
+# Note: No inline fallback is kept; if the JSON is missing or malformed, these dicts remain empty.
+
+def _load_methods_json():
+    here = os.path.dirname(__file__)
+    path = os.path.join(here, "web", "underscore", "methods.json")
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f) or {}
+        return (
+            data.get("_UNDERSCORE_SIGNATURE"),
+            data.get("_DESCRIPTION_OVERRIDES"),
+            data.get("_CODE_EXAMPLES"),
+        )
+    except Exception:
+        print(f"[ovum::underscore_nodes.py] Warning: could not load methods.json from {path}")
+        return None, None, None
+
+# Overwrite globals from methods.json if available to avoid duplication
+_sig, _desc, _ex = _load_methods_json()
+if _sig:
+    try:
+        _UNDERSCORE_SIGNATURE = _sig
+    except Exception:
+        pass
+if _desc:
+    try:
+        _DESCRIPTION_OVERRIDES = _desc
+    except Exception:
+        pass
+if _ex:
+    try:
+        _CODE_EXAMPLES = _ex
+    except Exception:
+        pass
 
 # Preferred Underscore.js argument labels for UI, excluding the first collection arg.
 _METHOD_ARG_LABELS: Dict[str, List[str]] = {
@@ -560,13 +389,7 @@ def _make_node_for_method(method_name: str, fn: Any) -> Type:
     param_names = [p.name for p in params]
     param_kinds = {p.name: p.kind for p in params}
 
-    def run(self, obj: Any = None,
-            args_json: Optional[str] = None, kwargs_json: Optional[str] = None,
-            **named_args):
-        # Merge json args/kwargs
-        extra_args = _parse_json(args_json, [])
-        extra_kwargs = _parse_json(kwargs_json, {})
-
+    def run(self, obj: Any = None, **named_args):
         # Determine primary input value based on category-specific input name
         try:
             pin = primary_input_name  # from closure, if available
@@ -581,7 +404,6 @@ def _make_node_for_method(method_name: str, fn: Any) -> Type:
         chain_in = base_val if _is_underscore_instance(base_val) else None
         base_obj = None if chain_in is not None else base_val
         us = _ensure_us(chain_in, base_obj, start_chain=True)
-
 
         # Translate UI-labeled args back to internal parameter names
         ui_labels = _METHOD_ARG_LABELS.get(method_name)
@@ -611,7 +433,7 @@ def _make_node_for_method(method_name: str, fn: Any) -> Type:
                 except Exception:
                     is_vararg = False
                 if is_vararg:
-                    # Allow JSON text that decodes to a list/tuple
+                    # Allow JSON text that decodes to a list/tuple for a single vararg parameter value
                     if isinstance(val, str):
                         val = _parse_json(val, val)
                     if isinstance(val, (list, tuple)):
@@ -621,15 +443,8 @@ def _make_node_for_method(method_name: str, fn: Any) -> Type:
                 else:
                     call_args.append(val)
 
-        # Append json-based extras
-        if isinstance(extra_args, list):
-            call_args.extend(extra_args)
-        call_kwargs: Dict[str, Any] = {}
-        if isinstance(extra_kwargs, dict):
-            call_kwargs.update(extra_kwargs)
-
         m = getattr(us, method_name)
-        result_value = m(*call_args, **call_kwargs)
+        result_value = m(*call_args)
         # Decide single return based on whether a CHAIN was provided through the primary input
         if chain_in is not None:
             chain_out = result_value if _is_underscore_instance(result_value) else us
@@ -701,18 +516,30 @@ def _make_node_for_method(method_name: str, fn: Any) -> Type:
             obj_tip = f"Primary input object (expected {cat}). You can still pass any JSON-serializable value."
         optional: Dict[str, Tuple[str, Dict[str, Any]]] = {
             pin: (ANYTYPE, {"default": None, "tooltip": obj_tip + " Also accepts _.CHAIN to continue chaining."}),
-            "args_json": (STRING_T, {"default": "", "multiline": True, "tooltip": "Positional args as JSON array."}),
-            "kwargs_json": (STRING_T, {"default": "", "multiline": True, "tooltip": "Keyword args as JSON object."}),
         }
         # Preferred Underscore.js labels for this method
         labels = _METHOD_ARG_LABELS.get(method_name)
+        # Methods that support iteratee-shorthand should expose iteratee/predicate widgets
+        iteratee_methods = {'countBy', 'every', 'filter', 'find', 'findIndex', 'findKey', 'findLastIndex', 'groupBy',
+                            'indexBy', 'map', 'mapObject', 'max', 'min', 'partition', 'reject', 'some', 'sortBy',
+                            'sortedIndex', 'uniq'}
+        def _allow_label(lbl: str) -> bool:
+            # Always allow non-iteratee labels (non callable params)
+            if lbl not in ITERATEE_PARAM_NAMES:
+                return True
+            # Allow iteratee-like labels only for known iteratee-enabled methods
+            return method_name in iteratee_methods
+
         if labels is None:
-            # Fallback: show internal parameter names
+            # Fallback: show internal parameter names, excluding iteratee-like ones unless allowed
             for pname in param_names:
+                if pname in ITERATEE_PARAM_NAMES and method_name not in iteratee_methods:
+                    continue
                 optional[pname] = (ANYTYPE, {"tooltip": f"Argument: {pname} (JSON allowed for arrays/objects)"})
         else:
             for lbl in labels:
-                optional[lbl] = (ANYTYPE, {"tooltip": f"{lbl}: JSON allowed for arrays/objects where applicable."})
+                if _allow_label(lbl):
+                    optional[lbl] = (ANYTYPE, {"tooltip": f"{lbl}: JSON allowed for arrays/objects where applicable."})
         return {"required": required, "optional": optional}
 
     cd["INPUT_TYPES"] = INPUT_TYPES
