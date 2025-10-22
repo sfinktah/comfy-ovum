@@ -408,6 +408,21 @@ def _make_node_for_method(method_name: str, fn: Any) -> Type:
         # Translate UI-labeled args back to internal parameter names
         ui_labels = _METHOD_ARG_LABELS.get(method_name)
         translated: Dict[str, Any] = {}
+        # Inject iteratee_json fallback for non-scalar iteratee-like params
+        try:
+            iteratee_methods = {'countBy', 'every', 'filter', 'find', 'findIndex', 'findKey', 'findLastIndex', 'groupBy',
+                                'indexBy', 'map', 'mapObject', 'max', 'min', 'partition', 'reject', 'some', 'sortBy',
+                                'sortedIndex', 'uniq'}
+            if ui_labels and (method_name in iteratee_methods):
+                for lbl in ui_labels:
+                    if lbl in ITERATEE_PARAM_NAMES:
+                        if (named_args.get(lbl) is None) and (f"{lbl}_json" in named_args):
+                            # Parse JSON text into value fallback
+                            fallback_val = _parse_json(named_args.get(f"{lbl}_json"), None)
+                            if fallback_val is not None:
+                                named_args[lbl] = fallback_val
+        except Exception:
+            pass
         if ui_labels:
             for label in ui_labels:
                 if label in named_args and named_args[label] is not None:
@@ -517,29 +532,107 @@ def _make_node_for_method(method_name: str, fn: Any) -> Type:
         optional: Dict[str, Tuple[str, Dict[str, Any]]] = {
             pin: (ANYTYPE, {"default": None, "tooltip": obj_tip + " Also accepts _.CHAIN to continue chaining."}),
         }
-        # Preferred Underscore.js labels for this method
-        labels = _METHOD_ARG_LABELS.get(method_name)
-        # Methods that support iteratee-shorthand should expose iteratee/predicate widgets
+
+        # Helper: map a UI label to an actual parameter object, if any
+        def _param_for_label(lbl: str) -> Optional[inspect.Parameter]:
+            for cand in _LABEL_TO_PARAM_CANDIDATES.get(lbl, [lbl]):
+                for p in params:
+                    if p.name == cand:
+                        return p
+            return None
+
+        # Determine if this method accepts iteratee-like shorthand
         iteratee_methods = {'countBy', 'every', 'filter', 'find', 'findIndex', 'findKey', 'findLastIndex', 'groupBy',
                             'indexBy', 'map', 'mapObject', 'max', 'min', 'partition', 'reject', 'some', 'sortBy',
                             'sortedIndex', 'uniq'}
-        def _allow_label(lbl: str) -> bool:
-            # Always allow non-iteratee labels (non callable params)
-            if lbl not in ITERATEE_PARAM_NAMES:
-                return True
-            # Allow iteratee-like labels only for known iteratee-enabled methods
-            return method_name in iteratee_methods
 
+        # Preferred Underscore.js labels for this method
+        labels = _METHOD_ARG_LABELS.get(method_name)
+        labels_list: List[str] = []
         if labels is None:
-            # Fallback: show internal parameter names, excluding iteratee-like ones unless allowed
-            for pname in param_names:
-                if pname in ITERATEE_PARAM_NAMES and method_name not in iteratee_methods:
+            # Fallback to raw parameter names (excluding iteratee-like ones unless allowed)
+            for p in params:
+                if p.name in ("self", "context"):
                     continue
-                optional[pname] = (ANYTYPE, {"tooltip": f"Argument: {pname} (JSON allowed for arrays/objects)"})
+                if p.name in ITERATEE_PARAM_NAMES and method_name not in iteratee_methods:
+                    continue
+                labels_list.append(p.name)
         else:
-            for lbl in labels:
-                if _allow_label(lbl):
-                    optional[lbl] = (ANYTYPE, {"tooltip": f"{lbl}: JSON allowed for arrays/objects where applicable."})
+            labels_list = [lbl for lbl in labels if (lbl not in ITERATEE_PARAM_NAMES) or (method_name in iteratee_methods)]
+
+        # Now add widgets/inputs per rules
+        for lbl in labels_list:
+            # Skip primary input label if it accidentally appears
+            if lbl == pin:
+                continue
+            
+            # Special case: _.range uses varargs in underscore3, so we cannot infer defaults/types from signature.
+            # Provide explicit INT widgets for start/stop/step as widget-only controls.
+            if method_name == "range" and lbl in ("start", "stop", "step"):
+                default_val = 0 if lbl in ("start", "stop") else 1
+                optional[lbl] = (INT_T, {"default": int(default_val), "tooltip": f"{lbl} (int)", "ovumWidgetOnly": True})
+                continue
+            # Explicit override: _.initial should have integer widget 'n' defaulting to 1 (widget-only)
+            if method_name == "initial" and lbl == "n":
+                optional[lbl] = (INT_T, {"default": 1, "tooltip": "n (int)", "ovumWidgetOnly": True})
+                continue
+            p = _param_for_label(lbl)
+            default = getattr(p, 'default', inspect._empty) if p else inspect._empty
+            kind = getattr(p, 'kind', None)
+
+            # 1) Boolean parameters (excluding context) => BOOLEAN widget, no input socket (frontend converts)
+            if default in (True, False):
+                optional[lbl] = (BOOLEAN_T, {"default": bool(default), "tooltip": f"{lbl} (boolean)", "ovumWidgetOnly": True})
+                continue
+
+            # 2) Iteratee parameters (non-scalar): expose an ANYTYPE input named like the parameter,
+            #    and a widget-only JSON editor named with the `_json` suffix.
+            if (method_name in iteratee_methods) and (lbl in ITERATEE_PARAM_NAMES):
+                # Input socket (can be function, key, object, etc.)
+                optional[lbl] = (ANYTYPE, {"tooltip": f"{lbl}: ANY input to override widget. Accepts function, key string, or object shorthand.", "forceInput": True})
+                # Widget-only editor for JSON/shorthand (no socket)
+                optional[f"{lbl}_json"] = (STRING_T, {"default": "", "multiline": True, "tooltip": f"{lbl}_json: JSON or key selector. Used when '{lbl}' input is not connected.", "ovumWidgetOnly": True})
+                continue
+
+            # 3) Scalar parameters (int/float/str) => add widgets when no matching input
+            # Infer scalar type from default when available; otherwise fall back to heuristics by label
+            if default is not inspect._empty:
+                if isinstance(default, int):
+                    optional[lbl] = (INT_T, {"default": int(default), "tooltip": f"{lbl} (int)", "ovumWidgetOnly": True})
+                    continue
+                if isinstance(default, float):
+                    # Comfy has no FLOAT type in this module; fall back to INT with rounding
+                    optional[lbl] = (INT_T, {"default": int(default), "tooltip": f"{lbl} (number)", "ovumWidgetOnly": True})
+                    continue
+                if isinstance(default, str):
+                    optional[lbl] = (STRING_T, {"default": default, "tooltip": f"{lbl} (string)", "ovumWidgetOnly": True})
+                    continue
+
+            # Heuristic: create widget-only controls for common scalar labels even when no defaults are exposed
+            try:
+                _int_defaults = {"n": 1, "length": 1, "index": 0, "fromIndex": 0, "start": 0, "stop": 0, "step": 1}
+                _str_labels = {"propertyName", "key", "path", "methodName"}
+                _bool_labels = {"isSorted"}
+                if lbl in _bool_labels:
+                    optional[lbl] = (BOOLEAN_T, {"default": False, "tooltip": f"{lbl} (boolean)", "ovumWidgetOnly": True})
+                    continue
+                if lbl in _int_defaults:
+                    optional[lbl] = (INT_T, {"default": int(_int_defaults[lbl]), "tooltip": f"{lbl} (int)", "ovumWidgetOnly": True})
+                    continue
+                if lbl in _str_labels:
+                    optional[lbl] = (STRING_T, {"default": "", "tooltip": f"{lbl} (string)", "ovumWidgetOnly": True})
+                    continue
+            except Exception:
+                pass
+
+            # Varargs or unknown types: keep as ANYTYPE with tooltip
+            # Provide a gentle hint that JSON is allowed for arrays/objects
+            tip = f"{lbl}: JSON allowed for arrays/objects where applicable."
+            # If varargs, suggest a JSON array
+            if kind == inspect.Parameter.VAR_POSITIONAL:
+                tip += " For multiple values, provide a JSON array (e.g., [1,2,3])."
+            optional[lbl] = (ANYTYPE, {"tooltip": tip})
+
         return {"required": required, "optional": optional}
 
     cd["INPUT_TYPES"] = INPUT_TYPES

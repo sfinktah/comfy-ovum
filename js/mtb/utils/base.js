@@ -70,9 +70,9 @@ export const errorLogger = createLogger('🔥', 'red', 'error')
 export const successLogger = createLogger('✅', 'green')
 
 export const log = (...args) => {
-    if (window.MTB?.DEBUG) {
-        console.debug(...args)
-    }
+    // if (window.MTB?.DEBUG) {
+        console.debug("[ovum-mtb-base]", ...args)
+    // }
 }
 
 /**

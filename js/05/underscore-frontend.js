@@ -7,6 +7,7 @@ import {chainCallback} from "../01/utility.js";
 import {inspectUpstream} from "../common/ovum_helpers.js";
 import {Logger} from "../common/logger.js";
 import {$el} from "../common/ui.js";
+import {convertToWidget, fixWidgets} from "../mtb/utils/widgets.js";
 
 // Frontend enhancements for ovum/underscore nodes
 // Loosely based on image-list-dynamic.js
@@ -495,6 +496,25 @@ app.registerExtension({
                 if (typeof node.properties._usInfoVisible !== "boolean") node.properties._usInfoVisible = false;
                 node._usInfoVisible = !!node.properties._usInfoVisible;
 
+                // Convert any widget-only inputs (ovumWidgetOnly) into pure widgets (remove sockets)
+                try {
+                    if (Array.isArray(node.inputs) && Array.isArray(node.widgets)) {
+                        for (const input of node.inputs.slice()) {
+                            if (input?.options?.ovumWidgetOnly) {
+                                console.log("converting ovumWidgetOnly input", input);
+                                const w = node.widgets.find(w => w.name === input.name);
+                                if (w) {
+                                    try { convertToWidget(node, w); } catch(_) {}
+                                }
+                            }
+                        }
+                    }
+                } catch(_) {}
+
+                // Ensure widgets are hidden when inputs are connected (iteratee JSON widget override)
+                // DO NOT RUN FIXWIDGETS IS DOES NOT WORK< IT IS NOT THE RIGHT FUCKING FUNCTION
+                // DO NOT RUN: try { fixWidgets(node); } catch(_) {} << DO NOT RUN
+
                 const setupInfoPanel = async () => {
                     const titleMethod = methodNameFromTitle(node);
                     const baseMethod = titleMethod || methodNameFromNode(nodeData, nodeType);
@@ -582,7 +602,7 @@ app.registerExtension({
                         applyVis(node._usInfoVisible);
                         // Add an info button to the titlebar only if metadata exists and button not yet added
                         if (!node._usInfoTitleBtn && typeof node.addTitleButton === "function") {
-                            try { node._usInfoTitleBtn = node.addTitleButton({ text: "ℹ", xOffset: -8, iconOptions: { unicode: "ℹ" } }); } catch(_) {}
+                            try { node._usInfoTitleBtn = node.addTitleButton({ text: "🛈", xOffset: -8, iconOptions: { unicode: "🛈" } }); } catch(_) {}
                         }
                     // } catch(_) {}
                 };

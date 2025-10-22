@@ -59,6 +59,25 @@ export function showWidget(widget) {
     }
 }
 
+/**
+ * Disable widget (stays visible, but is grayed out)
+ *
+ * @param {import("../../../../web/types/litegraph.d.ts").IWidget} widget - target widget
+ */
+export function disableWidget(widget) {
+    widget.disabled = true;
+}
+
+/**
+ * Enable widget (opposite of disableWidget)
+ *
+ * @param {import("../../../../web/types/litegraph.d.ts").IWidget} widget - target widget
+ */
+export function enableWidget(widget) {
+    widget.disabled = false;
+}
+
+
 export function convertToWidget(node, widget) {
     showWidget(widget)
     const sz = node.size
@@ -116,7 +135,7 @@ export function fixWidgets(node) {
                     const w = node.widgets.find((w) => w.name === matching_widget.name)
                     if (w && w.type !== CONVERTED_TYPE) {
                         log(w)
-                        log(`hidding ${w.name}(${w.type}) from ${node.type}`)
+                        log(`hiding ${w.name}(${w.type}) from ${node.type}`)
                         log(node)
                         hideWidget(node, w)
                     } else {
