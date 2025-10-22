@@ -620,10 +620,10 @@ class underscore(object):
             for key, value in enumerate(self._clean.obj):
                 yield key, value
 
-    def each(self, func):
+    def each(self, iteratee):
         """
         iterates through each item of an object
-        :Param: func iterator function
+        :Param: iteratee iterator function
 
         underscore.js:
         Iterates over a list of elements, yielding each in turn to an iteratee
@@ -635,12 +635,12 @@ class underscore(object):
         """
         if callable(getattr(self._clean.obj, 'items', None)):
             for key, value in self.obj.items():
-                r = func(value, key, self.obj)
+                r = iteratee(value, key, self.obj)
                 if r == "breaker":
                     break
         else:
             for index, value in enumerate(self.obj):
-                r = func(value, index, self.obj)
+                r = iteratee(value, index, self.obj)
                 if r == "breaker":
                     break
         return self._wrap(self)
@@ -656,40 +656,40 @@ class underscore(object):
         return self._wrap(_extend_recursive(self.obj, src, func))
 
 
-    def mapObject(self, func):
+    def mapObject(self, iteratee):
         """ Return the results of applying the iterator to each element.
         """
-        func = _.iteratee(func)
+        iteratee = _.iteratee(iteratee)
         newlist = {}
         for k, v in self._clean.items():
             # if k not in values:  # use indexof to check identity
-            k2, v2 = func(v, k, self.obj)
+            k2, v2 = iteratee(v, k, self.obj)
             newlist[k2] = v2
 
         return self._wrap(newlist)
 
-    def map(self, func=None):
+    def map(self, iteratee=None):
         """ Return the results of applying the iterator to each element.
         """
-        func = _.iteratee(func)
+        iteratee = _.iteratee(iteratee)
 
         ns = self.Namespace()
         ns.results = []
 
         # noinspection PyShadowingBuiltins
         def by(value, index, list, *args):
-            ns.results.append(func(value, index, list))
+            ns.results.append(iteratee(value, index, list))
 
         _(self.obj).each(by)
         return self._wrap(ns.results)
     collect = map
 
-    def reduce(self, func, memo=None):
+    def reduce(self, iteratee, memo=None):
         """
         **Reduce** builds up a single result from a list of values,
         aka `inject`, or foldl
 
-        func takes arguments(memo, value, index) and returns memo
+        iteratee takes arguments(memo, value, index) and returns memo
         """
         if memo is None:
             memo = []
@@ -703,32 +703,34 @@ class underscore(object):
                 ns.memo = value
                 ns.initial = True
             else:
-                ns.memo = func(ns.memo, value, index)
+                ns.memo = iteratee(ns.memo, value, index)
 
         _(obj).each(by)
         return self._wrap(ns.memo)
     foldl = inject = reduce
 
-    def reduceRight(self, func):
+    def reduceRight(self, iteratee, memo=None):
         """ The right-associative version of reduce, also known as `foldr`.
         """
-        #foldr = lambda f, i: lambda s: reduce(f, s, i)
         x = self.obj[:]
         x.reverse()
-        return self._wrap(functools.reduce(func, x))
+        if memo is None:
+            return self._wrap(functools.reduce(iteratee, x))
+        else:
+            return self._wrap(functools.reduce(iteratee, x, memo))
     foldr = reduceRight
 
-    def find(self, func):
+    def find(self, predicate):
         """
         Return the first value which passes a truth test.
         Aliased as `detect`.
         """
-        func = _.iteratee(func)
+        predicate = _.iteratee(predicate)
         self.ftmp = None
 
         # noinspection PyShadowingBuiltins
         def test(value, index, list):
-            if func(value, index, list) is True:
+            if predicate(value, index, list) is True:
                 self.ftmp = value
                 return True
             return False
@@ -746,26 +748,26 @@ class underscore(object):
                 return self._wrap(key)
         return self._wrap(None)
 
-    def filterObject(self, func):
+    def filterObject(self, iteratee):
         """ Return all the items that pass a truth test
         """
-        func = _.iteratee(func)
+        iteratee = _.iteratee(iteratee)
 
         if self._clean.isDictlike():
             # https://stackoverflow.com/questions/2844516/how-to-filter-a-dictionary-according-to-an-arbitrary-condition-function
             # method a: {k: v for k, v in r.items() if not v['data'].startswith('False')}; 
             # method b: dict((k, v) for k, v in r.items() if not v['data'].startswith('False'))
-            return self._wrap(type(self.obj)((k, v) for k, v in self.items() if func(v, k, self._clean.obj)))
+            return self._wrap(type(self.obj)((k, v) for k, v in self.items() if iteratee(v, k, self._clean.obj)))
 
-        return self._wrap(type(self.obj)(v for k, v in self.items() if func(v, k, self._clean.obj)))
+        return self._wrap(type(self.obj)(v for k, v in self.items() if iteratee(v, k, self._clean.obj)))
 
 
-    def filter(self, func=None):
+    def filter(self, predicate=None):
         """ Return all the elements that pass a truth test.
         """
-        func = _.iteratee(func)
+        predicate = _.iteratee(predicate)
 
-        return self._wrap(list(filter(func, self.obj)))
+        return self._wrap(list(filter(predicate, self.obj)))
 
     select = filter
 
@@ -840,20 +842,20 @@ class underscore(object):
 
 
 
-    def reject(self, func):
+    def reject(self, predicate):
         """ Return all the elements for which a truth test fails.
         """
-        func = _.iteratee(func)
-        return self._wrap(list(filter(lambda val: not func(val), self.obj)))
+        predicate = _.iteratee(predicate)
+        return self._wrap(list(filter(lambda val: not predicate(val), self.obj)))
 
-    def all(self, func=None):
+    def all(self, predicate=None):
         """ Determine whether all of the elements match a truth test.
         """
-        func = _.iteratee(func)
+        predicate = _.iteratee(predicate)
         self.altmp = True
 
         def testEach(value, index, *args):
-            if func(value, index, *args) is False:
+            if predicate(value, index, *args) is False:
                 self.altmp = False
 
         self._clean.each(testEach)
@@ -892,16 +894,16 @@ class underscore(object):
         
 
 
-    def any(self, func=None):
+    def any(self, predicate=None):
         """
         Determine if at least one element in the object
         matches a truth test.
         """
-        func = _.iteratee(func)
+        predicate = _.iteratee(predicate)
         self.antmp = False
 
         def testEach(value, index, *args):
-            if func(value, index, *args):
+            if predicate(value, index, *args):
                 self.antmp = True
                 return "breaker"
             return None
@@ -910,17 +912,28 @@ class underscore(object):
         return self._wrap(self.antmp)
     some = any
 
-    def include(self, target):
+    def include(self, value, fromIndex=None):
         """
         Determine if a given value(s) is included in the
         array or object using `is`.
+        Supports optional fromIndex for sequence types.
         """
-        target = asList(target)
+        value = asList(value)
 
         if self._clean.isDict():
-            return self._wrap(_.any(target, lambda x, *a: x in self._clean.obj.values()))
+            return self._wrap(_.any(value, lambda x, *a: x in self._clean.obj.values()))
         else:
-            return self._wrap(_.any(target, lambda x, *a: x in self._clean.obj))
+            seq = self._clean.obj
+            if fromIndex is not None and isinstance(seq, (list, tuple, str)):
+                try:
+                    start = int(fromIndex)
+                except Exception:
+                    start = 0
+                n = len(seq)
+                if start < 0:
+                    start = max(0, n + start)
+                seq = seq[start:]
+            return self._wrap(_.any(value, lambda x, *a: x in seq))
     contains = include
 
     def invoke(self, method, *args):
@@ -939,7 +952,7 @@ class underscore(object):
                 return getattr(value, method)(*args)
         return self._wrap(self._clean.map(inv))
 
-    def pluck(self, key):
+    def pluck(self, propertyName):
         """
         Convenience version of a common use case of
         `map`: fetching a property/properties.
@@ -947,19 +960,19 @@ class underscore(object):
 
         # allow pluck to operate on numeric indexes to quickly
         # grab items from tuples and lists
-        if _.isInt(key):
-            return list(list(zip(*self.obj))[key])
+        if _.isInt(propertyName):
+            return list(list(zip(*self.obj))[propertyName])
 
-        if _.isList(key) or _.isTuple(key) and len(key) == 2:
+        if _.isList(propertyName) or _.isTuple(propertyName) and len(propertyName) == 2:
             r1 = []
             for x in self.obj:
                 r2 = []
-                for _key in key:
+                for _key in propertyName:
                     r2.append(_oget(x, _key, call=True))
                 r1.append(tuple(r2))
             return r1
 
-        return self._wrap([_oget(x, key, call=True) for x in self.obj])
+        return self._wrap([_oget(x, propertyName, call=True) for x in self.obj])
 
     def pluckAsObject(self, key):
         """
@@ -994,22 +1007,22 @@ class underscore(object):
 
         return self._wrap(results)
 
-    def where(self, attrs=None, first=False):
+    def where(self, properties=None, first=False):
         """
         Convenience version of a common use case of `filter`:
         selecting only objects
         containing specific `key:value` pairs.
         """
-        if attrs is None:
+        if properties is None:
             return None if first is True else []
 
         method = _.find if first else _.filter
 
         # noinspection PyUnusedLocal
         def by(val, *args):
-            for key, value in attrs.items():
+            for key, value in properties.items():
                 try:
-                    if attrs[key] != val[key]:
+                    if properties[key] != val[key]:
                         return False
                 except KeyError:
                     return False
@@ -1018,13 +1031,13 @@ class underscore(object):
 
         return self._wrap(method(self.obj, by))
 
-    def findWhere(self, attrs=None):
+    def findWhere(self, properties=None):
         """
         Convenience version of a common use case of `find`:
         getting the first object
         containing specific `key:value` pairs.
         """
-        return self._wrap(self._clean.where(attrs, True))
+        return self._wrap(self._clean.where(properties, True))
 
     def max(self, iteratee=None):
         """ Return the maximum element or (element-based computation).
@@ -1107,29 +1120,29 @@ class underscore(object):
         cloned.reverse()
         return self._wrap(cloned)
 
-    def sort(self, val=None):
+    def sort(self, iteratee=None):
         """ Sort the object's values by a criterion produced by an iterator.
         """
-        if val is not None:
-                return self._wrap(sorted(self.obj, key=val))
+        if iteratee is not None:
+                return self._wrap(sorted(self.obj, key=iteratee))
         else:
             return self._wrap(sorted(self.obj))
 
-    def sortBy(self, val=None):
+    def sortBy(self, iteratee=None):
         """ 
         Sort the object's values by a criterion produced by an iterator or
         attribute name.
         """
-        if val is not None:
-            keyfn = _.iteratee(val)
+        if iteratee is not None:
+            keyfn = _.iteratee(iteratee)
             return self._wrap(sorted(self.obj, key=lambda x: keyfn(x)))
         else:
             return self._wrap(sorted(self.obj))
 
-    def sortObjectBy(self, val=None, reverse=None):
+    def sortObjectBy(self, iteratee=None, reverse=None):
         """ Sort the object's values by a criterion produced by an iterator.
         """
-        keys = _.sortBy(self.obj, val)
+        keys = _.sortBy(self.obj, iteratee)
         if reverse:
             keys.reverse()
         o = {}
@@ -1162,30 +1175,30 @@ class underscore(object):
 
         return ns.result
 
-    def groupBy(self, val=None):
+    def groupBy(self, iteratee=None):
         """
         Groups the object's values by a criterion. Pass either a string
         attribute to group by, or a function that returns the criterion.
         """
 
-        if val is None:
-            val = lambda v, *a: v
+        if iteratee is None:
+            iteratee = lambda v, *a: v
 
         def by(result, key, value):
             if key not in result:
                 result[key] = []
             result[key].append(value)
 
-        res = self._group(self.obj, val, by)
+        res = self._group(self.obj, iteratee, by)
 
         return self._wrap(res)
 
-    def chunk(self, n):
+    def chunk(self, length):
         """
         https://stackoverflow.com/a/74120449/912236
         Batch data into tuples of length n. The last batch may be shorter.
         """
-        return self._wrap(asList(batched(self.obj, n)))
+        return self._wrap(asList(batched(self.obj, length)))
 
     def grouper(self, n, fillvalue=None):
         """
@@ -1196,54 +1209,54 @@ class underscore(object):
         # from six.moves import zip_longest # for both (uses the six compat library)
         return zip_longest(*[iter(self.obj)]*n, fillvalue=fillvalue)
 
-    def indexBy(self, val=None):
+    def indexBy(self, iteratee=None):
         """
         Indexes the object's values by a criterion, similar to
         `groupBy`, but for when you know that your index values will be unique.
         """
-        if val is None:
-            val = lambda *args: args[0]
+        if iteratee is None:
+            iteratee = lambda *args: args[0]
 
         def by(result, key, value):
             result[key] = value
 
-        res = self._group(self.obj, val, by)
+        res = self._group(self.obj, iteratee, by)
 
         return self._wrap(res)
 
-    def countBy(self, val=None):
+    def countBy(self, iteratee=None):
         """
         Counts instances of an object that group by a certain criterion. Pass
         either a string attribute to count by, or a function that returns the
         criterion.
         """
 
-        if val is None:
-            val = lambda v, *a: v
+        if iteratee is None:
+            iteratee = lambda v, *a: v
 
         def by(result, key, value):
             if key not in result:
                 result[key] = 0
             result[key] += 1
 
-        res = self._group(self.obj, val, by)
+        res = self._group(self.obj, iteratee, by)
 
         return self._wrap(res)
 
-    def sortedIndex(self, obj, iterator=lambda x: x):
+    def sortedIndex(self, value, iteratee=lambda x: x):
         """
         Use a comparator function to figure out the smallest index at which
         an object should be inserted so as to maintain order.
         Uses binary search.
         """
         array = self.obj
-        iterator = _.iteratee(iterator)
-        value = iterator(obj)
+        iteratee = _.iteratee(iteratee)
+        target = iteratee(value)
         low = 0
         high = len(array)
         while low < high:
             mid = (low + high) >> 1
-            if iterator(array[mid]) < value:
+            if iteratee(array[mid]) < target:
                 low = mid + 1
             else:
                 high = mid
@@ -1334,7 +1347,7 @@ class underscore(object):
         return self._wrap(res)
 
 
-    def rest(self, n=1):
+    def rest(self, index=1):
         """
         Returns everything but the first entry of the array. Aliased as `tail`.
         Especially useful on the arguments object.
@@ -1342,7 +1355,7 @@ class underscore(object):
         array from that index onward.
         The **guard** check allows it to work with `_.map`.
         """
-        return self._wrap(self.obj[n:])
+        return self._wrap(self.obj[index:])
     tail = rest
 
     def compact(self):
@@ -1350,7 +1363,7 @@ class underscore(object):
         """
         return self._wrap(self._clean.filter(lambda x: x))
 
-    def _flatten(self, input, shallow=False, output=None):
+    def _flatten(self, input, depth=None, output=None):
         ns = self.Namespace()
         ns.output = output
         if ns.output is None:
@@ -1358,10 +1371,20 @@ class underscore(object):
 
         def by(value, *args):
             if _isIterable(value):
-                if shallow:
-                    ns.output = ns.output + _values(value)
+                # Determine remaining depth
+                if depth is None:
+                    # Infinite depth: fully flatten
+                    self._flatten(_values(value), None, ns.output)
+                elif isinstance(depth, int):
+                    if depth <= 0:
+                        ns.output.append(value)
+                    elif depth == 1:
+                        ns.output = ns.output + _values(value)
+                    else:
+                        self._flatten(_values(value), depth - 1, ns.output)
                 else:
-                    self._flatten(_values(value), shallow, ns.output)
+                    # Fallback: treat like full flatten
+                    self._flatten(_values(value), None, ns.output)
             else:
                 ns.output.append(value)
 
@@ -1369,10 +1392,11 @@ class underscore(object):
 
         return ns.output
 
-    def flatten(self, shallow=None):
-        """ Return a completely flattened version of an array.
+    def flatten(self, depth=None):
+        """ Return a flattened version of an array.
+        depth=None for full flatten; depth=1 for shallow flatten; depth>1 for limited depth.
         """
-        return self._wrap(self._flatten(self.obj, shallow))
+        return self._wrap(self._flatten(self.obj, depth))
 
     def partition(self, predicate=None):
         """
@@ -1390,7 +1414,7 @@ class underscore(object):
 
         return self._wrap([pass_list, fail_list])
 
-    def uniq(self, isSorted=False, iterator=None):
+    def uniq(self, isSorted=False, iteratee=None):
         """
         Produce a duplicate-free version of the array. If the array has already
         been sorted, you have the option of using a faster algorithm.
@@ -1398,7 +1422,7 @@ class underscore(object):
         """
         #return self._wrap(_uniq(self.obj))
 
-        iterator = _.iteratee(iterator) if iterator is not None else None
+        iteratee = _.iteratee(iteratee) if iteratee is not None else None
 
         # Use value-based keys for hashable primitives and identity for unhashables (like list, dict).
         def _key(v):
@@ -1415,7 +1439,7 @@ class underscore(object):
             last_key_set = False
             last_key = None
             for idx, x in enumerate(self.obj):
-                computed = iterator(x, idx, self.obj) if iterator else x
+                computed = iteratee(x, idx, self.obj) if iteratee else x
                 k = _key(computed)
                 if not last_key_set or k != last_key:
                     out.append(x)
@@ -1428,7 +1452,7 @@ class underscore(object):
             return self._wrap(_uniq(self.obj))
         except TypeError: # unhashable type: 'list'
             for idx, x in enumerate(self.obj):
-                computed = iterator(x, idx, self.obj) if iterator else x
+                computed = iteratee(x, idx, self.obj) if iteratee else x
                 k = _key(computed)
                 if k not in seen:
                     seen.add(k)
@@ -1437,18 +1461,18 @@ class underscore(object):
 
     unique = uniq
 
-    def uniq_mutate(self, iterator=None):
+    def uniq_mutate(self, iteratee=None):
         """
         Produce a duplicate-free version of the array (inplace). 
         Note, due to way .remove works in python, the earlier duplicates 
         will be removed, not the later ones.
         """
         #return self._wrap(_uniq(self.obj))
-        iterator = _.iteratee(iterator) if iterator is not None else (lambda x, *a: x)
+        iteratee = _.iteratee(iteratee) if iteratee is not None else (lambda x, *a: x)
         seen = {}
         result = []
         for item in self.obj:
-             marker = iterator(item)
+             marker = iteratee(item)
              # in old Python versions:
              # if seen.has_key(marker)
              # but in new ones:
@@ -1457,15 +1481,15 @@ class underscore(object):
              result.append(item)
         return self._wrap(result)
 
-    def sum(self, iterator=None, initial=0):
+    def sum(self, iteratee=None, initial=0):
         """
         Add shit up -- todo
         """
 
         def by(memo, value, index):
             # lambda memo, value, index: memo + len(value), 0)
-            if callable(iterator):
-                return memo + iterator(value)
+            if callable(iteratee):
+                return memo + iteratee(value)
             return memo + value
 
         ret = _.reduce(_values(self.obj), by, initial)
@@ -1482,7 +1506,7 @@ class underscore(object):
         # return self._wrap(self._clean._toOriginal(setobj))
         args = list(args)
         args.insert(0, self.obj)
-        return self._wrap(_.uniq(self._flatten(args, True, [])))
+        return self._wrap(_.uniq(self._flatten(args, 1, [])))
 
     def intersection(self, *args):
         """
@@ -1594,7 +1618,7 @@ class underscore(object):
 
     fromPairs = zipObject = object
 
-    def indexOf(self, item, isSorted=False):
+    def indexOf(self, value, isSorted=False):
         """
         Return the position of the first occurrence of an
         item in an array, or -1 if the item is not included in the array.
@@ -1606,30 +1630,41 @@ class underscore(object):
             return self._wrap(-1)
 
         if isSorted:
-            i = _.sortedIndex(array, item)
-            ret = i if array[i] is item else -1
+            i = _.sortedIndex(array, value)
+            ret = i if array[i] is value else -1
         else:
             i = 0
             l = len(array)
             while i < l:
                 # array[i] is item -- fails under py3
-                if array[i] == item:
+                if array[i] == value:
                     return self._wrap(i)
                 i += 1
         return self._wrap(ret)
 
-    def lastIndexOf(self, item):
+    def lastIndexOf(self, value, fromIndex=None):
         """
         Return the position of the last occurrence of an
         item in an array, or -1 if the item is not included in the array.
+        Supports optional fromIndex (like Underscore.js).
         """
         array = self.obj
-        i = len(array) - 1
         if not (self._clean.isList() or self._clean.isTuple()):
             return self._wrap(-1)
-
+        n = len(array)
+        if fromIndex is None:
+            i = n - 1
+        else:
+            try:
+                i = int(fromIndex)
+            except Exception:
+                i = n - 1
+            if i < 0:
+                i = max(0, n + i)
+            if i >= n:
+                i = n - 1
         while i > -1:
-            if array[i] is item:
+            if array[i] == value:
                 return self._wrap(i)
             i -= 1
         return self._wrap(-1)
@@ -1977,7 +2012,7 @@ class underscore(object):
             if _oget(self.obj, key, 'nop6690') != 'nop6690':
                 ns.result[key] = _oget(self.obj, key)
 
-        _.each(self._flatten(args, True, []), by)
+        _.each(self._flatten(args, 1, []), by)
         return self._wrap(ns.result)
 
     def omit(self, *args):
@@ -2019,10 +2054,10 @@ class underscore(object):
         interceptor(self.obj)
         return self._wrap(self.obj)
 
-    def isEqual(self, match):
+    def isEqual(self, other):
         """ Perform a deep comparison to check if two objects are equal.
         """
-        return self._wrap(self.obj == match)
+        return self._wrap(self.obj == other)
 
     def isEmpty(self):
         """
@@ -2238,10 +2273,10 @@ class underscore(object):
         """
         return self._wrap(callable(getattr(self.obj, key, None)))
 
-    def get(self, key, _default=None):
+    def get(self, key, default=None):
         if callable(getattr(self.obj, 'get', None)):
-            return self._wrap(self.obj.get(key, _default))
-        return self._wrap(getattr(self.obj, key, _default))
+            return self._wrap(self.obj.get(key, default))
+        return self._wrap(getattr(self.obj, key, default))
 
     def getmanyattr(self, *args):
         """
