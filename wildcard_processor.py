@@ -76,10 +76,11 @@ def find_and_replace_wildcards(prompt, offset_seed, debug=False):
                     offset = random.randint(0, 1000000)
             selected_lines = []
             with open(file_path, 'r', encoding='utf-8') as file:
-                file_lines = file.readlines()
+                # filter out comment lines (starting with #) and empty lines
+                file_lines = [ln.strip() for ln in file.readlines() if ln.strip() and not ln.lstrip().startswith('#')]
                 num_lines = len(file_lines)
 
-                # Check if the file is empty
+                # Check if the file has no usable lines
                 if num_lines == 0:
                     error_msg = f"[ERROR: file {wildcard_file}.txt is empty in {search_path}]"
                     new_prompt += error_msg
@@ -94,7 +95,7 @@ def find_and_replace_wildcards(prompt, offset_seed, debug=False):
                         found_matching_line = False
                         for j in range(num_lines):
                             line_number = (start_idx + j) % num_lines
-                            line = file_lines[line_number].strip()
+                            line = file_lines[line_number]
                             if any(re.search(r'\b' + re.escape(word) + r'\b', line, re.IGNORECASE) for word in words_to_find):
                                 selected_lines.append(line)
                                 found_matching_line = True
@@ -108,7 +109,7 @@ def find_and_replace_wildcards(prompt, offset_seed, debug=False):
                     start_idx = offset % num_lines
                     for i in range(lines_to_insert):
                         line_number = (start_idx + i) % num_lines
-                        line = file_lines[line_number].strip()
+                        line = file_lines[line_number]
                         selected_lines.append(line)
             if len(selected_lines) == 1:
                 replacement_text = selected_lines[0]
@@ -136,22 +137,151 @@ def find_and_replace_wildcards(prompt, offset_seed, debug=False):
     return new_prompt
 
 def process_wildcard_syntax(text, seed):
-    # Use braceexpand to perform brace expansion.
-    # Steps:
-    # 1) Replace existing commas with an inert Unicode comma.
-    # 2) Replace '|' with ',' so braceexpand treats them as options.
-    # 3) Run brace expansion to get all combinations.
-    # 4) Restore original commas in results.
-    # 5) Deterministically choose one expansion using the provided seed.
+    # We keep braceexpand as the core expander, but enrich syntax pre-processing
+    # to support weighted choices and multi-select with quantifiers.
     random.seed(seed)
 
-    # Fast path: no braces present
+    # Fast path
     if '{' not in text or '}' not in text:
         return text
 
+    def split_top_level_pipes(s: str):
+        parts = []
+        depth = 0
+        buf = []
+        i = 0
+        while i < len(s):
+            c = s[i]
+            if c == '{':
+                depth += 1
+                buf.append(c)
+            elif c == '}':
+                depth = max(0, depth - 1)
+                buf.append(c)
+            elif c == '|' and depth == 0:
+                parts.append(''.join(buf))
+                buf = []
+            else:
+                buf.append(c)
+            i += 1
+        parts.append(''.join(buf))
+        return parts
+
+    def split_top_level_dollars(s: str):
+        # split on '$$' tokens only at top-level
+        parts = []
+        depth = 0
+        i = 0
+        last = 0
+        while i < len(s):
+            c = s[i]
+            if c == '{':
+                depth += 1
+                i += 1
+                continue
+            if c == '}':
+                depth = max(0, depth - 1)
+                i += 1
+                continue
+            if depth == 0 and s.startswith('$$', i):
+                parts.append(s[last:i])
+                i += 2
+                last = i
+                continue
+            i += 1
+        parts.append(s[last:])
+        return parts
+
+    def rewrite_weighted(content: str) -> str:
+        parts = split_top_level_pipes(content)
+        changed = False
+        new_parts = []
+        for p in parts:
+            m = re.match(r"\s*(\d+)\s*::(.*)\Z", p, re.S)
+            if m:
+                count = int(m.group(1))
+                option = m.group(2)
+                new_parts.extend([option] * max(0, count))
+                changed = True
+            else:
+                new_parts.append(p)
+        return '|'.join(new_parts) if changed else content
+
+    def process_multiselect(content: str):
+        # pattern: countSpec $$ sep $$ options
+        if '$$' not in content:
+            return None
+        parts = split_top_level_dollars(content)
+        if len(parts) < 3:
+            return None
+        count_spec = parts[0].strip()
+        sep = parts[1]
+        options_str = '$$'.join(parts[2:])
+
+        # parse count
+        m_range = re.match(r"\s*(\d+)\s*-\s*(\d+)\s*\Z", count_spec)
+        m_single = re.match(r"\s*(\d+)\s*\Z", count_spec)
+        if m_range:
+            lo = int(m_range.group(1))
+            hi = int(m_range.group(2))
+            if hi < lo:
+                lo, hi = hi, lo
+            k = random.randint(lo, hi)
+        elif m_single:
+            k = int(m_single.group(1))
+        else:
+            return None
+
+        # build options with quantifiers N#token
+        raw_opts = split_top_level_pipes(options_str)
+        options = []
+        for opt in raw_opts:
+            q = re.match(r"\s*(\d+)\s*#(.*)\Z", opt, re.S)
+            if q:
+                n = int(q.group(1))
+                tok = q.group(2)
+                options.extend([tok] * max(0, n))
+            else:
+                options.append(opt)
+
+        if not options:
+            return ''
+
+        take = min(k, len(options))
+        # unique selection without replacement
+        chosen = random.sample(options, take) if take > 0 else []
+        return sep.join(chosen)
+
+    # Process innermost braces for custom syntaxes
+    while True:
+        stack = []
+        pairs = []
+        for idx, ch in enumerate(text):
+            if ch == '{':
+                stack.append(idx)
+            elif ch == '}' and stack:
+                start = stack.pop()
+                pairs.append((start, idx))
+        if not pairs:
+            break
+        changed_any = False
+        for start, end in reversed(pairs):  # process right-to-left (innermost first)
+            inner = text[start + 1:end]
+            repl = process_multiselect(inner)
+            if repl is not None:
+                text = text[:start] + repl + text[end + 1:]
+                changed_any = True
+                continue
+            rewritten = rewrite_weighted(inner)
+            if rewritten != inner:
+                text = text[:start] + '{' + rewritten + '}' + text[end + 1:]
+                changed_any = True
+        if not changed_any:
+            break
+
+    # Now run braceexpand across the whole string using '|' as alternation
     inert_comma = '，'  # fullwidth comma as inert temporary character
     safe_text = text.replace(',', inert_comma).replace('|', ',')
-
     expansions = list(braceexpand(safe_text))
     expansions = [e.replace(inert_comma, ',') for e in expansions]
     if not expansions:
@@ -249,8 +379,10 @@ def search_and_replace(text, extra_pnginfo, prompt):
     return text
 
 def strip_all_comments(text):
-    # (?s) enables dotall mode, which allows . to match newlines in pattern "<!--.*?-->"
+    # Remove HTML-style comments
     text = re.sub(r'(?s)<!--.*?-->', '', text)
+    # Remove full lines starting with # (comments), respecting indentation
+    text = re.sub(r'(?m)^\s*#.*$', '', text)
     return text
 
 def strip_all_syntax(text):
@@ -347,6 +479,8 @@ class OvumWildcardProcessor:
             prompt_ = {}
         if extra_pnginfo is None:
             extra_pnginfo = {}
+        # Strip comment lines before any processing so they are ignored everywhere
+        prompt = strip_all_comments(prompt)
         prompt = search_and_replace(prompt, extra_pnginfo, prompt_)
         prompt = process_wildcard_syntax(prompt, seed)
         prompt = process_random_syntax(prompt, seed)
