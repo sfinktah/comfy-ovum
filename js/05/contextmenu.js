@@ -276,6 +276,81 @@ const removePassthruFromOutputs = (sourceNode) => {
     }
 };
 
+/**
+ * Clone a subgraph node to the right of the original and transfer all outgoing links
+ * from the original node to the clone ("steal" the connections).
+ * Only intended for subgraph nodes.
+ * @param {LGraphNode} sourceNode
+ */
+const cloneSubgraphNodeWithConnections = (sourceNode) => {
+    if (!sourceNode) return;
+    // Guard: only operate on subgraph nodes
+    // const isSubgraph = typeof sourceNode.isSubgraphNode === 'function' ? sourceNode.isSubgraphNode() : !!sourceNode.subgraph;
+    // if (!isSubgraph) return;
+
+    const graph = app.graph;
+
+    // 1) Create a clone of the node (prefer native clone if available)
+    let clone = null;
+    try {
+        if (typeof sourceNode.clone === 'function') {
+            clone = sourceNode.clone();
+        }
+    } catch (_) {}
+    if (!clone) {
+        try {
+            // Fallback: create new node of same type (may not copy internal subgraph content)
+            clone = LiteGraph.createNode(sourceNode.type);
+        } catch (_) {}
+    }
+    if (!clone) return;
+
+    // 2) Position the clone immediately to the right of the source
+    const offset = 40;
+    const x = Math.round((sourceNode.pos?.[0] ?? 0) + (sourceNode.size?.[0] ?? 0) + offset);
+    const y = Math.round(sourceNode.pos?.[1] ?? 0);
+    try { clone.pos = [x, y]; } catch (_) {}
+
+    // 3) Give the clone a unique title derived from the original
+    try {
+        const base = sourceNode.title || sourceNode.type || 'Subgraph';
+        clone.title = LinkUtils.uniqueTitle(graph, base);
+    } catch (_) {}
+
+    // 4) Add the clone to the graph
+    try { graph.add(clone); } catch (_) {
+        try { graph.addNode(clone); } catch (_) { return; }
+    }
+
+    // 5) Transfer all outgoing links from source to clone
+    const linksMap = graph.links ?? {};
+    const outputs = sourceNode.outputs || [];
+    for (let outIdx = 0; outIdx < outputs.length; outIdx++) {
+        const outLinks = outputs[outIdx]?.links;
+        if (!Array.isArray(outLinks) || outLinks.length === 0) continue;
+        for (const linkId of [...outLinks]) { // clone array because we will mutate
+            const link = linksMap[linkId] || GraphHelpers.getLink(graph, linkId);
+            if (!link) continue;
+            const targetNode = GraphHelpers.getNodeById(graph, link.target_id);
+            const targetSlot = link.target_slot ?? 0;
+
+            // Remove original link from source
+            try { GraphHelpers.removeLink(graph, linkId); } catch (_) {}
+
+            // Connect clone to the former target
+            try { clone.connect(outIdx, targetNode, targetSlot); } catch (_) {}
+        }
+    }
+
+    // 6) Select the clone for user feedback
+    try {
+        app.canvas.selectNode(clone, false);
+        app.canvas.fitViewToSelectionAnimated?.();
+    } catch (_) {}
+};
+
+window.cloneSubgraphNodeWithConnections = cloneSubgraphNodeWithConnections;
+
 
 app.registerExtension({
     name: "ovum.contextmenu",
@@ -321,6 +396,21 @@ app.registerExtension({
                 }
             });
         }
+
+        // Add "Clone with connections" to subgraph nodes
+        // which doesn't work, because... well, i guess they're not nodes (or not normal nodes).. and why would it work?
+        // even though they look like normal nodes... they may not be registered in the normal fashion.
+        chainCallback(nodeType.prototype, "getExtraMenuOptions", function (canvas, options) {
+            try {
+                // const isSubgraph = typeof this.isSubgraphNode === 'function' ? this.isSubgraphNode() : !!this.subgraph;
+                if (true || isSubgraph) {
+                    options.push({
+                        content: "🥚 Clone with connections",
+                        callback: () => cloneSubgraphNodeWithConnections(this)
+                    });
+                }
+            } catch (_) {}
+        });
         // if (nodeData.input && nodeData.input.required) {
         //     addContextMenuHandler(nodeType, function (canvas, options) {
         //         options.push(
