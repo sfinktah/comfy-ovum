@@ -5,7 +5,7 @@ import json
 import os
 import random
 import re
-from braceexpand import braceexpand
+from braceexpand import braceexpand, UnbalancedBracesError
 
 
 def find_and_replace_wildcards(prompt, offset_seed, debug=False):
@@ -208,15 +208,21 @@ def process_wildcard_syntax(text, seed):
         return '|'.join(new_parts) if changed else content
 
     def process_multiselect(content: str):
-        # pattern: countSpec $$ sep $$ options
+        # pattern A: countSpec $$ sep $$ options
+        # pattern B: countSpec $$ options (default separator = single space)
         if '$$' not in content:
             return None
         parts = split_top_level_dollars(content)
-        if len(parts) < 3:
+        if len(parts) < 2:
             return None
         count_spec = parts[0].strip()
-        sep = parts[1]
-        options_str = '$$'.join(parts[2:])
+        if len(parts) >= 3:
+            sep = parts[1]
+            options_str = '$$'.join(parts[2:])
+        else:
+            # two-part variant: default separator is a single space
+            sep = ' '
+            options_str = parts[1]
 
         # parse count
         m_range = re.match(r"\s*(\d+)\s*-\s*(\d+)\s*\Z", count_spec)
@@ -482,7 +488,7 @@ class OvumWildcardProcessor:
         # Strip comment lines before any processing so they are ignored everywhere
         prompt = strip_all_comments(prompt)
         prompt = search_and_replace(prompt, extra_pnginfo, prompt_)
-        prompt = process_wildcard_syntax(prompt, seed)
+        # prompt = process_wildcard_syntax(prompt, seed)
         prompt = process_random_syntax(prompt, seed)
         new_prompt = find_and_replace_wildcards(prompt, seed)
         # loop to pick up wildcards that are in wildcard files
@@ -490,12 +496,18 @@ class OvumWildcardProcessor:
             for i in range(10):
                 prompt = new_prompt
                 prompt = search_and_replace(prompt, extra_pnginfo, prompt_)
-                prompt = process_wildcard_syntax(prompt, seed)
+                # prompt = process_wildcard_syntax(prompt, seed)
                 prompt = process_random_syntax(prompt, seed)
                 new_prompt = find_and_replace_wildcards(prompt, seed)
                 if new_prompt == prompt:
                     break
         new_prompt = strip_all_comments(new_prompt)
+        try:
+            new_prompt = process_wildcard_syntax(new_prompt, seed)
+        except UnbalancedBracesError as e:
+            error = f"[ERROR: unbalanced braces in prompt: {e}]"
+            new_prompt = error
+            print("[ovum-wildcard-processor] {}".format(error))
         return (new_prompt, )
 
 

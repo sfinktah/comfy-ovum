@@ -73,7 +73,7 @@ function methodNameFromNode(nodeData, nodeType) {
     // If name contains separators or spaces, camelize; otherwise just lower the first letter
     const hasSep = /[\s_-]/.test(nameFromNode);
     let derived = hasSep ? toCamelLower(nameFromNode) : lowerFirst(nameFromNode);
-    try { Logger.log({ class: "ovum.underscore.ui", method: "methodNameFromNode", severity: "debug" }, "derived from node name", { nameFromNode, hasSep, derived }); } catch(_) {}
+    // try { Logger.log({ class: "ovum.underscore.ui", method: "methodNameFromNode", severity: "debug" }, "derived from node name", { nameFromNode, hasSep, derived }); } catch(_) {}
 
     // As a fallback, try deriving from the class/constructor name
     try {
@@ -176,7 +176,6 @@ function resolveMethodFromMethods(methods, nodeData, nodeType, initial) {
         // Pick highest score, tie-break by longest key and then alphabetical
         candidates.sort((a,b) => (b.score - a.score) || (b.k.length - a.k.length) || (a.k.localeCompare(b.k)));
         const best = candidates[0];
-        try { Logger.log({ class: "ovum.underscore.ui", method: "resolveMethodFromMethods", severity: "debug" }, "resolved", { initial, display, classTail, best }); } catch(_) {}
         return best?.k || initial;
     } catch(_) {
         return initial;
@@ -500,6 +499,7 @@ app.registerExtension({
                 try {
                     if (Array.isArray(node.inputs) && Array.isArray(node.widgets)) {
                         for (const input of node.inputs.slice()) {
+                            // would this even be visible?
                             if (input?.options?.ovumWidgetOnly) {
                                 console.log("converting ovumWidgetOnly input", input);
                                 const w = node.widgets.find(w => w.name === input.name);
@@ -520,14 +520,7 @@ app.registerExtension({
                     const baseMethod = titleMethod || methodNameFromNode(nodeData, nodeType);
                     const methods = await getUnderscoreMethods();
                     const resolvedMethod = resolveMethodFromMethods(methods, nodeData, nodeType, baseMethod);
-                    try { Logger.log({ class: "ovum.underscore.ui", method: "setupInfoPanel", severity: "debug" }, "methods resolved", { titleMethod, baseMethod, resolvedMethod }); } catch(_) {}
                     const method = resolvedMethod;
-                    Logger.log({
-                            class: "ovum.underscore.ui",
-                            method: "setupInfoPanel",
-                            severity: "debug",
-                        }, `ovum-underscore: setting up info panel for ${method}`
-                    );
                     // try {
                         // Remove previous widget if any
                         if (node._usInfoWidget) {
@@ -571,15 +564,17 @@ app.registerExtension({
                         node._usInfoWidget = w;
                         // Helper to request an immediate node resize based on current widget heights
                         const _requestUsInfoResize = () => {
-                            try {
+                            // try {
                                 if (typeof node.computeSize === "function") {
                                     const sz = node.computeSize(node.size);
-                                    if (Array.isArray(sz)) {
-                                        if (typeof node.setSize === "function") node.setSize(sz);
-                                        else node.size = sz;
-                                    }
+                                    Logger.log({
+                                        class: "ovum.underscore.ui",
+                                        method: "_requestUsInfoResize",
+                                        severity: "debug",
+                                    }, `node.size: ${this.size.join("x")} ${node.size.join("x")} computeSize: ${sz.join("x")}`);
+                                    node.setSize([Math.max(sz[0], node.size[0]), Math.max(sz[1], node.size[1])])
                                 }
-                            } catch(_) {}
+                            // } catch(_) {}
                             try { node.setDirtyCanvas?.(true, true); } catch(_) {}
                         };
                         // Visibility control
@@ -595,11 +590,13 @@ app.registerExtension({
                                     }
                                 }
                             } catch(_) {}
-                            // Defer resize to next tick to allow DOM to layout
-                            setTimeout(_requestUsInfoResize, 0);
+                            node.setDirtyCanvas(true, true);
+                            // Defer resize to next tick to allow DOM to layout -- sounds silly to me -- sfink
+                            // setTimeout(_requestUsInfoResize, 0);
                         };
                         node._applyUsInfoVisibility = applyVis;
-                        applyVis(node._usInfoVisible);
+                        // No need to call this just because it's there.
+                        // applyVis(node._usInfoVisible);
                         // Add an info button to the titlebar only if metadata exists and button not yet added
                         if (!node._usInfoTitleBtn && typeof node.addTitleButton === "function") {
                             try { node._usInfoTitleBtn = node.addTitleButton({ text: "🛈", xOffset: -8, iconOptions: { unicode: "🛈" } }); } catch(_) {}
