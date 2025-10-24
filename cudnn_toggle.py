@@ -40,14 +40,14 @@ class CUDNNToggleOvum:
         torch.backends.cudnn.enabled = enable_cudnn
         torch.backends.cudnn.benchmark = enable_cudnn
         if enable_cudnn != prev_cudnn:
-            print(f"[OVUM_CDDN_TOGGLE] torch.backends.cudnn.enabled set to {enable_cudnn} (was {prev_cudnn})")
+            print(f"[OVUM_CUDDN_TOGGLE] torch.backends.cudnn.enabled set to {enable_cudnn} (was {prev_cudnn})")
         else:
-            print(f"[OVUM_CDDN_TOGGLE] torch.backends.cudnn.enabled still set to {enable_cudnn}")
+            print(f"[OVUM_CUDDN_TOGGLE] torch.backends.cudnn.enabled still set to {enable_cudnn}")
 
         if enable_cudnn != prev_benchmark:
-            print(f"[OVUM_CDDN_TOGGLE] torch.backends.cudnn.benchmark set to {enable_cudnn} (was {prev_benchmark})")
+            print(f"[OVUM_CUDDN_TOGGLE] torch.backends.cudnn.benchmark set to {enable_cudnn} (was {prev_benchmark})")
         else:
-            print(f"[OVUM_CDDN_TOGGLE] torch.backends.cudnn.benchmark still set to {enable_cudnn}")
+            print(f"[OVUM_CUDDN_TOGGLE] torch.backends.cudnn.benchmark still set to {enable_cudnn}")
 
         return_tuple = (any_input, prev_cudnn)
         return return_tuple
