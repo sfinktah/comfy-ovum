@@ -7,7 +7,7 @@ import {uniq} from "../01/graphHelpers.js";
 // Define global tips array (can be overridden elsewhere before this file runs)
 if (!Array.isArray(window.OVUM_TIPS)) {
     window.OVUM_TIPS = [
-        "Hold Shift while clicking on a \"RUN\" heading to delete that run.",
+        "Hold Control while clicking on a \"RUN\" heading to delete that run.",
         "Double-click a \"RUN\" heading to edit/insert a note for that run.",
         "Green/red text indicates cuDNN has been enabled/disabled by an Ovum cuDNN node.",
         "Timing data can be retrieved via the <code>/ovum/get-timing</code> endpoint.",
