@@ -5,7 +5,7 @@ import {debounce} from "../01/utility.js";
 /**
  * Local type that extends ComfyNode with ComboMirror-specific helpers without modifying global d.ts.
  * @typedef {import("../../typings/ComfyNode").ComfyNode & {
- *   _setValues?: (values: any[]) => void,
+ *   _setValues?: (values: any[], value?: string) => void,
  *   _refreshValuesFromTarget?: () => void,
  *   _debouncedRefresh?: () => void,
  * }} ComboMirrorNode
@@ -60,6 +60,7 @@ app.registerExtension({
             self.title = "ComboMirror";
 
             // Ensure I/O: output[0] value (COMBO), output[1] strings (LIST); input[0] choice_index (INT)
+            // Going to leave this in here (though they are not necessary) just because its handy for the AI to have the names of everything handy
             if (!self.outputs || self.outputs.length === 0) {
                 self.addOutput("value", "COMBO");
                 self.addOutput("strings", "LIST");
@@ -77,11 +78,55 @@ app.registerExtension({
             self.size = self.computeSize();
             self._debouncedRefresh = debounce(self._refreshValuesFromTarget.bind(self), 500);
 
-            // Initial enable/disable state for the combo based on choice_index connection
-            const idxSlot = self.findInputSlot ? self.findInputSlot("choice_index") : 0;
-            const hasIdxLink = self.inputs?.[idxSlot]?.link != null;
+            // Initial enable/disable state for the combo based on choice_index connection and widget value
+            const indexSlot = self.findInputSlot ? self.findInputSlot("choice_index") : 0;
+            const hasIndexLink = self.inputs?.[indexSlot]?.link != null;
             const w = ensureComboWidget(self);
-            if (w) w.disabled = !!hasIdxLink;
+            const indexWidget = self.widgets?.find(wi => wi?.name === "choice_index");
+            const forcedByValue = Number(indexWidget?.value) > -1;
+            // if (w) w.disabled = hasIndexLink || forcedByValue;
+            if (w) w.disabled = hasIndexLink;
+
+            // Add callback so changing choice_index value disables/enables the combo widget
+            if (indexWidget) {
+                const prevCb = indexWidget.callback;
+                indexWidget.callback = function (...args) {
+                    try {
+                        const disableByValue = Number(indexWidget.value) > -1;
+                        if (w) {
+                            const linkActive = (self.inputs?.[indexSlot]?.link != null);
+                            // w.disabled = disableByValue || linkActive;
+                            w.disabled = linkActive;
+                        }
+
+                        // Also set w.value to combo_options_str[widgetIndex.value]
+                        const index = Number(indexWidget.value);
+                        if (w && Number.isInteger(index) && index > -1) {
+                            const carrierW = self.widgets?.find(wi => wi?.name === "combo_options_str");
+                            if (typeof carrierW?.value === "string") {
+                                const options = carrierW.value
+                                    .split("\n")
+                                    .map(s => s.trim())
+                                    .filter(Boolean);
+                                if (index < options.length) {
+                                    w.value = options[index];
+                                }
+                                else {
+                                    w.value = '';
+                                }
+                            }
+                        }
+
+                        self.setDirtyCanvas(true, true);
+                    } catch (e) {
+                        console.warn("[ComboMirror] choice_index callback error", e);
+                    } finally {
+                        if (typeof prevCb === "function") {
+                            try { prevCb.apply(this, args); } catch (e2) { console.warn("[ComboMirror] prior choice_index callback error", e2); }
+                        }
+                    }
+                };
+            }
         });
 
         // Minimal onConfigure: ensure widget exists and apply persisted options
@@ -89,8 +134,10 @@ app.registerExtension({
             function (o) {
             const self = /** @type {ComboMirrorNode} */ (this);
             ensureComboWidget(self);
-            if (typeof self.properties?.combo_options_str === 'string') {
-                const opts = self.properties.combo_options_str
+            // Is this superfluous, could we just call _refreshValuesFromTarget?
+            const carrierW = self.widgets?.find(w => w?.name === "combo_options_str");
+            if (carrierW && typeof carrierW.value === 'string') {
+                const opts = carrierW.value
                     .split('\n')
                     .map(s => s.trim())
                     .filter(s => s.length > 0);
@@ -107,10 +154,13 @@ app.registerExtension({
 
             // Handle choice_index input connection to enable/disable combo widget
             if (type === LiteGraph.INPUT) {
-                const choiceIdxSlot = self.findInputSlot ? self.findInputSlot("choice_index") : 0;
-                if (slotIndex === choiceIdxSlot) {
+                const choiceIndexSlot = self.findInputSlot ? self.findInputSlot("choice_index") : 0;
+                if (slotIndex === choiceIndexSlot) {
                     const w = ensureComboWidget(self);
-                    w.disabled = !!(self.inputs?.[choiceIdxSlot]?.link != null);
+                    const indexW = self.widgets?.find(wi => wi?.name === "choice_index");
+                    const forcedByValue = Number(indexW?.value) > -1;
+                    // w.disabled = isConnected || forcedByValue;
+                    w.disabled = isConnected;
                     self.setDirtyCanvas(true, true);
                     return;
                 }
@@ -119,15 +169,6 @@ app.registerExtension({
             // Only respond to output[0] link changes for mirroring options
             if (type !== LiteGraph.OUTPUT || slotIndex !== 0) {
                 return;
-            }
-            if (!self.properties) {
-                Logger.log({
-                        class: 'ComboMirrorOvum',
-                        method: 'onConnectionsChange',
-                        severity: 'info',
-                    },
-                    'this.properties is not yet available for ComboMirror node'
-                );
             }
             self._debouncedRefresh();
         });
@@ -138,23 +179,12 @@ app.registerExtension({
             try {
                 const out = self.outputs?.[0];
                 const linkIds = out?.links;
-                // If no links at all, fall back to persisted options
+                // If no links at all, fall back to options stored in the 'combo_options_str' widget
                 if (!Array.isArray(linkIds) || linkIds.length === 0) {
-                    // Clear any previous highlight
-                    try {
-                        const all = out?.links || [];
-                        for (const id of all) {
-                            const l = self.graph?.links?.[id];
-                            if (l && l.color) delete l.color;
-                        }
-                    } catch (_) {}
-
-                    let persisted;
-                    if (typeof self.properties?.combo_options_str === 'string') {
-                        persisted = self.properties.combo_options_str.split('\n').map(s => s.trim()).filter(Boolean);
-                    } else {
-                        persisted = [];
-                    }
+                    const carrierW = self.widgets?.find(w => w?.name === "combo_options_str");
+                    const persisted = typeof carrierW?.value === 'string'
+                        ? carrierW.value.split('\n').map(s => s.trim()).filter(Boolean)
+                        : [];
                     return self._setValues(persisted);
                 }
 
@@ -169,17 +199,20 @@ app.registerExtension({
                     }
 
                     // ---
-                    const targetSlot = link.target_slot ?? 0;
+                    const targetSlot = link.target_slot;
+                    if (link.target_slot == null) {
+                        Logger.log({
+                            class: 'ComboMirrorOvum',
+                            method: '_refreshValuesFromTarget',
+                            nodeName: `${self.title}#${self.id}`,
+                            severity: 'trace',
+                        }, "link.target_slot is null");
+                        continue;
+                    }
 
                     // Prefer the widget attached to the input slot
                     let tiName = target.inputs?.[targetSlot]?.widget?.name;
                     // let tiName = target.inputs?.[targetSlot]?.name;
-                    Logger.log({
-                        class: 'ComboMirrorOvum',
-                        method: '_refreshValuesFromTarget',
-                        nodeName: `${self.title}#${self.id}`,
-                        severity: 'trace',
-                    }, "widget name", tiName);
                     // Fallback: try to find by name in target.widgets
                     // if (!ti) {
                     //     const inputName = target.inputs?.[targetSlot]?.name;
@@ -192,6 +225,13 @@ app.registerExtension({
                         return ctorName === 'ComboWidget' && w?.name === tiName;
                     });
 
+                    Logger.log({
+                        class: 'ComboMirrorOvum',
+                        method: '_refreshValuesFromTarget',
+                        nodeName: `${self.title}#${self.id}`,
+                        severity: 'trace',
+                    }, "tiName", tiName, "targetSlot", targetSlot, "tw", tw);
+
                     if (tw) {
                         let values = [];
                         if (Array.isArray(tw.options)) {
@@ -200,71 +240,76 @@ app.registerExtension({
                             values = tw.options.values;
                         } else if (Array.isArray(tw.values)) {
                             values = tw.values;
+                            Logger.log({
+                                class: 'ComboMirrorOvum',
+                                method: '_refreshValuesFromTarget',
+                                nodeName: `${self.title}#${self.id}`,
+                                severity: 'warn',
+                            }, "not expecting condition 209 to be hit; tw.values is an array, but tw.options is not an array", tw.options);
                         }
 
-                        // Highlight the link that provided these options (this does not work)
-                        // TODO: remove if you can't find a fix
-                        try {
-                            const out = self.outputs?.[0];
-                            const all = out?.links || [];
-                            for (const id of all) {
-                                const l = self.graph?.links?.[id];
-                                if (l) {
-                                    if (id === linkId) {
-                                        l.color = "#ffcc00"; // amber highlight
-                                    } else {
-                                        // clear highlight on others
-                                        if (l.color) delete l.color;
-                                    }
-                                }
-                            }
-                            self.setDirtyCanvas(true, true);
-                        } catch (_) {}
+                        const value = tw.value;
 
-                        return self._setValues(values);
+                        Logger.log({
+                            class: 'ComboMirrorOvum',
+                            method: '_refreshValuesFromTarget',
+                            nodeName: `${self.title}#${self.id}`,
+                            severity: 'trace',
+                        }, "values", values, "value", value);
+
+                        return self._setValues(values, value);
                     }
                 }
 
-                // No connected targets with ComboWidget; use persisted options
-                const persisted = typeof self.properties?.combo_options_str === 'string'
-                    ? self.properties.combo_options_str.split('\n').map(s => s.trim()).filter(Boolean)
+                // No connected targets with ComboWidget; use options from the 'combo_options_str' widget
+                const carrierW = self.widgets?.find(w => w?.name === "combo_options_str");
+                const persisted = typeof carrierW?.value === 'string'
+                    ? carrierW.value.split('\n').map(s => s.trim()).filter(Boolean)
                     : [];
                 return self._setValues(persisted);
             } catch (e) {
                 console.warn("[ComboMirror] failed to refresh options", e);
-                const persisted = typeof self.properties?.combo_options_str === 'string'
-                    ? self.properties.combo_options_str.split('\n').map(s => s.trim()).filter(Boolean)
+                const carrierW = self.widgets?.find(w => w?.name === "combo_options_str");
+                const persisted = typeof carrierW?.value === 'string'
+                    ? carrierW.value.split('\n').map(s => s.trim()).filter(Boolean)
                     : [];
                 return self._setValues(persisted);
             }
         };
 
-        nodeType.prototype._setValues =
-            function (values) {
+        nodeType.prototype._setValues = function (values, value = undefined) {
             const self = /** @type {ComboMirrorNode} */ (this);
             const w = ensureComboWidget(self);
-            const opts = Array.isArray(values) ? values.map(v => String(v)) : [];
+            const options = Array.isArray(values) ? values.map(v => String(v)) : [];
 
-            // Persist options to ComfyUI properties as one option per line
-            const optsStr = opts.join('\n');
-            self.properties = self.properties || {};
-            self.properties.combo_options_str = optsStr;
-            // Trigger a serialize so the graph captures updated properties
-            if (typeof self.serialize === 'function') {
-                try { self.serialize(); } catch (_) {}
+            // Persist options into the hidden carrier widget as one option per line
+            const carrierW = self.widgets?.find(wi => wi?.name === "combo_options_str");
+            if (carrierW) {
+                carrierW.value = options.join('\n');
             }
 
             if (Array.isArray(w.options)) {
-                w.options = opts;
+                w.options = options;
             } else if (w.options && typeof w.options === 'object') {
-                w.options.values = opts;
+                w.options.values = options;
             } else {
-                w.options = {values: opts};
+                w.options = {values: options};
+                Logger.log({
+                    class: 'ComboMirrorOvum',
+                    method: '_refreshValuesFromTarget',
+                    nodeName: `${self.title}#${self.id}`,
+                    severity: 'warn',
+                }, "not expecting condition 265 to be hit");
             }
-            w.values = opts;
 
-            if (!opts.includes(w.value)) {
-                w.value = opts.length ? opts[0] : "";
+            if (!options.includes(w.value)) {
+                if (value != null) {
+                    w.value = value;
+                // } else if (options.length > 0) {
+                //     w.value = options[0];
+                } else {
+                    w.value = "";
+                }
             }
             if (self.onResize) {
                 self.onResize(self.size);
