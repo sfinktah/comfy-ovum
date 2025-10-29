@@ -35,6 +35,7 @@ except AttributeError:
 # Routes to provide data to the callback via fetch
 
 API_BASE = '/ovum/image-list'
+LMSTUDIO_API_BASE = '/ovum/lmstudio'
 
 
 def _is_subpath(child: Path, parent: Path) -> bool:
@@ -253,3 +254,36 @@ async def search(request: web.Request):
                 except Exception:
                     results.append(str(p.resolve()))
     return web.json_response({"results": results, "base": str(start_dir)})
+
+
+@PromptServer.instance.routes.post(f"{LMSTUDIO_API_BASE}/refresh_models")
+async def refresh_lmstudio_models(request: web.Request):
+    """Refresh LM Studio models from a given server and cache them.
+    Body JSON: {"server_address": str, "server_port": int}
+    """
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    server_address = (data.get("server_address") or "localhost").strip()
+    try:
+        server_port = int(data.get("server_port") or 1234)
+    except Exception:
+        server_port = 1234
+
+    try:
+        # Lazy import to avoid circulars at module import time
+        from .lmstudio import LMStudioPromptOvum  # type: ignore
+        models = LMStudioPromptOvum.fetch_models_from_server(server_address, server_port)
+        # Always save placeholder-less list; Python side will prepend placeholder in enums
+        if isinstance(models, list):
+            LMStudioPromptOvum.save_cached_models(models)
+        return web.json_response({
+            "ok": True,
+            "count": len(models) if isinstance(models, list) else 0,
+            "models": models,
+            "server": f"{server_address}:{server_port}",
+        })
+    except Exception as e:
+        logger.exception("[ovum] Failed to refresh LM Studio models")
+        return web.json_response({"ok": False, "error": str(e)}, status=500)

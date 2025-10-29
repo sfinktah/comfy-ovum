@@ -209,22 +209,28 @@ Requirements:
 
     @classmethod
     def get_available_models(cls):
-        """Get available models, trying cache first, then server"""
+        """Get available models for the enum input.
+        Always include the placeholder 'No models available' so validation won't break
+        when the selection persists across host/port changes or empty caches.
+        """
+        placeholder = 'No models available'
         # Try to load from cache first
         cached_models = cls.load_cached_models()
 
         if cached_models:
-            return cached_models
+            # Always include placeholder at the start
+            # Keep order: placeholder + cached
+            return [placeholder] + cached_models
 
-        # If no cached models, try to fetch from server
+        # If no cached models, try to fetch from default server
         server_models = cls.fetch_models_from_server()
 
         if server_models:
             cls.save_cached_models(server_models)
-            return server_models
+            return [placeholder] + server_models
 
         # Return default if nothing else works
-        return ['No models available']
+        return [placeholder]
 
     def encode_image_to_base64(self, image):
         """Convert image tensor to base64 encoded string"""
@@ -387,7 +393,6 @@ Requirements:
 
         history['messages'].append({'role': 'user', 'content': message_content})
         request = {
-            'model': selected_model if selected_model and selected_model != 'No models available' else None,
             'messages': history['messages'],
             #'temperature': 0.2,
             'top_p': 0.95,
@@ -397,6 +402,9 @@ Requirements:
             'stream': False,
             'seed': seed,
         }
+        # Only include model field if a concrete model is selected
+        if selected_model and selected_model != 'No models available':
+            request['model'] = selected_model
         # Handle dynamic model loading if enabled
         # if dynamic_loading and selected_model and selected_model != 'No models available':
         #     print(f"Dynamic loading enabled, loading model: {selected_model}")
@@ -433,18 +441,40 @@ Requirements:
             result = html.unescape(result)  # decode URL encoded special characters
             return result
         else:
+            # On API error, attempt to refresh the models list from the current server
+            try:
+                latest_models = self.fetch_models_from_server(server_address, server_port)
+                if latest_models:
+                    self.save_cached_models(latest_models)
+            except Exception:
+                pass
             return 'Error'
 
     def process(self, input_prompt, mode, custom_history, server_address, server_port, selected_model, unload_timeout_seconds, seed, image=None, prompt=None, unique_id=None, extra_pnginfo=None):
-        # Refresh model list if dynamic loading is enabled
+        # Always refresh models from the currently selected server (host:port)
         server_models = self.fetch_models_from_server(server_address, server_port)
         if server_models:
+            # Update cache so the enum list updates on next UI refresh
             self.save_cached_models(server_models)
+        else:
+            # If we couldn't reach the server, keep server_models as empty list
+            server_models = []
+
+        # If user changed host/port or after an error, do NOT auto-select the first model.
+        # Instead, refresh the cache and ask the user to pick a valid model explicitly.
+        placeholder = 'No models available'
+        if (selected_model in (None, '', placeholder)) or (server_models and selected_model not in server_models):
+            # Cache was refreshed above if possible; raise to inform the user.
+            hostport = f"{server_address}:{server_port}"
+            raise Exception(
+                f"LM Studio models list has been refreshed from {hostport}. "
+                f"Please select a valid model from the 'selected_model' dropdown before running again."
+            )
 
         # If automatic unload is requested, ensure the tiny model exists to fake unloading
         if unload_timeout_seconds and unload_timeout_seconds != 0:
             required_model = 'liquid/lfm2-1.2b'
-            if required_model not in server_models:
+            if server_models and (required_model not in server_models):
                 raise Exception(
                     "Automatic unload requires the 'liquid/lfm2-1.2b' model to be installed in LM Studio to fake unloading. "
                     "In developer settings, JIT Model Loading and Auto unload JIT models should be enabled with 1 minute TTL."
