@@ -914,13 +914,204 @@ Small building blocks used with the loop nodes.
 
 Mirror the options from any combobox input and drive multiple targets with a single selection.
 
-- What it does: lets you connect one ComboMirror to a node input that uses a combo-box and automatically adopts that list of options. You can then connect the ComboMirror output to any number of compatible combo inputs so they all share the same chosen value.
-- Why it’s helpful: ComboMirror allows you to set multiple instances of a combo-box from a single source, keeping nodes in sync and reducing repetitive clicking.
+- What it does: Connect ComboMirror to a node input that uses a combo-box and it automatically adopts that list of options. Then feed ComboMirror’s output into any number of compatible combo inputs so they all share the same chosen value.
+- Why it’s helpful: Keep several nodes in sync with one picker and reduce repetitive clicking.
+- Outputs: COMBO (the selected value) and LIST (all available option strings mirrored from the target).
+- How to select:
+  - Manual: Pick from the mirrored options in the ComboMirror widget (default).
+  - choice_index: Provide a non-negative index to force selection by index and disable manual picking.
+  - choice_regex: Provide a string/regex to auto-pick. Matching order is:
+    1) Regex search (re.search)
+    2) Exact match (case-sensitive)
+    3) Exact match (case-insensitive)
+    4) Substring contains (case-insensitive)
+  - If none of the above applies, the current widget value is used.
 - How to use:
-  1. Place a ComboMirror near a node that has a combobox input (e.g., model, scheduler, sampler).
+  1. Place ComboMirror near a node that has a combobox input (e.g., model, scheduler, sampler).
   2. Connect ComboMirror’s output to that input; the options will be mirrored into the ComboMirror widget.
-  3. Pick the desired value once in ComboMirror; wire its output to other matching combo inputs to keep them synchronized.
+  3. Pick a value once (or drive via choice_index/choice_regex) and wire the COMBO output to other matching combo inputs to keep them synchronized.
 
 Notes:
-- If ComboMirror receives a fixed index via choice_index (advanced workflows), it will select by index and disable manual picking.
-- The node also outputs the entire options list as strings for inspection or debugging.
+- For advanced workflows the frontend also passes the raw options as a hidden string; the node returns those as the LIST output for inspection or debugging.
+
+
+
+## VHS PNG deleter (VhsPngDeletingOvum)
+
+Remove intermediate PNG frames produced by Video Helper Suite (VHS) from both your list of filenames and from disk.
+
+- Category: ovum/workflow
+- Display name: "VHS PNG deleter"
+- Class name: VhsPngDeletingOvum
+
+Inputs
+- filenames (STRING)
+  - Accepts a STRING, a list of STRINGs, or a tuple shaped like `(BOOLEAN, LIST[STRING])` as produced by some VHS nodes.
+  - If a list or tuple is provided, the node will treat the inner list as a list of file paths.
+
+Outputs
+- filenames (STRING)
+  - Mirrors the input structure:
+    - If input was a list, returns a filtered list with .png items removed.
+    - If input was a tuple `(flag, list)`, returns `(flag, filtered_list)` with the same flag preserved.
+    - Otherwise returns the input unchanged.
+
+Behavior
+- For list inputs (or the list inside a supported tuple):
+  - Removes any entries that end with the .png extension (case-insensitive).
+  - Attempts to delete those .png files from the filesystem (silently ignores errors if a file cannot be removed).
+  - Returns the remaining non-.png filenames.
+- For non-list inputs, simply returns the input unchanged.
+
+Example
+```
+(True,
+  ['C:\\zluda\\comfyui-n\\output\\WanVideo2_2_T2V_VHS_01102.png',
+   'C:\\zluda\\comfyui-n\\output\\WanVideo2_2_T2V_VHS_01102.mp4'])
+```
+becomes
+```
+(True,
+  ['C:\\zluda\\comfyui-n\\output\\WanVideo2_2_T2V_VHS_01102.mp4'])
+```
+
+Notes
+- This is useful after VHS video assembly steps when you want to clean up temporary PNG frames.
+
+
+---
+
+## Index of Node Classes
+
+Below is an index of Python class names for nodes in this repository. Each entry links to the section in this README where the node or its family is documented; entries marked as "undocumented" currently have no dedicated section.
+
+- AmdNvidiaIfElseOvum — undocumented
+- AssertOvum — undocumented
+- BigKnob — see BigKnob (Widget): #bigknob-widget
+- CUDNNToggleOvum — see CUDNN Toggle Ovum: #cudnn-toggle-ovum
+- CastAnyToList — see Casting helpers: #casting-helpers-ovumdata
+- CastListToAny — see Casting helpers: #casting-helpers-ovumdata
+- ComboMirrorOvum — see ComboMirror: #combomirror
+- CommandExecNode — undocumented
+- ConcatBatchesOvum — undocumented
+- ConcatLists — see Pystructure Data Nodes: #pystructure-data-nodes-complementary-to-comfyui-logicutils
+- ConcatListsOvum — see More List utilities (Data): #more-list-utilities-data
+- ConvertAny2Dict — undocumented
+- ConvertAny2List — undocumented
+- ConvertAny2Set — undocumented
+- ConvertAny2Tuple — undocumented
+- CreateEmptyList — undocumented
+- FolderPathsNode — see Image List Loader + Folder Paths: #image-list-loader--folder-paths
+- ForeachListBeginOvum — see Loop/Logic nodes: #looplogic-nodes-ovumloop
+- ForeachListEndOvum — see Loop/Logic nodes: #looplogic-nodes-ovumloop
+- FromBatchTypeNodeOvum — undocumented
+- FromListTypeNode — see Pystructure Data Nodes: #pystructure-data-nodes-complementary-to-comfyui-logicutils
+- FromListTypeNodeOvum — see More List utilities (Data): #more-list-utilities-data
+- GetByIndex — see More List utilities (Data): #more-list-utilities-data
+- GetEnvVar — see Environment Bridge: #environment-bridge-set-environment-variable-and-get-environment-variable
+- GetListLength — undocumented
+- GetLocalStorage — see Browser Local Storage: #browser-local-storage-set-localstorage-and-get-localstorage
+- Ground — undocumented
+- IfElseOvum — see Logic helpers: #logic-helpers-ovumloop
+- ImageExContextListOvum — see Load Image with Workflow + IMAGE_EX Context: #load-image-with-workflow--image_ex-context
+- ImageExContextOvum — see Load Image with Workflow + IMAGE_EX Context: #load-image-with-workflow--image_ex-context
+- IndexOf — see Pystructure Data Nodes: #pystructure-data-nodes-complementary-to-comfyui-logicutils
+- IndexOfBatchOvum — undocumented
+- IndexOfOvum — see More List utilities (Data): #more-list-utilities-data
+- JoinBatchOvum — undocumented
+- JoinList — see Pystructure Data Nodes: #pystructure-data-nodes-complementary-to-comfyui-logicutils
+- JoinListOvum — see More List utilities (Data): #more-list-utilities-data
+- LMStudioPromptOvum — see LM Studio Prompt (Ovum/LLM): #lm-studio-prompt-ovumllm
+- ListExtend — see Pystructure Data Nodes: #pystructure-data-nodes-complementary-to-comfyui-logicutils
+- ListExtendOvum — see More List utilities (Data): #more-list-utilities-data
+- ListSlice — see Pystructure Data Nodes: #pystructure-data-nodes-complementary-to-comfyui-logicutils
+- ListSliceOvum — see More List utilities (Data): #more-list-utilities-data
+- ListSplice — see Pystructure Data Nodes: #pystructure-data-nodes-complementary-to-comfyui-logicutils
+- ListSpliceOvum — see More List utilities (Data): #more-list-utilities-data
+- LiveCrop — see Live Crop (interactive): #live-crop-interactive
+- LoadImageFromOutputWithWorkflowOvum — see Load Image with Workflow + IMAGE_EX Context: #load-image-with-workflow--image_ex-context
+- LoadImageWithWorkflowOvum — see Load Image with Workflow + IMAGE_EX Context: #load-image-with-workflow--image_ex-context
+- LoadImagesListWithCallback — see Image List Loader + Folder Paths: #image-list-loader--folder-paths
+- MakeFlatImageList — see More List utilities (Data): #more-list-utilities-data
+- MakeFlatStringList — see More List utilities (Data): #more-list-utilities-data
+- MapEndOvum — see Loop/Logic nodes: #looplogic-nodes-ovumloop
+- MapStartOvum — see Loop/Logic nodes: #looplogic-nodes-ovumloop
+- MinusOne — see Logic helpers: #logic-helpers-ovumloop
+- NextVideoFilenameOvum — see VHS Helper: Next Video Filename: #vhs-helper-next-video-filename
+- OpenOutputViaShell — see Open Output via Shell (secure): #open-output-via-shell-secure
+- OvumCombinePaths — see OS Path Utilities: #os-path-utilities-ovumpath-and-ovumpathospath
+- OvumOsPathAbspath — see OS Path Utilities: #os-path-utilities-ovumpath-and-ovumpathospath
+- OvumOsPathBasename — see OS Path Utilities: #os-path-utilities-ovumpath-and-ovumpathospath
+- OvumOsPathCommonPath — see OS Path Utilities: #os-path-utilities-ovumpath-and-ovumpathospath
+- OvumOsPathCommonPrefix — see OS Path Utilities: #os-path-utilities-ovumpath-and-ovumpathospath
+- OvumOsPathDirname — see OS Path Utilities: #os-path-utilities-ovumpath-and-ovumpathospath
+- OvumOsPathExists — see OS Path Utilities: #os-path-utilities-ovumpath-and-ovumpathospath
+- OvumOsPathExpanduser — see OS Path Utilities: #os-path-utilities-ovumpath-and-ovumpathospath
+- OvumOsPathExpandvars — see OS Path Utilities: #os-path-utilities-ovumpath-and-ovumpathospath
+- OvumOsPathGetAtime — see OS Path Utilities: #os-path-utilities-ovumpath-and-ovumpathospath
+- OvumOsPathGetCtime — see OS Path Utilities: #os-path-utilities-ovumpath-and-ovumpathospath
+- OvumOsPathGetMtime — see OS Path Utilities: #os-path-utilities-ovumpath-and-ovumpathospath
+- OvumOsPathGetSize — see OS Path Utilities: #os-path-utilities-ovumpath-and-ovumpathospath
+- OvumOsPathIsAbs — see OS Path Utilities: #os-path-utilities-ovumpath-and-ovumpathospath
+- OvumOsPathIsdir — see OS Path Utilities: #os-path-utilities-ovumpath-and-ovumpathospath
+- OvumOsPathIsfile — see OS Path Utilities: #os-path-utilities-ovumpath-and-ovumpathospath
+- OvumOsPathIslink — see OS Path Utilities: #os-path-utilities-ovumpath-and-ovumpathospath
+- OvumOsPathIsmount — see OS Path Utilities: #os-path-utilities-ovumpath-and-ovumpathospath
+- OvumOsPathJoin — see OS Path Utilities: #os-path-utilities-ovumpath-and-ovumpathospath
+- OvumOsPathLexists — see OS Path Utilities: #os-path-utilities-ovumpath-and-ovumpathospath
+- OvumOsPathNormCase — see OS Path Utilities: #os-path-utilities-ovumpath-and-ovumpathospath
+- OvumOsPathNormPath — see OS Path Utilities: #os-path-utilities-ovumpath-and-ovumpathospath
+- OvumOsPathRealpath — see OS Path Utilities: #os-path-utilities-ovumpath-and-ovumpathospath
+- OvumOsPathRelpath — see OS Path Utilities: #os-path-utilities-ovumpath-and-ovumpathospath
+- OvumOsPathSamefile — see OS Path Utilities: #os-path-utilities-ovumpath-and-ovumpathospath
+- OvumOsPathSplit — see OS Path Utilities: #os-path-utilities-ovumpath-and-ovumpathospath
+- OvumOsPathSplitAll — see OS Path Utilities: #os-path-utilities-ovumpath-and-ovumpathospath
+- OvumOsPathSplitdrive — see OS Path Utilities: #os-path-utilities-ovumpath-and-ovumpathospath
+- OvumOsPathSplitext — see OS Path Utilities: #os-path-utilities-ovumpath-and-ovumpathospath
+- OvumPathBackToForward — see OS Path Utilities: #os-path-utilities-ovumpath-and-ovumpathospath
+- OvumPathToPathLike — see OS Path Utilities: #os-path-utilities-ovumpath-and-ovumpathospath
+- OvumReEscape — see Regex Nodes: #regex-nodes-ovumregex
+- OvumReFindAll — see Regex Nodes: #regex-nodes-ovumregex
+- OvumReFindIter — see Regex Nodes: #regex-nodes-ovumregex
+- OvumReFlags — see Regex Nodes: #regex-nodes-ovumregex
+- OvumReFullMatch — see Regex Nodes: #regex-nodes-ovumregex
+- OvumReMatch — see Regex Nodes: #regex-nodes-ovumregex
+- OvumReMatchExpand — see Regex Nodes: #regex-nodes-ovumregex
+- OvumReMatchGroup — see Regex Nodes: #regex-nodes-ovumregex
+- OvumReMatchInfo — see Regex Nodes: #regex-nodes-ovumregex
+- OvumReMatchSelect — see Regex Nodes: #regex-nodes-ovumregex
+- OvumReMatchSpan — see Regex Nodes: #regex-nodes-ovumregex
+- OvumReMatchView — see Regex Nodes: #regex-nodes-ovumregex
+- OvumReSearch — see Regex Nodes: #regex-nodes-ovumregex
+- OvumReSplit — see Regex Nodes: #regex-nodes-ovumregex
+- OvumReSub — see Regex Nodes: #regex-nodes-ovumregex
+- OvumReSubN — see Regex Nodes: #regex-nodes-ovumregex
+- OvumWildcardProcessor — see Wildcard Processor (Escapable): #wildcard-processor-escapable
+- PassthruInputAndOutputIsListOvum — see Passthrough shapers: #passthrough-shapers-ovum
+- PassthruInputIsListOvum — see Passthrough shapers: #passthrough-shapers-ovum
+- PassthruOutputIsListOvum — see Passthrough shapers: #passthrough-shapers-ovum
+- PassthruOvum — see Passthrough shapers: #passthrough-shapers-ovum
+- PlusOne — see Logic helpers: #logic-helpers-ovumloop
+- PythonStringFormat — see Python String Format: #python-string-format
+- RepeatItem — see Pystructure Data Nodes: #pystructure-data-nodes-complementary-to-comfyui-logicutils
+- RepeatItemBatchOvum — undocumented
+- RepeatItemOvum — see More List utilities (Data): #more-list-utilities-data
+- ReverseBatchOvum — undocumented
+- ReverseList — see Pystructure Data Nodes: #pystructure-data-nodes-complementary-to-comfyui-logicutils
+- ReverseListOvum — see More List utilities (Data): #more-list-utilities-data
+- SetEnvVar — see Environment Bridge: #environment-bridge-set-environment-variable-and-get-environment-variable
+- SetLocalStorage — see Browser Local Storage: #browser-local-storage-set-localstorage-and-get-localstorage
+- StringListEditor — see Pystructure Data Nodes: #pystructure-data-nodes-complementary-to-comfyui-logicutils
+- StringListEditorOvum — see More List utilities (Data): #more-list-utilities-data
+- SyncSinkOvum — see Workflow Helpers: #workflow-helpers-widgets-to-values
+- TextOvary — see Text Ovary (overlay text on images): #text-ovary-overlay-text-on-images
+- Timer — see Timer: #timer
+- UniqueList — see Pystructure Data Nodes: #pystructure-data-nodes-complementary-to-comfyui-logicutils
+- UniqueListOvum — see More List utilities (Data): #more-list-utilities-data
+- VhsPngDeletingOvum — see VHS PNG deleter: #vhs-png-deleter-vhspngdeletingovum
+- WidgetToBooleanOvum — see Workflow Helpers: #workflow-helpers-widgets-to-values
+- WidgetToFloatOvum — see Workflow Helpers: #workflow-helpers-widgets-to-values
+- WidgetToIntOvum — see Workflow Helpers: #workflow-helpers-widgets-to-values
+- WidgetToStringOvum — see Workflow Helpers: #workflow-helpers-widgets-to-values
+- WorkflowWidgetToAnyOvum — see Workflow Helpers: #workflow-helpers-widgets-to-values
+- XRangeNode — see Folder, Range, and Sequence Utilities: #folder-range-and-sequence-utilities
