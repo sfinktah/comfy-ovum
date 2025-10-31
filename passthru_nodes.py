@@ -193,9 +193,8 @@ class PassthruOvum:
 
     FUNCTION = "passthru"
     DESCRIPTION = """
-    Pass the input directly through to the output.
-    Dumps the input to the console and the canvas.
-    """
+Passthru with console/canvas debug output
+"""
     # INPUT_IS_LIST = True
     RETURN_TYPES = (ANYTYPE,)
     RETURN_NAMES = ("any_out",)
@@ -232,9 +231,9 @@ class PassthruInputIsListOvum:
 
     FUNCTION = "passthru"
     DESCRIPTION = """
-    Interprets the input as INPUT_IS_LIST, and outputs it as a python list.
-    Dumps the input to the console and canvas.
-    """
+Interprets the input as INPUT_IS_LIST, and outputs it as a python list.
+Dumps the input to the console and canvas.
+"""
     INPUT_IS_LIST = True
     RETURN_TYPES = (ANYTYPE,)
     RETURN_NAMES = ("any_out",)
@@ -266,9 +265,9 @@ class PassthruInputAndOutputIsListOvum:
 
     FUNCTION = "passthru"
     DESCRIPTION = """
-    Interprets the input as INPUT_IS_LIST, and outputs it with OUTPUT_IS_LIST.
-    Dumps the input to the console and canvas.
-    """
+Interprets the input as INPUT_IS_LIST, and outputs it with OUTPUT_IS_LIST.
+Dumps the input to the console and canvas.
+"""
     INPUT_IS_LIST = True
     OUTPUT_IS_LIST = (True,)
     RETURN_TYPES = (ANYTYPE,)
@@ -305,9 +304,9 @@ class PassthruOutputIsListOvum:
 
     FUNCTION = "passthru"
     DESCRIPTION = """
-    Interprets the input normally, and outputs it with OUTPUT_IS_LIST.
-    Dumps the input to the console and canvas.
-    """
+Interprets the input normally, and outputs it with OUTPUT_IS_LIST.
+Dumps the input to the console and canvas.
+"""
     OUTPUT_IS_LIST = (True,)
     RETURN_TYPES = (ANYTYPE,)
     RETURN_NAMES = ("any_out",)
