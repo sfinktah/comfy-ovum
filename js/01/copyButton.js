@@ -1,4 +1,5 @@
 import {stripTrailingId} from "./utility.js";
+import {getRunStartEndMs} from "../04/timer-utils.js";
 
 export function getLatestRunIds() {
     return Object.keys(Timer.run_history).sort().reverse().slice(0, Timer.last_n_runs - 1);
@@ -37,11 +38,11 @@ export function getStartTimes() {
 
 export function getRunNoteTimes() {
     return getLatestRunIds().reduce((acc, id) => {
-        const startTime = Timer.run_history[id]?.systemStartTime;
+        const { startMs, endMs } = getRunStartEndMs(id);
         const runNote = Timer.run_notes[id] || '';
-        if (!startTime) return acc;
+        if (!startMs) return acc;
 
-        acc.push({start: startTime, note: runNote});
+        acc.push({ start: startMs, end: endMs, note: runNote });
 
         return acc;
     }, []);

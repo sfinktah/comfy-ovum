@@ -133,8 +133,23 @@ export function html_impl(scope) {
         });
 
         // Tooltip showing run notes after 1 second hover
-        const notesText = Timer.run_notes[runId] || "No run notes";
-        attachTooltip(th, () => notesText, 1000);
+        const rh = Timer.run_history[runId] || {};
+        const sysStartMs = rh.systemStartTime;
+        const lgStart = rh.startTime;
+        const lgEnd = rh.endTime;
+        const startDate = (typeof sysStartMs === 'number') ? new Date(sysStartMs) : null;
+        let endDate = null;
+        if (startDate && typeof lgEnd === 'number' && typeof lgStart === 'number') {
+            const delta = lgEnd - lgStart;
+            if (!isNaN(delta)) endDate = new Date(sysStartMs + delta);
+        }
+        const startStr = startDate ? startDate.toLocaleString() : 'Unknown';
+        const endStr = endDate ? endDate.toLocaleString() : (typeof lgEnd === 'number' ? 'Unknown' : 'In progress');
+        const noteRaw = Timer.run_notes[runId] || "No run notes";
+        function escapeHtml(s){ return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+        const noteEscaped = escapeHtml(noteRaw).replace(/\r?\n/g, "<br>");
+        const notesTextHtml = `${noteEscaped}<br><br>Start: ${escapeHtml(startStr)}<br>End: ${escapeHtml(endStr)}`;
+        attachTooltip(th, () => notesTextHtml, 1000);
 
         // Attach double click event for editing run notes
         th.addEventListener("dblclick", () => {
