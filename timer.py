@@ -98,7 +98,7 @@ class Timer:
         if isinstance(current_run, str) and current_run.strip():
             pieces.append(current_run.strip())
         pieces.append(notes_obj)
-        last_run_json = "\n".join(pieces) + "\nlast_run_json"
+        last_run_json = "\n".join(pieces)
 
         return {
             "ui": {
