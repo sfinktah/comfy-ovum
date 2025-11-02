@@ -981,6 +981,53 @@ Notes
 
 ---
 
+## Burn Notice
+
+A small utility node for ephemeral text that should be consumed once and then disappear. It exposes a multiline STRING input and immediately returns it on execution, but the UI clears the field afterward. Optionally, the node can auto‑mute itself so it won’t execute again until you unmute it.
+
+- Category: ovum/util
+- Display name: "Burn Notice"
+- Class name: BurnNoticeOvum
+
+Inputs
+- value (STRING, multiline)
+  - Arbitrary text. This is returned as the output on execution. After execution completes, the UI clears this field so it doesn’t persist into the next run.
+- mute_after (BOOLEAN, default: false)
+  - When enabled, the frontend mutes the node after it runs (equivalent to LiteGraph mode = 2). This prevents the node from executing again until you manually unmute it from the node’s context menu.
+
+Outputs
+- value (STRING)
+  - Exactly the text that was provided at execution time.
+
+Behavior and notes
+- The backend simply returns the provided string; all “erase after read” behavior is handled in the frontend extension.
+- After onExecuted, the UI:
+  - Sets the "value" widget to an empty string.
+  - If mute_after is true, sets node.mode = 2 (mute) and marks the canvas dirty so the UI updates immediately.
+- Practical uses: one‑shot messages, tokens, secrets, ad‑hoc parameters, or any text you intend to consume once and then remove from the workflow state.
+
+---
+
+## Colorize Graph
+
+A frontend-only utility node that recolors all nodes in the current graph based on the type of the first input (if any),
+else the first output. It uses the same color mapping SetTwinNodes, which is an extended version of Kijai's SetNode coloring scheme.
+
+- Category: ovum
+- Display name: "Colorize Graph"
+- Node type: ColorizeGraph (frontend)
+
+Buttons
+- Apply Colors: Recolors every node according to the type heuristic described above.
+- Undo: Restores all nodes to their original colors from before the last Apply Colors.
+
+Notes
+- Skips recoloring itself.
+- Works entirely in the browser; no backend execution is involved.
+- If you click Apply Colors multiple times, Undo restores the colors as they were before the first apply in that session.
+
+---
+
 ## Index of Node Classes
 
 Below is an index of Python class names for nodes in this repository. Each entry links to the section in this README where the node or its family is documented; entries marked as "undocumented" currently have no dedicated section.
@@ -988,9 +1035,11 @@ Below is an index of Python class names for nodes in this repository. Each entry
 - AmdNvidiaIfElseOvum — undocumented
 - AssertOvum — undocumented
 - BigKnob — see BigKnob (Widget): #bigknob-widget
+- BurnNoticeOvum — see Burn Notice: #burn-notice
 - CUDNNToggleOvum — see CUDNN Toggle Ovum: #cudnn-toggle-ovum
 - CastAnyToList — see Casting helpers: #casting-helpers-ovumdata
 - CastListToAny — see Casting helpers: #casting-helpers-ovumdata
+- ColorizeGraph — see Colorize Graph: #colorize-graph
 - ComboMirrorOvum — see ComboMirror: #combomirror
 - CommandExecNode — undocumented
 - ConcatBatchesOvum — undocumented

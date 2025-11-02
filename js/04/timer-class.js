@@ -448,16 +448,95 @@ export class Timer {
     }
 
 
+    static buildCurrentRunPayload() {
+        try {
+            const runId = Timer.current_run_id;
+            if (!runId) return "";
+            const rh = Timer.run_history?.[runId] || {};
+            const sysStartMs = rh.systemStartTime;
+            const lgStart = rh.startTime;
+            const lgEnd = rh.endTime;
+            const startMs = (typeof sysStartMs === 'number') ? sysStartMs : null;
+            let endMs = null;
+            if (typeof sysStartMs === 'number' && typeof lgEnd === 'number' && typeof lgStart === 'number') {
+                const delta = lgEnd - lgStart;
+                if (!Number.isNaN(delta)) endMs = sysStartMs + delta;
+            }
+            const note = Timer.run_notes?.[runId] || '';
+            const runNotes = startMs ? [{ start: startMs, end: endMs, note }] : [];
+
+            // startTimes for the current run only (reuse copyButton logic heuristics)
+            const startTimes = [];
+            const nodes = rh.nodes || {};
+            let previousTitle = "";
+            let previousCudnn = undefined;
+            for (const [id, node] of Object.entries(nodes)) {
+                const st = Array.isArray(node.startTimes) ? (node.startTimes[0] ?? 0) : 0;
+                const title = String(app?.graph?.getNodeById?.(id)?.getTitle?.() ?? Timer.getNodeNameByIdCached(id) ?? "");
+                if (
+                    title && st && (
+                        (typeof node.totalTime === 'number' && node.totalTime > 2000) ||
+                        (~previousTitle.indexOf('code')) ||
+                        (node.cudnn !== previousCudnn)
+                    )
+                ) {
+                    startTimes.push({ start: st, node: title, total: (node.totalTime >>> 0) || 0, cudnn: node.cudnn });
+                }
+                previousTitle = title;
+                previousCudnn = node.cudnn;
+            }
+
+            const lines = [];
+            lines.push(JSON.stringify({ runNotes, startTimes }));
+            if (Timer.systemInfo && typeof Timer.systemInfo === 'object') {
+                lines.push(JSON.stringify({systemInfo: Timer.systemInfo}));
+            } else if (Timer.systemInfo && typeof Timer.systemInfo === 'string') {
+                lines.push(Timer.systemInfo);
+            }
+            return lines.join("\n");
+        } catch(_e) {
+            return "";
+        }
+    }
+
     /**
-     * When a new node is about to be executed
+     * When a new node is about to be executed.
+     * See https://docs.comfy.org/development/comfyui-server/comms_messages for details
      * node (node id or None to indicate completion), prompt_id
      * @param {ComfyTickEvent} e
      */
     static executing(e) {
+        Logger.log({
+            class: 'ovum.timer',
+            method: 'executing',
+            severity: 'debug',
+            tag: 'event executing'.split(' '),
+            nodeName: 'ovum.timer'
+        }, "arguments", arguments);
+
         let detail = e.detail;
+        const node_name = Timer.getNodeNameByIdCached(detail);
+
+        // Update hidden 'current_run' payload on all Timer nodes during execution (JIT: only if at least one Timer node exists)
+        try {
+            // TODO: Don't we have a bunch of helper functions to avoid doing app.graph._nodes crap?
+            const g = app?.graph;
+            const hasTimer = !!(g && Array.isArray(g._nodes) && g._nodes.some(n => n?.comfyClass === 'Timer'));
+            if (hasTimer) {
+                // const payload = `${node_name}\n` + Timer.buildCurrentRunPayload?.() || "";
+                const payload = Timer.buildCurrentRunPayload?.() || "";
+                for (const n of g._nodes) {
+                    if (n?.comfyClass === 'Timer') {
+                        const w = n.widgets?.find(w => w?.name === 'current_run');
+                        if (w) w.value = payload;
+                    }
+                }
+            }
+        } catch(_e) {
+            console.log("Failed to update current_run payload:", _e);
+        }
 
         if (detail === Timer?.currentNodeId) return;
-        const node_name = Timer.getNodeNameByIdCached(detail);
 
         const t = LiteGraph.getTime();
         const unix_t = Math.floor(t / 1000);
@@ -484,6 +563,7 @@ export class Timer {
         }
 
         if (!Timer.currentNodeId) Timer.add_timing("total", t - Timer.startTime);
+
 
         if (Timer.onChange) Timer.onChange();
     }

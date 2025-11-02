@@ -47,7 +47,7 @@ const LGraphNode = LiteGraph.LGraphNode
 // TwinNodes base moved to ../common/twinNodes.js and imported above
 class SetTwinNodes extends TwinNodes {
     currentGetters = null;
-    menuEntry = "Show connections";
+    menuEntry = "🥚 Show connections";
 
     /**
      * Constructs a new SetTwinNodes instance.
@@ -496,7 +496,7 @@ class SetTwinNodes extends TwinNodes {
         //     - Uses node.currentGetters[0].outputs[0].type to derive a color for the “Show connections” highlight.
         //     - Rationale: sampling the first getter’s first output only. Probably fine for a quick color, but could be generalized to first connected/typed output
         const node = this;
-        let menuEntry = node.drawConnection ? "Hide connections" : "Show connections";
+        let menuEntry = node.drawConnection ? "🥚 Hide connections" : "🥚 Show connections";
         options.push(
             {
                 content: menuEntry,
@@ -511,7 +511,7 @@ class SetTwinNodes extends TwinNodes {
                             if (found) { linkType = found.type; break; }
                         }
                         node.slotColors[i] = node.canvas.default_connection_color_byType[linkType]
-                        menuEntry = node.drawConnection ? "Hide connections" : "Show connections";
+                        menuEntry = node.drawConnection ? "🥚 Hide connections" : "🥚 Show connections";
                     });
                     // Generalize: pick first connected, typed output across all getters
                     node.drawConnection = !node.drawConnection;
@@ -545,7 +545,7 @@ class SetTwinNodes extends TwinNodes {
                         log({ class: "SetTwinNodes", method: "getExtraMenuOptions", severity: "debug", tag: "context_menu" }, otherNode);
                     });
 
-                    menuEntry = "Show connections";
+                    menuEntry = "🥚 Show connections";
                     node.drawConnection = false
                     node.canvas.setDirty(true, true);
 

@@ -842,7 +842,7 @@ app.registerExtension({
             getExtraMenuOptions(_, options) {
                 const node = this;
 
-                let menuEntry = node.drawConnection ? "Hide connections" : "Show connections";
+                let menuEntry = node.drawConnection ? "🥚 Hide connections" : "🥚 Show connections";
 
                 options.push(
                     {
@@ -906,7 +906,7 @@ app.registerExtension({
                             }
                             node.drawConnection = !node.drawConnection;
                             // node.slotColor = node.canvas.default_connection_color_byType[linkType]
-                            menuEntry = node.drawConnection ? "Hide connections" : "Show connections";
+                            menuEntry = node.drawConnection ? "🥚 Hide connections" : "🥚 Show connections";
                             node.canvas.setDirty(true, true);
                         },
                     },

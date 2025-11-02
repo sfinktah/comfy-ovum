@@ -1,4 +1,5 @@
 import json
+import time
 import comfy.utils
 from common_types import ANYTYPE
 
@@ -18,18 +19,19 @@ class Timer:
             },
             "optional": {
                 "any_in": (ANYTYPE, {"tooltip": "This is just used connect the timer to the workflow somewhere (only required if you want 'notes' to be recorded when the workflow runs)"}),
+                "current_run": ("STRING", {"multiline": True, "tooltip": "This should be hidden (internal use only)"}),
                 # **dyn_inputs
             },
-            # "hidden": {"unique_id": "UNIQUE_ID", "extra_pnginfo": "EXTRA_PNGINFO"}
+            # "hidden": {"current_run": "STRING"}
         }
         return inputs
 
-    RETURN_TYPES = (ANYTYPE,)
-    RETURN_NAMES = ("any_out",)
+    RETURN_TYPES = (ANYTYPE, "STRING")
+    RETURN_NAMES = ("any_out", "last_run")
     FUNCTION = "func"
     NAME = "Timer 🥚"
     OUTPUT_NODE = True
-    def func(self, notes, any_in=None, *args, **kwargs):
+    def func(self, notes, any_in=None, current_run=None, *args, **kwargs):
         # Accept arbitrary dynamic inputs like input2, input3, etc.
 
         def _to_jsonable(obj, _seen=None):
@@ -81,6 +83,23 @@ class Timer:
         }
         safe_json = json.dumps(payload, ensure_ascii=False)
 
+        # Build unformatted JSON string for current run output based on hidden 'current_run'
+        # The frontend will populate 'current_run' with one or more compact JSON objects (NDJSON).
+        # Here we append the user's notes as another JSON object, and return the combined string.
+        try:
+            notes_obj = json.dumps({"notes": notes}, ensure_ascii=False, separators=(",", ":"))
+        except Exception:
+            # Fallback to a stringified notes field
+            try:
+                notes_obj = json.dumps({"notes": str(notes)}, ensure_ascii=False, separators=(",", ":"))
+            except Exception:
+                notes_obj = "{}"
+        pieces = []
+        if isinstance(current_run, str) and current_run.strip():
+            pieces.append(current_run.strip())
+        pieces.append(notes_obj)
+        last_run_json = "\n".join(pieces) + "\nlast_run_json"
+
         return {
             "ui": {
                 # Return a list (not a set) to avoid unhashable type errors
@@ -89,7 +108,7 @@ class Timer:
                 "kwargs": kwargs,
                 "args": args,
             },
-            "result": (any_in,)
+            "result": (any_in, last_run_json)
         }
 
 CLAZZES = [Timer]

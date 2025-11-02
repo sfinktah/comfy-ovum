@@ -66,6 +66,10 @@ app.registerExtension({
             Logger.log({class:'ovum.timer',method:'setup',severity:'error',tag:'import'}, "Failed to load timer styles:", err);
         });
 
+        // Error loading extension /extensions/ovum/lib/tippy.umd.min.js TypeError: Cannot read properties of undefined (reading 'applyStyles')
+        //     at tippy.umd.min.js:1:15462
+        //     at tippy.umd.min.js:1:198
+        //     at tippy.umd.min.js:1:210
         const styleLink = document.createElement('link');
         styleLink.rel = 'stylesheet';
         styleLink.href = '/extensions/ovum/css/tippy.css';
@@ -130,6 +134,7 @@ app.registerExtension({
         });
 
         Logger.log({class:'ovum.timer',method:'setup',severity:'info',tag:'registration'}, 'ovum.timer registered');
+
     },
     /**
      * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} app
@@ -146,6 +151,20 @@ app.registerExtension({
             });
 
             chainCallback(nodeType.prototype, "onExecuted", function (message) {
+                // Keep current_run payload fresh after execute as well (JIT only if a Timer node exists)
+                // (Absolutely pointless, since this is exactly Just Too Late to be output)
+                if (!"stupid") {
+                    try {
+                        const g = app?.graph;
+                        const hasTimer = !!(g && Array.isArray(g._nodes) && g._nodes.some(n => n?.comfyClass === 'Timer'));
+                        if (hasTimer) {
+                            const payload = Timer.buildCurrentRunPayload?.() || "";
+                            const w = this.widgets?.find(w => w?.name === 'current_run');
+                            if (w) w.value = payload;
+                        }
+                    } catch (_e) {
+                    }
+                }
                 Logger.log({class:'Timer',method:'onExecuted',severity:'debug',tag:'execution'}, "[Timer] onExecuted (chainCallback)", message);
                 const timerNode = this;
                 let bg_image = message["bg_image"];
@@ -175,6 +194,7 @@ app.registerExtension({
             chainCallback(nodeType.prototype, "onNodeCreated", /** @this {ComfyNode} */ function () {
                 Logger.log({class:'Timer',method:'onNodeCreated',severity:'debug',tag:'node_creation'}, 'beforeRegisterNodeDef.onNodeCreated', this);
                 const node = this;
+
 
                 // Ensure built-in widgets (like 'Run notes (for queued run)') render above the dynamic inputs
                 // this.widgets_up = true;
