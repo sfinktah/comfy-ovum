@@ -26,7 +26,7 @@ class BurnNoticeOvum:
 
     def run(self, value: str, mute_after: bool):
         # Backend just returns the string; the frontend JS extension will clear the widget and optionally mute.
-        return (value,)
+        return {"ui": {"mute_after": [mute_after]}, "result": (value,), }
 
 
 CLAZZES = [BurnNoticeOvum]

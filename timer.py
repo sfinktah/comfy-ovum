@@ -12,12 +12,12 @@ class Timer:
 
         inputs = {
             "required": {
-                "notes": ("STRING", {"tooltip": "This will be recorded when the job is dequeued"})
                 # "select": ("INT", {"default": 1, "min": 1, "max": 999999, "step": 1, "tooltip": "The input number you want to output among the inputs"}),
                 # "sel_mode": ("BOOLEAN", {"default": False, "label_on": "select_on_prompt", "label_off": "select_on_execution", "forceInput": False,
                 #                          "tooltip": "In the case of 'select_on_execution', the selection is dynamically determined at the time of workflow execution. 'select_on_prompt' is an option that exists for older versions of ComfyUI, and it makes the decision before the workflow execution."}),
             },
             "optional": {
+                "notes": ("STRING", {"tooltip": "This will be recorded when the job is dequeued"}),
                 "any_in": (ANYTYPE, {"tooltip": "This is just used connect the timer to the workflow somewhere (only required if you want 'notes' to be recorded when the workflow runs)"}),
                 "current_run": ("STRING", {"multiline": True, "tooltip": "This should be hidden (internal use only)"}),
                 # **dyn_inputs
@@ -31,7 +31,7 @@ class Timer:
     FUNCTION = "func"
     NAME = "Timer 🥚"
     OUTPUT_NODE = True
-    def func(self, notes, any_in=None, current_run=None, *args, **kwargs):
+    def func(self, notes="", any_in=None, current_run=None, *args, **kwargs):
         # Accept arbitrary dynamic inputs like input2, input3, etc.
 
         def _to_jsonable(obj, _seen=None):

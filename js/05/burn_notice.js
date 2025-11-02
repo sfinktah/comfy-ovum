@@ -34,7 +34,7 @@ app.registerExtension({
 
                     // If mute_after is true, mute the node
                     const shouldMute = !!(muteWidget && (muteWidget.value === true));
-                    if (shouldMute) {
+                    if (message.mute_after[0]) {
                         // 2 = LiteGraph.ALWAYS = "mute"
                         this.mode = 2;
                         if (app.canvas?.setDirty) {
