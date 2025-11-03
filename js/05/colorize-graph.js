@@ -291,4 +291,8 @@ app.registerExtension({
         );
         ColorizeGraphNode.category = "ovum";
     },
+    // loadedGraphNode(node, app) {
+    //     console.log(`[colorize-graph] loadGraphNode: ${node.comfyClass || node.title}`);
+    //     // input_dirty[node.id + ""] = true;
+    // },
 });

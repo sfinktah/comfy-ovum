@@ -106,6 +106,9 @@ app.registerExtension({
         function onSocketClose(event) {
             Logger.log({class:'ovum.timer',method:'onSocketClose',severity:'warn',tag:'websocket'}, "[ComfyUI] websocket closed", event.code, event.reason);
             Timer.systemInfo = {...Timer.systemInfo, connectionClosed: true, closeCode: event.code, closeReason: event.reason};
+            if (Timer.current_run_id && Timer.run_history[Timer.current_run_id]) {
+                Timer.run_history[Timer.current_run_id].endTime = 'comfy-restart';
+            }
         }
 
         // Set up socket event listeners

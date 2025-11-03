@@ -239,6 +239,22 @@ export class Timer {
     }
 
     static start() {
+        // Remove any incomplete previous runs (no endTime), unless there are run notes.
+        const removeIds = [];
+        for (const [rid, rdata] of Object.entries(Timer.run_history)) {
+            if (rdata && !rdata.endTime) {
+                if (!Timer.run_notes[rid]) {
+                    removeIds.push(rid);
+                } else {
+                    Timer.run_history[rid].endTime = 'browser-reload';
+                }
+            }
+        }
+        for (const rid of removeIds) {
+            delete Timer.run_history[rid];
+            delete Timer.run_notes[rid];
+        }
+
         const t = LiteGraph.getTime();
         Timer.current_run_id = Date.now().toString(); // Generate unique run ID
         Timer.run_history[Timer.current_run_id] = { nodes: {}, startTime: t, systemStartTime: Date.now() };
@@ -631,8 +647,18 @@ export class Timer {
         });
     }
 
-    static executionError(e) {}
-    static executionInterrupted(e) {}
+    static executionError(e) {
+        if (Timer.current_run_id && Timer.run_history[Timer.current_run_id]) {
+            Timer.run_history[Timer.current_run_id].endTime = 'execution-error';
+        }
+    }
+
+    static executionInterrupted(e) {
+        if (Timer.current_run_id && Timer.run_history[Timer.current_run_id]) {
+            Timer.run_history[Timer.current_run_id].endTime = 'execution-interrupted';
+        }
+    }
+
     static executionStart(e) {
     }
     // When all nodes from the prompt have been successfully executed	prompt_id, timestamp

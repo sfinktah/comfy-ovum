@@ -18,19 +18,22 @@ class VhsPngDeletingOvum:
     NAME = "VHS PNG deleter"
     CATEGORY = "ovum/workflow"
     FUNCTION = "run"
+    DESCRIPTION = """
+Deletes .png files created by Video Helper Suite (VHS) from the filesystem and filters them out of an input list of filenames.
+"""
 
     # Allow list inputs/outputs (list of STRING)
-    INPUT_IS_LIST = True
-    OUTPUT_IS_LIST = (True,)
+    # INPUT_IS_LIST = True
+    # OUTPUT_IS_LIST = (True,)
 
-    RETURN_TYPES = (STRING,)
+    RETURN_TYPES = ("VHS_FILENAMES",)
     RETURN_NAMES = ("filenames",)
 
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "filenames": (STRING, {"default": ""}),
+                "filenames": ("VHS_FILENAMES", ),
             }
         }
 

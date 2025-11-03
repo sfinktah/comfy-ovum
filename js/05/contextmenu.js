@@ -102,3 +102,105 @@ app.registerExtension({
         installLinkMenuEnhancements();
     }
 });
+
+// LGraphCanvas.onMenuAdd
+/*
+function onMenuAdd(event, _t, mouseEvent, parentMenu, onNodeAdded) {
+    const canvas = LGraphCanvas.active_canvas;
+    const canvasWindow = canvas.getCanvasWindow();
+    const graph = canvas.graph;
+
+    if (!graph) {
+        return false;
+    }
+
+    function buildCategoryMenu (prefix, parent) {
+        const filter = canvas.filter || graph.filter;
+
+        // Collect subcategories under current prefix
+        const categories = LiteGraph
+            .getNodeTypesCategories(filter)
+            .filter(cat => cat.startsWith(prefix));
+
+        let entries = [];
+
+        categories.map(cat => {
+            if (!cat) {
+                return;
+            }
+
+            const regex = new RegExp("^(" + prefix + ")");
+            const top = cat.replace(regex, "").split("/")[0]; // immediate child
+            const nextPrefix = (prefix === "") ? top + "/" : prefix + top + "/";
+            let label = top;
+
+            // If label contains ::, show the suffix only
+            if (label.indexOf("::") !== -1) {
+                label = label.split("::")[1];
+            }
+
+            // Avoid duplicates by value
+            const exists = entries.findIndex(e => e.value === nextPrefix) !== -1;
+            if (!exists) {
+                entries.push({
+                    value: nextPrefix,
+                    content: label,
+                    has_submenu: true,
+                    callback: (item, _target, _opts, submenuParent) => {
+                        buildCategoryMenu(item.value, submenuParent);
+                    }
+                });
+            }
+        });
+
+        // Add nodes in this exact category (prefix without trailing slash)
+        const nodes = LiteGraph.getNodeTypesInCategory(prefix.slice(0, -1), filter);
+        nodes.map(nodeType => {
+            if (nodeType.skip_list) {
+                return;
+            }
+
+            const item = {
+                value: nodeType.type,
+                content: nodeType.title,
+                has_submenu: false,
+                callback: (item, _target, _opts, menuInstance) => {
+                    const firstEvt = menuInstance.getFirstEvent();
+
+                    canvas.graph.beforeChange();
+                    const node = LiteGraph.createNode(item.value);
+                    if (node) {
+                        node.pos = canvas.convertEventToCanvasOffset(firstEvt);
+                        canvas.graph.add(node);
+                    }
+                    if (onNodeAdded) {
+                        onNodeAdded(node);
+                    }
+                    canvas.graph.afterChange();
+                }
+            };
+
+            entries.push(item);
+        });
+
+        // Optional sorting/serialization for root menu
+        const sortSetting = getSetting("EasyUse.ContextMenu.NodesSort", null);
+        if (prefix === "" && sortSetting) {
+            entries = serializeParentNodeMenu(entries);
+        }
+
+        // Render context menu
+        new LiteGraph.ContextMenu(
+            entries,
+            {
+                event: mouseEvent,
+                parentMenu: parent
+            },
+            canvasWindow
+        );
+    }
+
+    buildCategoryMenu("", parentMenu);
+    return false;
+}
+*/

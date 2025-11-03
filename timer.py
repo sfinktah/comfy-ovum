@@ -19,10 +19,12 @@ class Timer:
             "optional": {
                 "notes": ("STRING", {"tooltip": "This will be recorded when the job is dequeued"}),
                 "any_in": (ANYTYPE, {"tooltip": "This is just used connect the timer to the workflow somewhere (only required if you want 'notes' to be recorded when the workflow runs)"}),
-                "current_run": ("STRING", {"multiline": True, "tooltip": "This should be hidden (internal use only)"}),
+                # "current_run": ("STRING", {"multiline": True, "tooltip": "This should be hidden (internal use only)"}),
                 # **dyn_inputs
             },
-            # "hidden": {"current_run": "STRING"}
+            "hidden": {
+                "current_run": ("STRING", {"multiline": True, "tooltip": "This should be hidden (internal use only)"}),
+            },
         }
         return inputs
 

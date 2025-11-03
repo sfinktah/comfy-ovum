@@ -133,15 +133,15 @@ export function html_impl(scope) {
         });
 
         // Tooltip showing run notes after 1 second hover
-        const rh = Timer.run_history[runId] || {};
-        const sysStartMs = rh.systemStartTime;
-        const lgStart = rh.startTime;
-        const lgEnd = rh.endTime;
-        const startDate = (typeof sysStartMs === 'number') ? new Date(sysStartMs) : null;
+        const runHistory = Timer.run_history[runId] || {};
+        const systemStartTime = runHistory.systemStartTime;
+        const lgStart = runHistory.startTime;
+        const lgEnd = runHistory.endTime;
+        const startDate = (typeof systemStartTime === 'number') ? new Date(systemStartTime) : null;
         let endDate = null;
         if (startDate && typeof lgEnd === 'number' && typeof lgStart === 'number') {
             const delta = lgEnd - lgStart;
-            if (!isNaN(delta)) endDate = new Date(sysStartMs + delta);
+            if (!isNaN(delta)) endDate = new Date(systemStartTime + delta);
         }
         const startStr = startDate ? startDate.toLocaleString() : 'Unknown';
         const endStr = endDate ? endDate.toLocaleString() : (typeof lgEnd === 'number' ? 'Unknown' : 'In progress');
