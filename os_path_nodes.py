@@ -201,15 +201,14 @@ class OvumOsPathBasename(_FirstArgPathBase):
     @classmethod
     def INPUT_TYPES(cls):
         t = super().INPUT_TYPES()
-        t["required"]["forward_slashes"] = (BOOLEAN, {"default": False})
+        # t["required"]["forward_slashes"] = (BOOLEAN, {"default": False})
         return t
 
     FUNCTION = "run"
 
-    def run(self, path: str, forward_slashes: bool = False, path_in: Optional[PATHLIKE] = None):
+    def run(self, path: str, path_in: Optional[PATHLIKE] = None):
         p = self._get_path_arg(path, path_in)
-        out = os.path.basename(p)  # type: ignore[arg-type]
-        return (_maybe_forward(out, forward_slashes),)
+        return os.path.basename(p)  # type: ignore[arg-type]
 
 class OvumOsPathSplit(_FirstArgPathBase):
     NAME = "os.path.split"
