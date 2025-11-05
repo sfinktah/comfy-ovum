@@ -13,6 +13,7 @@
 import { promises as fsp } from 'fs';
 import fs from 'fs';
 import path from 'path';
+import tailwindcss from '@tailwindcss/vite';
 
 /** Recursively walk a directory and return file paths */
 async function walk(dir) {
@@ -288,7 +289,7 @@ function copyUsedNodeModulesPlugin() {
 }
 
 /** @type {import('vite').UserConfig} */
-const config = {
+const baseConfig = {
   // Make sure vite doesn’t delete or interfere with your existing output.
   build: {
     outDir: 'js/.vite-tmp',
@@ -314,7 +315,48 @@ const config = {
       }
     }
   },
-  plugins: [externalizeOutsideRootPlugin(), copyUsedNodeModulesPlugin()],
+  plugins: [externalizeOutsideRootPlugin(), copyUsedNodeModulesPlugin(), tailwindcss()],
 };
 
-export default config;
+function cssBuildConfig() {
+  /** @type {import('vite').UserConfig} */
+  return {
+    build: {
+      outDir: 'web/css',
+      emptyOutDir: false,
+      rollupOptions: {
+        input: 'styles/tailwind.css',
+        output: {
+          assetFileNames: '[name][extname]'
+        }
+      }
+    },
+    plugins: [tailwindcss()],
+  };
+}
+
+function vendorBuildConfig() {
+  /** @type {import('vite').UserConfig} */
+  return {
+    build: {
+      outDir: 'web/dist/vendor',
+      emptyOutDir: false,
+      rollupOptions: {
+        input: 'js/vendor/tippy-bundle.js',
+        output: {
+          format: 'es',
+          entryFileNames: 'tippy-bundle.js',
+          assetFileNames: 'assets/[name][extname]'
+        },
+        // Do not externalize dependencies so @popperjs/core is bundled into the output
+        external: []
+      }
+    }
+  };
+}
+
+export default ({ mode }) => {
+  if (mode === 'css') return cssBuildConfig();
+  if (mode === 'vendor') return vendorBuildConfig();
+  return baseConfig;
+};

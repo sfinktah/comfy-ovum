@@ -24,17 +24,30 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "copy:modules": "vite build",
+    "build:css": "vite build --mode css",
+    "build:vendor": "vite build --mode vendor",
+    "build": "npm run copy:modules && npm run build:css && npm run build:vendor",
     "patch:comfyui-frontend": "python __export_frontend_types.py"
   },
   "devDependencies": {
     "@comfyorg/comfyui-frontend-types": "^1.32.1",
     "@comfyorg/litegraph": "^0.17.2",
+    "@popperjs/core": "^2.11.8",
+    "@tailwindcss/vite": "^4.1.16",
+    "daisyui": "^5.3.10",
     "fzf": "^0.5.2",
+    "tailwindcss": "^4.1.16",
     "tippy.js": "^6.3.7",
     "typescript": "^5.9.2",
     "vite": "^7.1.11"
   },
   "dependencies": {
     "lodash-es": "^4.17.21"
+  },
+  "tailwind": {
+    "content": [
+      "./js/**/*.js",
+      "./web/**/*.html"
+    ]
   }
 }

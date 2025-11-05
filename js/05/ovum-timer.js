@@ -9,7 +9,6 @@ import {$el} from "../common/ui.js";
 
 import { graphGetNodeById  } from '../01/graphHelpers.js';
 import { chainCallback, debounce} from '../01/utility.js';
-import { ensureTooltipLib } from '../01/tooltipHelpers.js';
 import { ensureDynamicInputsImpl} from "../01/dynamicInputHelpers.js";
 import { Timer } from '../04/timer-class.js';
 import { Logger } from '../common/logger.js';
@@ -66,19 +65,6 @@ app.registerExtension({
             Logger.log({class:'ovum.timer',method:'setup',severity:'error',tag:'import'}, "Failed to load timer styles:", err);
         });
 
-        // Error loading extension /extensions/ovum/lib/tippy.umd.min.js TypeError: Cannot read properties of undefined (reading 'applyStyles')
-        //     at tippy.umd.min.js:1:15462
-        //     at tippy.umd.min.js:1:198
-        //     at tippy.umd.min.js:1:210
-        const styleLink = document.createElement('link');
-        styleLink.rel = 'stylesheet';
-        styleLink.href = '/extensions/ovum/css/tippy.css';
-        styleLink.id = 'cg-timer-stylesheet';
-        document.head.appendChild(styleLink);
-
-
-        // Preload tooltip library (Tippy.js via CDN)
-        ensureTooltipLib().catch(() => {});
 
         // Collect system information when socket opens
         function onSocketOpen() {
