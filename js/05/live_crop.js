@@ -492,7 +492,7 @@ app.registerExtension({
                     // Get images from the array
                     const imgs = this._livecrop?.images || [];
                     if (!imgs.length) {
-                        Logger.log({ class: 'LiveCrop', method: 'redraw', severity: 'warn', tag: 'no_image' }, 'No image(s) available for drawing', {
+                        Logger.log({ class: 'LiveCrop', method: 'redraw', severity: 'debug', tag: 'no_image' }, 'No image(s) available for drawing', {
                             hasLivecrop: !!this._livecrop,
                             imagesProperty: this._livecrop?.images
                         });

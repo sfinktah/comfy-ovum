@@ -124,6 +124,104 @@ class LoadImageFromOutputWithWorkflowOvum(LoadImageWithWorkflowOvum):
         return base
 
 
+class LoadImageFromOutputSubdirectoryWithWorkflowOvum(LoadImageWithWorkflowOvum):
+    DESCRIPTION = "Load an image from a subdirectory under the output folder with workflow metadata."
+    EXPERIMENTAL = True
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        base = {
+            "required": {
+                "image": ("COMBO", {
+                    "image_upload": True,
+                    "image_folder": "output",
+                    "remote": {
+                        "route": "/internal/files/output",
+                        "refresh_button": True,
+                        "control_after_refresh": "first",
+                    },
+                }),
+            },
+            "optional": {
+                "output_subdir": ("STRING", {"default": "", "placeholder": "e.g. my_subdir/nested"}),
+            },
+        }
+        base["hidden"] = {"loaded_path": ("STRING", {})}
+        return base
+
+    def load_image_ex(self, image, output_subdir: str = ""):
+        # Resolve path under a provided subdirectory of the output folder, if specified
+        try:
+            subdir = str(output_subdir or "").strip().strip("/\\")
+        except Exception:
+            subdir = ""
+        default_dir = None
+        if subdir:
+            try:
+                default_dir = os.path.join(folder_paths.get_output_directory(), subdir)
+            except Exception:
+                default_dir = None
+        image_path = folder_paths.get_annotated_filepath(image, default_dir)
+
+        # The following mirrors LoadImageWithWorkflowOvum.load_image_ex but starts from image_path
+        pil = node_helpers.pillow(Image.open, image_path)
+
+        output_images = []
+        output_masks = []
+        w, h = None, None
+        excluded_formats = ['MPO']
+
+        for i in ImageSequence.Iterator(pil):
+            i = node_helpers.pillow(ImageOps.exif_transpose, i)
+            if i.mode == 'I':
+                i = i.point(lambda ii: ii * (1 / 255))
+            img = i.convert("RGB")
+            if len(output_images) == 0:
+                w, h = img.size
+            if img.size[0] != w or img.size[1] != h:
+                continue
+            arr = np.array(img).astype(np.float32) / 255.0
+            tensor = torch.from_numpy(arr)[None,]
+            if 'A' in i.getbands():
+                mask_np = np.array(i.getchannel('A')).astype(np.float32) / 255.0
+                mask_t = 1. - torch.from_numpy(mask_np)
+            elif i.mode == 'P' and 'transparency' in i.info:
+                mask_np = np.array(i.convert('RGBA').getchannel('A')).astype(np.float32) / 255.0
+                mask_t = 1. - torch.from_numpy(mask_np)
+            else:
+                mask_t = torch.zeros((64, 64), dtype=torch.float32, device="cpu")
+            output_images.append(tensor)
+            output_masks.append(mask_t.unsqueeze(0))
+
+        if len(output_images) > 1 and getattr(pil, 'format', None) not in excluded_formats:
+            output_image = torch.cat(output_images, dim=0)
+            output_mask = torch.cat(output_masks, dim=0)
+        else:
+            output_image = output_images[0]
+            output_mask = output_masks[0]
+
+        # Metadata
+        try:
+            prompt_workflow = MetadataFileExtractor.extract_both(str(image_path))
+        except Exception:
+            prompt_workflow = {"prompt": {}, "workflow": {}}
+
+        file_path_str = str(image_path)
+        image_ex: Dict[str, Any] = {
+            "image": output_image,
+            "mask": output_mask,
+            "filepath": file_path_str.replace('\\', '/'),
+            "prompt": prompt_workflow.get("prompt", {}),
+            "workflow": prompt_workflow.get("workflow", {}),
+        }
+
+        ui = {
+            "loaded_path": [file_path_str.replace('\\', '/')],
+            "loaded_basename": [os.path.basename(file_path_str).replace('\\', '/')],
+        }
+        return {"ui": ui, "result": (output_image, output_mask, file_path_str.replace('\\', '/'), prompt_workflow, image_ex)}
+
+
 # The concept is that the context (in our case, the IMAGE_EX muxed data) is allowed to input
 # and output from any instance of a context node, with the separate input links taking precedence
 # over the context (which is passed in and out as the first input/output)
@@ -325,6 +423,7 @@ lists. All provided list inputs must have the same length."""
 NODE_CLASS_MAPPINGS = {
     "LoadImageWithWorkflowOvum": LoadImageWithWorkflowOvum,
     "LoadImageFromOutputWithWorkflowOvum": LoadImageFromOutputWithWorkflowOvum,
+    "LoadImageFromOutputSubdirectoryWithWorkflowOvum": LoadImageFromOutputSubdirectoryWithWorkflowOvum,
     "ImageExContextOvum": ImageExContextOvum,
     "ImageExContextListOvum": ImageExContextListOvum,
 }
@@ -332,6 +431,7 @@ NODE_CLASS_MAPPINGS = {
 NODE_DISPLAY_NAME_MAPPINGS = {
     "LoadImageWithWorkflowOvum": "Load Image with Workflow",
     "LoadImageFromOutputWithWorkflowOvum": "Load Image from Output with Workflow",
+    "LoadImageFromOutputSubdirectoryWithWorkflowOvum": "Load Image from Output Subdirectory with Workflow",
     "ImageExContextOvum": "IMAGE_EX Context",
     "ImageExContextListOvum": "IMAGE_EX Context (List)",
 }
@@ -340,6 +440,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
 CLAZZES = [
     LoadImageWithWorkflowOvum,
     LoadImageFromOutputWithWorkflowOvum,
+    LoadImageFromOutputSubdirectoryWithWorkflowOvum,
     ImageExContextOvum,
     ImageExContextListOvum,
 ]

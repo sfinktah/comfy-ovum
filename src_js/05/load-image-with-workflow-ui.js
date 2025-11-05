@@ -4,6 +4,7 @@ import { chainCallback } from "../01/utility.js";
 const TARGET_CLASSES = new Set([
     "LoadImageWithWorkflowOvum",
     "LoadImageFromOutputWithWorkflowOvum",
+    "LoadImageFromOutputSubdirectoryWithWorkflowOvum",
 ]);
 
 function basename(path) {
