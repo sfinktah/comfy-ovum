@@ -23,14 +23,16 @@
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "copy:modules": "vite build"
+    "copy:modules": "vite build",
+    "patch:comfyui-frontend": "python __export_frontend_types.py"
   },
   "devDependencies": {
-    "@comfyorg/comfyui-frontend-types": "^1.25.10",
-    "@comfyorg/litegraph": "^0.8.100",
+    "@comfyorg/comfyui-frontend-types": "^1.32.1",
+    "@comfyorg/litegraph": "^0.17.2",
     "fzf": "^0.5.2",
+    "tippy.js": "^6.3.7",
     "typescript": "^5.9.2",
-    "vite": "^7.1.9"
+    "vite": "^7.1.11"
   },
   "dependencies": {
     "lodash-es": "^4.17.21"
