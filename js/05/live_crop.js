@@ -1,4 +1,4 @@
-/** @typedef {import("../../typings/ComfyNode").ComfyNode} ComfyNode */
+/** @typedef {import("../../typings/ComfyNode.js").ComfyNode} ComfyNode */
 // noinspection JSFileReferences
 import {app} from "../../../scripts/app.js";
 import {chainCallback} from "../01/utility.js";
@@ -89,9 +89,9 @@ function getCursorForDragType(dragType) {
 app.registerExtension({
     name: "ovum.live-crop",
     /**
-     * @param {import("../../typings/ComfyNode").ComfyNode} nodeType
-     * @param {import("@comfyorg/comfyui-frontend-types").ComfyNodeDef} nodeData
-     * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} app
+     * @param {import("../../typings/ComfyNode.js").ComfyNode} nodeType
+     * @param {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").ComfyNodeDef} nodeData
+     * @param {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").ComfyApp} app
      */
     async beforeRegisterNodeDef(nodeType, nodeData) {
         if (nodeData?.name !== "LiveCrop") {

@@ -1,4 +1,4 @@
-/** @typedef {import('@comfyorg/comfyui-frontend-types').ComfyApp} ComfyApp */
+/** @typedef {import('/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js').ComfyApp} ComfyApp */
 /** @typedef {import('../01/typedefs.js').INodeInputSlot} INodeInputSlot */
 
 /** @type {ComfyApp} */

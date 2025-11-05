@@ -326,7 +326,7 @@ app.registerExtension({
         }
     },
     /**
-     * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} app
+     * @param {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").ComfyApp} app
      */
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
         if (nodeData.name !== "Label") return;

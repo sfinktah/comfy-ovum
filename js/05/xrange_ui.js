@@ -1,5 +1,5 @@
-/** @typedef {import('@comfyorg/comfyui-frontend-types').ComfyApp} ComfyApp */
-/** @typedef {import('@comfyorg/litegraph').LiteGraph} LiteGraph */
+/** @typedef {import('/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js').ComfyApp} ComfyApp */
+/** @typedef {import('/ovum/web/dist/node_modules/@comfyorg/litegraph.js').LiteGraph} LiteGraph */
 /** @typedef {import('../01/typedefs.js').INodeInputSlot} INodeInputSlot */
 
 /** @type {ComfyApp} */
@@ -144,9 +144,9 @@ function advanceAllXRangeCursors(app) {
 app.registerExtension({
     name: "pyobjects.xrange.ui",
     /**
-     * @param {import("../../typings/ComfyNode").ComfyNode} nodeType
-     * @param {import("@comfyorg/comfyui-frontend-types").ComfyNodeDef} nodeData
-     * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} app
+     * @param {import("../../typings/ComfyNode.js").ComfyNode} nodeType
+     * @param {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").ComfyNodeDef} nodeData
+     * @param {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").ComfyApp} app
      */
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
         // Target the specific node by its displayed name or class name (support both).

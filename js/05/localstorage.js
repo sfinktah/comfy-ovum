@@ -40,9 +40,9 @@ app.registerExtension({
         });
     },
     /**
-     * @param {import("../../typings/ComfyNode").ComfyNode} nodeType
-     * @param {import("@comfyorg/comfyui-frontend-types").ComfyNodeDef} nodeData
-     * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} app
+     * @param {import("../../typings/ComfyNode.js").ComfyNode} nodeType
+     * @param {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").ComfyNodeDef} nodeData
+     * @param {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").ComfyApp} app
      */
     async beforeRegisterNodeDef(nodeType, nodeData, app_) {
         // 2) Still honor UI side-effects for SetLocalStorage on node onExecuted

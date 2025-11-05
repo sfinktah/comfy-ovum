@@ -1,7 +1,7 @@
 /// <reference lib="es2015.collection" />
-/** @typedef {import("@comfyorg/comfyui-frontend-types").LGraphNode} LGraphNode */
-/** @typedef {import("@comfyorg/comfyui-frontend-types").LiteGraph} LiteGraph */
-/** @typedef {import('@comfyorg/comfyui-frontend-types').LGraphCanvas} LGraphCanvas */
+/** @typedef {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").LGraphNode} LGraphNode */
+/** @typedef {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").LiteGraph} LiteGraph */
+/** @typedef {import('/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js').LGraphCanvas} LGraphCanvas */
 
 import {app} from "../../../scripts/app.js";
 import {getPreviousWidgetName, setColorAndBgColor, wrapWidgetValueSetter} from "../01/twinnodeHelpers.js";

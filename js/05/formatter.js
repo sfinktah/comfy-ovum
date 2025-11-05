@@ -1,12 +1,12 @@
-/** @typedef {import('@comfyorg/comfyui-frontend-types').ComfyApp} ComfyApp */
-/** @typedef {import('@comfyorg/litegraph').LiteGraph} LiteGraph */
-/** @typedef {import("@comfyorg/comfyui-frontend-types").INodeInputSlot} INodeInputSlot */
-/** @typedef {import("@comfyorg/comfyui-frontend-types").INodeOutputSlot} INodeOutputSlot */
-/** @typedef {import("@comfyorg/comfyui-frontend-types").ISlotType} ISlotType */
-/** @typedef {import("@comfyorg/comfyui-frontend-types").LLink} LLink */
-/** @typedef {import("@comfyorg/comfyui-frontend-types").SubgraphIO} SubgraphIO */
-/** @typedef {import("@comfyorg/comfyui-frontend-types").LGraphNode} LGraphNode */
-/** @typedef {import("../../typings/ComfyNode").ComfyNode} ComfyNode */
+/** @typedef {import('/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js').ComfyApp} ComfyApp */
+/** @typedef {import('/ovum/web/dist/node_modules/@comfyorg/litegraph.js').LiteGraph} LiteGraph */
+/** @typedef {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").INodeInputSlot} INodeInputSlot */
+/** @typedef {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").INodeOutputSlot} INodeOutputSlot */
+/** @typedef {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").ISlotType} ISlotType */
+/** @typedef {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").LLink} LLink */
+/** @typedef {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").SubgraphIO} SubgraphIO */
+/** @typedef {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").LGraphNode} LGraphNode */
+/** @typedef {import("../../typings/ComfyNode.js").ComfyNode} ComfyNode */
 
 import { app } from "../../../scripts/app.js";
 import { graphGetNodeById } from "../01/graphHelpers.js";
@@ -27,7 +27,7 @@ app.registerExtension({
      * @return {Promise<void>} Resolves when the node's dynamic input rules and behaviors are properly initialized.
      */
     /**
-     * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} app
+     * @param {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").ComfyApp} app
      */
     nodeCreated(node, app) {
 
@@ -39,13 +39,13 @@ app.registerExtension({
      *
      * @param {Object} nodeType - The type definition of the node being registered.
      * @param {Object} nodeData - The data associated with the node being registered.
-     * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} app - The application instance where the node is being registered.
+     * @param {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").ComfyApp} app - The application instance where the node is being registered.
      * @return {Promise<void>} Resolves when the dynamic input management is set up for the specified node type.
      */
     /**
-     * @param {import("../../typings/ComfyNode").ComfyNode} nodeType
-     * @param {import("@comfyorg/comfyui-frontend-types").ComfyNodeDef} nodeData
-     * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} app
+     * @param {import("../../typings/ComfyNode.js").ComfyNode} nodeType
+     * @param {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").ComfyNodeDef} nodeData
+     * @param {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").ComfyApp} app
      */
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
         // Target the Python class that supports many dynamic inputs

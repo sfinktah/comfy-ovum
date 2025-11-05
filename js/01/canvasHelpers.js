@@ -27,7 +27,7 @@ export function drawTextWithBg(ctx, text, x, y, font = "12px sans-serif") {
 
 /**
  * Get the bounding box of a widget in node-local coordinates
- * @param {import("@comfyorg/comfyui-frontend-types").LGraphNode} node - The node containing the widget
+ * @param {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").LGraphNode} node - The node containing the widget
  * @param {Object} widget - The widget to get bounds for
  * @returns {{x:number,y:number,width:number,height:number}|null} - bounds in node-local coordinates
  */

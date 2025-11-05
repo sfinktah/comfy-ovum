@@ -4,7 +4,7 @@ import {debounce} from "../01/utility.js";
 
 /**
  * Local type that extends ComfyNode with ComboMirror-specific helpers without modifying global d.ts.
- * @typedef {import("../../typings/ComfyNode").ComfyNode & {
+ * @typedef {import("../../typings/ComfyNode.js").ComfyNode & {
  *   _setValues?: (values: any[], value?: string) => void,
  *   _refreshValuesFromTarget?: () => void,
  *   _debouncedRefresh?: () => void,
@@ -25,9 +25,9 @@ import {debounce} from "../01/utility.js";
 app.registerExtension({
     name: "ovum.combo_mirror",
     /**
-     * @param {import("../../typings/ComfyNode").ComfyNode} nodeType
-     * @param {import("@comfyorg/comfyui-frontend-types").ComfyNodeDef} nodeData
-     * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} app
+     * @param {import("../../typings/ComfyNode.js").ComfyNode} nodeType
+     * @param {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").ComfyNodeDef} nodeData
+     * @param {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").ComfyApp} app
      */
     beforeRegisterNodeDef: async function (nodeType, nodeData, app) {
         if (nodeType?.comfyClass !== "ComboMirrorOvum") {
@@ -38,7 +38,7 @@ app.registerExtension({
 
         /**
          * Find or create the combobox widget for the node.
-         * @param {import("../../typings/ComfyNode").ComfyNode} node
+         * @param {import("../../typings/ComfyNode.js").ComfyNode} node
          */
         function ensureComboWidget (node) {
             if (node.widgets && node.widgets[0]) {

@@ -1,5 +1,5 @@
-/** @typedef {import('@comfyorg/comfyui-frontend-types').ComfyApp} ComfyApp */
-/** @typedef {import("../../typings/ComfyNode").ComfyNode} ComfyNode */
+/** @typedef {import('/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js').ComfyApp} ComfyApp */
+/** @typedef {import("../../typings/ComfyNode.js").ComfyNode} ComfyNode */
 
 import { app } from "../../../scripts/app.js";
 import { api } from "../../../scripts/api.js";

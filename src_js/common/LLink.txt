@@ -1,0 +1,73 @@
+=== Analysis of LLink ===
+
+Inheritance Chain:
+LLink (instance)
+  |- LLink (prototype)
+
+Functions:
+asSerialisable() [LLink (prototype)]
+configure(o2) [LLink (prototype)]
+disconnect(network, keepReroutes) [LLink (prototype)]
+hasOrigin(nodeId, outputIndex) [LLink (prototype)]
+  hasOrigin(nodeId, outputIndex) {
+      return this.origin_id === nodeId && this.origin_slot === outputIndex;
+    }
+hasTarget(nodeId, inputIndex) [LLink (prototype)]
+  hasTarget(nodeId, inputIndex) {
+      return this.target_id === nodeId && this.target_slot === inputIndex;
+    }
+resolve(network) [LLink (prototype)]
+serialize() [LLink (prototype)]
+  serialize() {
+      return [
+        this.id,
+        this.origin_id,
+        this.origin_slot,
+        this.target_id,
+        this.target_slot,
+        this.type
+      ];
+    }
+toFloating(slotType, parentId) [LLink (prototype)]
+
+Getters:
+color [LLink (prototype)]
+  get color() {
+      return this.#color;
+    }
+isFloating [LLink (prototype)]
+  get isFloating() {
+      return this.isFloatingOutput || this.isFloatingInput;
+    }
+isFloatingInput [LLink (prototype)]
+  get isFloatingInput() {
+      return this.target_id === -1 && this.target_slot === -1;
+    }
+isFloatingOutput [LLink (prototype)]
+  get isFloatingOutput() {
+      return this.origin_id === -1 && this.origin_slot === -1;
+    }
+originIsIoNode [LLink (prototype)]
+  get originIsIoNode() {
+      return this.origin_id === SUBGRAPH_INPUT_ID;
+    }
+targetIsIoNode [LLink (prototype)]
+  get targetIsIoNode() {
+      return this.target_id === SUBGRAPH_OUTPUT_ID;
+    }
+
+Setters:
+color [LLink (prototype)]
+  set color(value) {
+      this.#color = value === "" ? null : value;
+    }
+
+Summary:
+  |- Total members: 15
+  |- Functions: 8
+  |- Getters: 6
+  |- Setters: 1
+  |- Own members: 0
+  |- Inherited members: 15
+  |- Async members: 0
+  |- With source code: 10

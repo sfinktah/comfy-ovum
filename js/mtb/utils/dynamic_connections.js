@@ -1,21 +1,21 @@
-/** @typedef {import('@comfyorg/comfyui-frontend-types').ComfyApp} ComfyApp */
-/** @typedef {import('@comfyorg/comfyui-frontend-types').LiteGraph} LiteGraph */
-/** @typedef {import('@comfyorg/comfyui-frontend-types').LGraphCanvas} LGraphCanvas */
-/** @typedef {import("@comfyorg/comfyui-frontend-types").LGraphNode} LGraphNode */
-/** @typedef {import("@comfyorg/comfyui-frontend-types").LiteGraph} LiteGraph */
-/** @typedef {import('@comfyorg/comfyui-frontend-types').LGraphCanvas} LGraphCanvas */
-/** @typedef {import('@comfyorg/comfyui-frontend-types').LGraph} LGraph */
-/** @typedef {import("@comfyorg/comfyui-frontend-types").LLink} LLink */
-/** @typedef {import("@comfyorg/comfyui-frontend-types").INodeInputSlot} INodeInputSlot */
-/** @typedef {import("@comfyorg/comfyui-frontend-types").INodeOutputSlot} INodeOutputSlot */
-/** @typedef {import("@comfyorg/comfyui-frontend-types").ISlotType} ISlotType */
-/** @typedef {import("@comfyorg/comfyui-frontend-types").SubgraphIO} SubgraphIO */
-/** @typedef {import('@comfyorg/comfyui-frontend-types').ComfyApp} ComfyApp */
-/** @typedef {import("@comfyorg/comfyui-frontend-types").IWidget} IWidget */
-/** @typedef {import("@comfyorg/comfyui-frontend-types").Subgraph} Subgraph */
-/** @typedef {import("@comfyorg/comfyui-frontend-types").IFoundSlot} IFoundSlot */
-/** @typedef {import("@comfyorg/comfyui-frontend-types").IContextMenuValue} IContextMenuValue */
-/** @typedef {import("../../../typings/ComfyNode").ComfyNode} ComfyNode */
+/** @typedef {import('/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js').ComfyApp} ComfyApp */
+/** @typedef {import('/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js').LiteGraph} LiteGraph */
+/** @typedef {import('/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js').LGraphCanvas} LGraphCanvas */
+/** @typedef {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").LGraphNode} LGraphNode */
+/** @typedef {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").LiteGraph} LiteGraph */
+/** @typedef {import('/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js').LGraphCanvas} LGraphCanvas */
+/** @typedef {import('/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js').LGraph} LGraph */
+/** @typedef {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").LLink} LLink */
+/** @typedef {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").INodeInputSlot} INodeInputSlot */
+/** @typedef {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").INodeOutputSlot} INodeOutputSlot */
+/** @typedef {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").ISlotType} ISlotType */
+/** @typedef {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").SubgraphIO} SubgraphIO */
+/** @typedef {import('/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js').ComfyApp} ComfyApp */
+/** @typedef {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").IWidget} IWidget */
+/** @typedef {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").Subgraph} Subgraph */
+/** @typedef {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").IFoundSlot} IFoundSlot */
+/** @typedef {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").IContextMenuValue} IContextMenuValue */
+/** @typedef {import("../../../typings/ComfyNode.js").ComfyNode} ComfyNode */
 /**
  * @module Dynamic connections
  * File: dynamic_connections.js

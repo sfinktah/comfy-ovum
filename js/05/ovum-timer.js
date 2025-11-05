@@ -1,5 +1,5 @@
-/** @typedef {import('@comfyorg/comfyui-frontend-types').ComfyApp} ComfyApp */
-/** @typedef {import('@comfyorg/litegraph').LiteGraph} LiteGraph */
+/** @typedef {import('/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js').ComfyApp} ComfyApp */
+/** @typedef {import('/ovum/web/dist/node_modules/@comfyorg/litegraph.js').LiteGraph} LiteGraph */
 /** @typedef {import('../01/typedefs.js').INodeInputSlot} INodeInputSlot */
 
 import {api} from "../../../scripts/api.js";
@@ -17,7 +17,6 @@ import {html_impl} from "../04/timer-html.js";
 window.Timer = Timer;
 
 // Timer styles will be dynamically imported in the setup function
-// import _ from "./lodash";
 
 const MARGIN = 8;
 
@@ -126,12 +125,12 @@ app.registerExtension({
 
     },
     /**
-     * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} app
+     * @param {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").ComfyApp} app
      */
     /**
-     * @param {import("../../typings/ComfyNode").ComfyNode} nodeType
-     * @param {import("@comfyorg/comfyui-frontend-types").ComfyNodeDef} nodeData
-     * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} app
+     * @param {import("../../typings/ComfyNode.js").ComfyNode} nodeType
+     * @param {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").ComfyNodeDef} nodeData
+     * @param {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").ComfyApp} app
      */
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
         if (nodeType.comfyClass === "Timer") {

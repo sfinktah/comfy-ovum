@@ -1,4 +1,4 @@
-/** @typedef {import("@comfyorg/comfyui-frontend-types").INodeInputSlot} INodeInputSlot */
+/** @typedef {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").INodeInputSlot} INodeInputSlot */
 import { log } from "../common/logger.js";
 import {last} from "./graphHelpers.js";
 

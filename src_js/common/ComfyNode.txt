@@ -1,0 +1,643 @@
+
+=== Analysis of ComfyNode ===
+
+Inheritance Chain:
+ComfyNode (instance)
+  |- ComfyNode (prototype)
+    |- LGraphNode (prototype)
+      |- Object (base)
+
+Functions:
+_setConcreteSlots() [LGraphNode (prototype)]
+    _setConcreteSlots() {
+        this.#concreteInputs = this.inputs.map(
+          (slot) => toClass(NodeInputSlot, slot, this)
+        );
+        this.#concreteOutputs = this.outputs.map(
+          (slot) => toClass(NodeOutputSlot, slot, this)
+        );
+      }
+actionDo(action, param, options2) [LGraphNode (prototype)]
+addCustomWidget(custom_widget) [LGraphNode (prototype)]
+    addCustomWidget(custom_widget) {
+        this.widgets ||= [];
+        const widget = toConcreteWidget(custom_widget, this, false) ?? custom_widget;
+        this.widgets.push(widget);
+        return widget;
+      }
+addDOMWidget(name2, type, element, options2 = {}) [LGraphNode (prototype)]
+addInput(name, type, options)
+addOnExecutedOutput() [LGraphNode (prototype)]
+addOnTriggerInput() [LGraphNode (prototype)]
+    addOnTriggerInput() {
+        const trigS = this.findInputSlot("onTrigger");
+        if (trigS == -1) {
+          this.addInput("onTrigger", LiteGraph.EVENT, {
+            nameLocked: true
+          });
+          return this.findInputSlot("onTrigger");
+        }
+        return trigS;
+      }
+addOutput(name2, type, extra_info) [LGraphNode (prototype)]
+addProperty(name2, default_value, type, extra_info) [LGraphNode (prototype)]
+addTitleButton(options2) [LGraphNode (prototype)]
+    addTitleButton(options2) {
+        this.title_buttons ||= [];
+        const button = new LGraphButton(options2);
+        this.title_buttons.push(button);
+        return button;
+      }
+addWidget(type, name2, value, callback, options2) [LGraphNode (prototype)]
+alignToGrid() [LGraphNode (prototype)]
+    alignToGrid() {
+        this.snapToGrid(LiteGraph.CANVAS_GRID_SIZE);
+      }
+arrange() [LGraphNode (prototype)]
+    arrange() {
+        const slotsBounds = this.#measureSlots();
+        const widgetStartY = slotsBounds ? slotsBounds[1] + slotsBounds[3] - this.pos[1] : 0;
+        this.#arrangeWidgets(widgetStartY);
+        this.#arrangeWidgetInputSlots();
+      }
+canConnectTo(node2, toSlot, fromSlot) [LGraphNode (prototype)]
+    canConnectTo(node2, toSlot, fromSlot) {
+        return this.id !== node2.id && LiteGraph.isValidConnection(fromSlot.type, toSlot.type);
+      }
+captureInput(v2) [LGraphNode (prototype)]
+changeMode(modeTo) [LGraphNode (prototype)]
+clearTriggeredSlot(slot, link_id) [LGraphNode (prototype)]
+clone() [LGraphNode (prototype)]
+collapse(force) [LGraphNode (prototype)]
+    collapse(force) {
+        if (!this.collapsible && !force) return;
+        if (!this.graph) throw new NullGraphError();
+        this.graph._version++;
+        this.flags.collapsed = !this.flags.collapsed;
+        this.setDirtyCanvas(true, true);
+      }
+computeSize()
+configure(data) [ComfyNode (prototype)]
+connect(slot, target_node, target_slot, afterRerouteId) [LGraphNode (prototype)]
+connectByType(slot, targetNode, targetSlotType, optsIn) [LGraphNode (prototype)]
+connectByTypeOutput(slot, source_node, source_slotType, optsIn) [LGraphNode (prototype)]
+connectFloatingReroute(pos, slot, afterRerouteId) [LGraphNode (prototype)]
+connectInputToOutput() [LGraphNode (prototype)]
+connectSlots(output, inputNode, input, afterRerouteId) [LGraphNode (prototype)]
+constructor(this, "ComfyNode") (constructor) [ComfyNode (prototype)]
+convertWidgetToInput() [ComfyNode (prototype)]
+    function() {
+          console.warn(
+            "Please remove call to convertWidgetToInput. Widget to socket conversion is no longer necessary, as they co-exist now."
+          );
+          return false;
+        }
+disconnectInput(slot, keepReroutes) [LGraphNode (prototype)]
+disconnectOutput(slot, target_node) [LGraphNode (prototype)]
+doExecute(param, options2) [LGraphNode (prototype)]
+drawBadges(ctx, { gap = 2 } = {}) [LGraphNode (prototype)]
+drawCollapsedSlots(ctx) [LGraphNode (prototype)]
+drawProgressBar(ctx) [LGraphNode (prototype)]
+    drawProgressBar(ctx) {
+        if (!this.progress) return;
+        const originalFillStyle = ctx.fillStyle;
+        ctx.fillStyle = "green";
+        ctx.fillRect(0, 0, this.width * this.progress, 6);
+        ctx.fillStyle = originalFillStyle;
+      }
+drawSlots(ctx, { fromSlot, colorContext, editorAlpha, lowQuality }) [LGraphNode (prototype)]
+drawTitleBarBackground(ctx, {
+    scale, title_height = LiteGraph.NODE_TITLE_HEIGHT, low_quality = false
+  }) [LGraphNode (prototype)]
+drawTitleBox(ctx, {
+    scale, low_quality = false, title_height = LiteGraph.NODE_TITLE_HEIGHT, box_size = 10
+  }) [LGraphNode (prototype)]
+drawTitleText(ctx, {
+    scale, default_title_color, low_quality = false, title_height = LiteGraph.NODE_TITLE_HEIGHT
+  }) [LGraphNode (prototype)]
+drawWidgets(ctx, { lowQuality = false, editorAlpha = 1 }) [LGraphNode (prototype)]
+ensureWidgetRemoved(widget) [LGraphNode (prototype)]
+    ensureWidgetRemoved(widget) {
+        try {
+          this.removeWidget(widget);
+        } catch (error2) {
+          console.debug("Failed to remove widget", error2);
+        }
+      }
+expandToFitContent() [LGraphNode (prototype)]
+    expandToFitContent() {
+        const newSize = this.computeSize();
+        this.setSize([
+          Math.max(this.size[0], newSize[0]),
+          Math.max(this.size[1], newSize[1])
+        ]);
+      }
+findConnectByTypeSlot(findInputs, node2, slotType, options2) [LGraphNode (prototype)]
+findInputByType(type) [LGraphNode (prototype)]
+    findInputByType(type) {
+        return findFreeSlotOfType(this.inputs, type, (input) => input.link == null);
+      }
+findInputSlot(name2, returnObj = false) [LGraphNode (prototype)]
+    findInputSlot(name2, returnObj = false) {
+        const { inputs } = this;
+        if (!inputs) return -1;
+        for (const [i2, input] of inputs.entries()) {
+          if (name2 == input.name) {
+            return !returnObj ? i2 : input;
+          }
+        }
+        return -1;
+      }
+findInputSlotByType(type, returnObj, preferFreeSlot, doNotUseOccupied) [LGraphNode (prototype)]
+    findInputSlotByType(type, returnObj, preferFreeSlot, doNotUseOccupied) {
+        return this.#findSlotByType(
+          this.inputs,
+          type,
+          returnObj,
+          preferFreeSlot,
+          doNotUseOccupied
+        );
+      }
+findInputSlotFree(optsIn) [LGraphNode (prototype)]
+    findInputSlotFree(optsIn) {
+        return this.#findFreeSlot(this.inputs, optsIn);
+      }
+findOutputByType(type) [LGraphNode (prototype)]
+    findOutputByType(type) {
+        return findFreeSlotOfType(
+          this.outputs,
+          type,
+          (output) => !output.links?.length
+        );
+      }
+findOutputSlot(name2, returnObj = false) [LGraphNode (prototype)]
+findOutputSlotByType(type, returnObj, preferFreeSlot, doNotUseOccupied) [LGraphNode (prototype)]
+    findOutputSlotByType(type, returnObj, preferFreeSlot, doNotUseOccupied) {
+        return this.#findSlotByType(
+          this.outputs,
+          type,
+          returnObj,
+          preferFreeSlot,
+          doNotUseOccupied
+        );
+      }
+findOutputSlotFree(optsIn) [LGraphNode (prototype)]
+    findOutputSlotFree(optsIn) {
+        return this.#findFreeSlot(this.outputs, optsIn);
+      }
+findResizeDirection(canvasX, canvasY) [LGraphNode (prototype)]
+findSlotByType(input, type, returnObj, preferFreeSlot, doNotUseOccupied) [LGraphNode (prototype)]
+getBounding(out, includeExternal) [LGraphNode (prototype)]
+    getBounding(out, includeExternal) {
+        out ||= new Float32Array(4);
+        const rect = includeExternal ? this.renderArea : this.boundingRect;
+        out[0] = rect[0];
+        out[1] = rect[1];
+        out[2] = rect[2];
+        out[3] = rect[3];
+        return out;
+      }
+getColorOption() [LGraphNode (prototype)]
+    getColorOption() {
+        return Object.values(LGraphCanvas.node_colors).find(
+          (colorOption) => colorOption.color === this.color && colorOption.bgcolor === this.bgcolor
+        ) ?? null;
+      }
+getConnectionPos(is_input, slot_number, out) [LGraphNode (prototype)]
+getExtraMenuOptions(canvas, options) [ComfyNode (prototype)]
+getInputData(slot, force_update) [LGraphNode (prototype)]
+getInputDataByName(slot_name, force_update) [LGraphNode (prototype)]
+    getInputDataByName(slot_name, force_update) {
+        const slot = this.findInputSlot(slot_name);
+        return slot == -1 ? null : this.getInputData(slot, force_update);
+      }
+getInputDataType(slot) [LGraphNode (prototype)]
+getInputInfo(slot) [LGraphNode (prototype)]
+    getInputInfo(slot) {
+        return !this.inputs || !(slot < this.inputs.length) ? null : this.inputs[slot];
+      }
+getInputLink(slot) [LGraphNode (prototype)]
+getInputNode(slot) [LGraphNode (prototype)]
+getInputOnPos(pos) [LGraphNode (prototype)]
+    getInputOnPos(pos) {
+        return getNodeInputOnPos(this, pos[0], pos[1])?.input;
+      }
+getInputOrProperty(name2) [LGraphNode (prototype)]
+getInputPos(slot) [LGraphNode (prototype)]
+    getInputPos(slot) {
+        return this.getInputSlotPos(this.inputs[slot]);
+      }
+getInputSlotPos(input) [LGraphNode (prototype)]
+getOutputData(slot) [LGraphNode (prototype)]
+    getOutputData(slot) {
+        if (!this.outputs) return null;
+        if (slot >= this.outputs.length) return null;
+        const info = this.outputs[slot];
+        return info._data;
+      }
+getOutputInfo(slot) [LGraphNode (prototype)]
+    getOutputInfo(slot) {
+        return !this.outputs || !(slot < this.outputs.length) ? null : this.outputs[slot];
+      }
+getOutputNodes(slot) [LGraphNode (prototype)]
+getOutputOnPos(pos) [LGraphNode (prototype)]
+    getOutputOnPos(pos) {
+        return getNodeOutputOnPos(this, pos[0], pos[1])?.output;
+      }
+getOutputPos(slot) [LGraphNode (prototype)]
+getPropertyInfo(property) [LGraphNode (prototype)]
+getSlotFromWidget(widget) [LGraphNode (prototype)]
+    getSlotFromWidget(widget) {
+        if (widget)
+          return this.inputs.find(
+            (slot) => isWidgetInputSlot(slot) && slot.widget.name === widget.name
+          );
+      }
+getSlotInPosition(x2, y2) [LGraphNode (prototype)]
+getSlotOnPos(pos) [LGraphNode (prototype)]
+    getSlotOnPos(pos) {
+        if (!isPointInRect(pos, this.boundingRect)) return;
+        return this.getInputOnPos(pos) ?? this.getOutputOnPos(pos);
+      }
+getTitle()
+    function() {
+                const t = original_getTitle.bind(node)()
+                if (node._is_caching) return `${t} (caching)`
+                else return t;
+            }
+getWidgetFromSlot(slot) [LGraphNode (prototype)]
+    getWidgetFromSlot(slot) {
+        if (!isWidgetInputSlot(slot)) return;
+        return this.widgets?.find((w2) => w2.name === slot.widget.name);
+      }
+getWidgetOnPos(canvasX, canvasY, includeDisabled = false) [LGraphNode (prototype)]
+  Source: function hasOwnProperty() { [native code] }
+inResizeCorner(canvasX, canvasY) [LGraphNode (prototype)]
+isAnyOutputConnected() [LGraphNode (prototype)]
+    isAnyOutputConnected() {
+        const { outputs } = this;
+        if (!outputs) return false;
+        for (const output of outputs) {
+          if (output.links?.length) return true;
+        }
+        return false;
+      }
+isInputConnected(slot) [LGraphNode (prototype)]
+    isInputConnected(slot) {
+        if (!this.inputs) return false;
+        return slot < this.inputs.length && this.inputs[slot].link != null;
+      }
+isOutputConnected(slot) [LGraphNode (prototype)]
+    isOutputConnected(slot) {
+        if (!this.outputs) return false;
+        return slot < this.outputs.length && Number(this.outputs[slot].links?.length) > 0;
+      }
+isPointInCollapse(x2, y2) [LGraphNode (prototype)]
+    isPointInCollapse(x2, y2) {
+        const squareLength = LiteGraph.NODE_TITLE_HEIGHT;
+        return isInRectangle(
+          x2,
+          y2,
+          this.pos[0],
+          this.pos[1] - squareLength,
+          squareLength,
+          squareLength
+        );
+      }
+isPointInside(x2, y2) [LGraphNode (prototype)]
+    isPointInside(x2, y2) {
+        return isInRect(x2, y2, this.boundingRect);
+      }
+isSubgraphNode() [LGraphNode (prototype)]
+    isSubgraphNode() {
+        return false;
+      }
+isWidgetVisible(widget) [LGraphNode (prototype)]
+    isWidgetVisible(widget) {
+        const isHidden = this.collapsed || widget.hidden || widget.advanced && !this.showAdvanced;
+        return !isHidden;
+      }
+loadImage(url) [LGraphNode (prototype)]
+localToScreen(x2, y2, dragAndScale) [LGraphNode (prototype)]
+    localToScreen(x2, y2, dragAndScale) {
+        return [
+          (x2 + this.pos[0]) * dragAndScale.scale + dragAndScale.offset[0],
+          (y2 + this.pos[1]) * dragAndScale.scale + dragAndScale.offset[1]
+        ];
+      }
+measure(out, ctx) [LGraphNode (prototype)]
+move(deltaX, deltaY) [LGraphNode (prototype)]
+    move(deltaX, deltaY) {
+        if (this.pinned) return;
+        this.pos[0] += deltaX;
+        this.pos[1] += deltaY;
+      }
+onAdded(...args)
+    function(...args) {
+        originalCallback?.call(this, ...args);
+        for (const callback of callbacks) callback.call(this, ...args);
+      }
+onAfterExecuteNode(param, options2) [LGraphNode (prototype)]
+    onAfterExecuteNode(param, options2) {
+        const trigS = this.findOutputSlot("onExecuted");
+        if (trigS != -1) {
+          this.triggerSlot(trigS, param, null, options2);
+        }
+      }
+onConfigure()
+    function () {
+                const r = callback_orig.apply(this, arguments);
+                return callback.apply(this, arguments) ?? r
+            }
+onConnectionsChange(contype, slot, iscon, linf) [ComfyNode (prototype)]
+async onDragDrop(e) [ComfyNode (prototype)]
+onDragOver(e) [ComfyNode (prototype)]
+onDrawBackground() [ComfyNode (prototype)]
+    function() {
+          try {
+            unsafeDrawBackground.call(this);
+          } catch (error2) {
+            console.error("Error drawing node background", error2);
+          }
+        }
+onDrawForeground()
+    function () {
+                const r = callback_orig.apply(this, arguments);
+                return callback.apply(this, arguments) ?? r
+            }
+onDrawTitle(ctx) [LGraphNode (prototype)]
+    function (ctx) {
+                onDrawTitle?.apply(this,arguments)
+                NodeInclusionManager.visual(ctx, this)
+            }
+onExecuted(message) [ComfyNode (prototype)]
+    function(message) {
+                    if (message?.gifs) {
+                        this.updateParameters(message.gifs[0], true);
+                    }
+                }
+onGraphConfigured(...args) [ComfyNode (prototype)]
+    function(...args) {
+        originalCallback?.call(this, ...args);
+        for (const callback of callbacks) callback.call(this, ...args);
+      }
+onInputAdded() [ComfyNode (prototype)]
+    function () {
+                onInputAdded?.apply(this,arguments)
+                ControllerPanel.node_change(this.id, "onInputAdded")
+                app.graph.afterChange()
+            }
+onInputDblClick(...[slot, ...args]) [ComfyNode (prototype)]
+onInputRemoved() [ComfyNode (prototype)]
+    function () {
+                onInputRemoved?.apply(this,arguments)
+                ControllerPanel.node_change(this.id, "onInputRemoved")
+            }
+onKeyDown(e2) [ComfyNode (prototype)]
+onModeChange() [ComfyNode (prototype)]
+    function () {
+                onModeChange?.apply(this,arguments)
+                ControllerPanel.node_change(this.id, "onModeChange")
+            }
+onMouseDown()
+    function () {
+                const r = callback_orig.apply(this, arguments);
+                return callback.apply(this, arguments) ?? r
+            }
+onMouseLeave(e, pos, canvas)
+    function (e, pos, canvas) {
+                if (timeout) {
+                    clearTimeout(timeout)
+                    timeout = null
+                }
+            }
+onMouseMove(e, pos, canvas)
+onNodeCreated() [ComfyNode (prototype)]
+    function () {
+                const r = callback_orig.apply(this, arguments);
+                return callback.apply(this, arguments) ?? r
+            }
+onOutputAdded() [ComfyNode (prototype)]
+    function () {
+                onOutputAdded?.apply(this,arguments)
+                ControllerPanel.node_change(this.id, "onOutputAdded")
+            }
+onOutputRemoved() [ComfyNode (prototype)]
+    function () {
+                onOutputRemoved?.apply(this,arguments)
+                ControllerPanel.node_change(this.id, "onOutputRemoved")
+            }
+onRemoved(...args)
+    function(...args) {
+        originalCallback?.call(this, ...args);
+        for (const callback of callbacks) callback.call(this, ...args);
+      }
+onResize(...args)
+    function(...args) {
+        originalCallback?.call(this, ...args);
+        for (const callback of callbacks) callback.call(this, ...args);
+      }
+onSerialize(info)
+onTitleButtonClick(button, canvas2) [LGraphNode (prototype)]
+    onTitleButtonClick(button, canvas2) {
+        canvas2.dispatch("litegraph:node-title-button-clicked", {
+          node: this,
+          button
+        });
+      }
+pin(v2) [LGraphNode (prototype)]
+    pin(v2) {
+        if (!this.graph) throw new NullGraphError();
+        this.graph._version++;
+        this.flags.pinned = v2 ?? !this.flags.pinned;
+        this.resizable = !this.pinned;
+        if (!this.pinned) delete this.flags.pinned;
+      }
+reject_ue_connection(input)
+  Source: (input) => input?.name == "vae"
+removeInput(slot) [LGraphNode (prototype)]
+removeOutput(slot) [LGraphNode (prototype)]
+removeWidget(widget) [LGraphNode (prototype)]
+removeWidgetByName(name2) [LGraphNode (prototype)]
+    removeWidgetByName(name2) {
+        const widget = this.widgets?.find((x2) => x2.name === name2);
+        if (widget) this.removeWidget(widget);
+      }
+serialize() [LGraphNode (prototype)]
+setColorOption(colorOption) [LGraphNode (prototype)]
+    setColorOption(colorOption) {
+        if (colorOption == null) {
+          delete this.color;
+          delete this.bgcolor;
+        } else {
+          this.color = colorOption.color;
+          this.bgcolor = colorOption.bgcolor;
+        }
+      }
+setDirtyCanvas(dirty_foreground, dirty_background) [LGraphNode (prototype)]
+    setDirtyCanvas(dirty_foreground, dirty_background) {
+        this.graph?.canvasAction(
+          (c2) => c2.setDirty(dirty_foreground, dirty_background)
+        );
+      }
+setOutputData(slot, data) [LGraphNode (prototype)]
+setOutputDataType(slot, type) [LGraphNode (prototype)]
+setProperty(name2, value) [LGraphNode (prototype)]
+setSize(size) [LGraphNode (prototype)]
+    setSize(size) {
+        this.size = size;
+        this.onResize?.(this.size);
+      }
+setSizeForImage() [ComfyNode (prototype)]
+    function() {
+          console.warn(
+            "node.setSizeForImage is deprecated. Now it has no effect. Please remove the call to it."
+          );
+        }
+snapToGrid(snapTo) [LGraphNode (prototype)]
+    snapToGrid(snapTo) {
+        return this.pinned ? false : snapPoint(this.pos, snapTo);
+      }
+toggleAdvanced() [LGraphNode (prototype)]
+toString() [LGraphNode (prototype)]
+    toString() {
+        return JSON.stringify(this.serialize());
+      }
+trace(msg) [LGraphNode (prototype)]
+    trace(msg) {
+        this.console ||= [];
+        this.console.push(msg);
+        if (this.console.length > LGraphNode.MAX_CONSOLE) this.console.shift();
+      }
+trigger(action, param, options2) [LGraphNode (prototype)]
+triggerSlot(slot, param, link_id, options2) [LGraphNode (prototype)]
+unpin() [LGraphNode (prototype)]
+    unpin() {
+        this.pin(false);
+      }
+updateArea(ctx) [LGraphNode (prototype)]
+updateParameters(params, force_update)
+
+Getters:
+bodyHeight [LGraphNode (prototype)]
+    get bodyHeight() {
+        return this.collapsed ? 0 : this.size[1];
+      }
+boundingOffset [LGraphNode (prototype)]
+    get boundingOffset() {
+        const {
+          pos: [posX, posY],
+          boundingRect: [bX, bY]
+        } = this;
+        return [posX - bX, posY - bY];
+      }
+boundingRect [LGraphNode (prototype)]
+    get boundingRect() {
+        return this.#boundingRect;
+      }
+collapsed [LGraphNode (prototype)]
+    get collapsed() {
+        return !!this.flags.collapsed;
+      }
+collapsible [LGraphNode (prototype)]
+    get collapsible() {
+        return !this.pinned && this.constructor.collapsable !== false;
+      }
+displayType [LGraphNode (prototype)]
+    get displayType() {
+        return this.type;
+      }
+height [LGraphNode (prototype)]
+    get height() {
+        return LiteGraph.NODE_TITLE_HEIGHT + this.bodyHeight;
+      }
+innerFontStyle [LGraphNode (prototype)]
+    get innerFontStyle() {
+        return `normal ${LiteGraph.NODE_SUBTEXT_SIZE}px ${LiteGraph.NODE_FONT}`;
+      }
+is_selected [LGraphNode (prototype)]
+    get is_selected() {
+        return this.selected;
+      }
+pinned [LGraphNode (prototype)]
+    get pinned() {
+        return !!this.flags.pinned;
+      }
+pos [LGraphNode (prototype)]
+    get pos() {
+        return this._pos;
+      }
+renderArea [LGraphNode (prototype)]
+    get renderArea() {
+        return this.#renderArea;
+      }
+renderingBgColor [LGraphNode (prototype)]
+    get renderingBgColor() {
+        return this.bgcolor || this.constructor.bgcolor || LiteGraph.NODE_DEFAULT_BGCOLOR;
+      }
+renderingBoxColor [LGraphNode (prototype)]
+renderingColor [LGraphNode (prototype)]
+    get renderingColor() {
+        return this.color || this.constructor.color || LiteGraph.NODE_DEFAULT_COLOR;
+      }
+renderingShape [LGraphNode (prototype)]
+    get renderingShape() {
+        return this._shape || this.constructor.shape || LiteGraph.NODE_DEFAULT_SHAPE;
+      }
+renderingSize [LGraphNode (prototype)]
+    get renderingSize() {
+        return this.flags.collapsed ? [this._collapsed_width ?? 0, 0] : this._size;
+      }
+shape [LGraphNode (prototype)]
+    get shape() {
+        return this._shape;
+      }
+size [LGraphNode (prototype)]
+    get size() {
+        return this._size;
+      }
+slots [LGraphNode (prototype)]
+    get slots() {
+        return [...this.inputs, ...this.outputs];
+      }
+title_mode [LGraphNode (prototype)]
+    get title_mode() {
+        return this.constructor.title_mode ?? TitleMode.NORMAL_TITLE;
+      }
+titleFontStyle [LGraphNode (prototype)]
+    get titleFontStyle() {
+        return `${LiteGraph.NODE_TEXT_SIZE}px ${LiteGraph.NODE_FONT}`;
+      }
+width [LGraphNode (prototype)]
+    get width() {
+        return this.collapsed ? this._collapsed_width || LiteGraph.NODE_COLLAPSED_WIDTH : this.size[0];
+      }
+
+Setters:
+is_selected [LGraphNode (prototype)]
+    set is_selected(value) {
+        this.selected = value;
+      }
+pos [LGraphNode (prototype)]
+    set pos(value) {
+        if (!value || value.length < 2) return;
+        this._pos[0] = value[0];
+        this._pos[1] = value[1];
+      }
+shape [LGraphNode (prototype)]
+size [LGraphNode (prototype)]
+    set size(value) {
+        if (!value || value.length < 2) return;
+        this._size[0] = value[0];
+        this._size[1] = value[1];
+      }
+
+Summary:
+  |- Total members: 178
+  |- Functions: 149
+  |- Getters: 24
+  |- Setters: 5
+  |- Own members: 14
+  |- Inherited members: 164
+  |- Async members: 1
+  |- With source code: 107

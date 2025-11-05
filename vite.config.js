@@ -1,7 +1,7 @@
 // Vite config that leaves your code alone and only copies the used node_modules packages into web/dist
 // Usage:
 //   npm run copy:modules
-// This scans ./js/**/*.js for imports that contain "/node_modules/..." (e.g., "/ovum/node_modules/lodash-es/get.js")
+// This scans ./src_js/**/*.js for bare imports that do NOT start with '.' or '/' (e.g., 'lodash-es/get')
 // and copies the referenced package directory from ./node_modules/<pkg> to ./web/dist/node_modules/<pkg>.
 //
 // Notes:
@@ -173,7 +173,7 @@ function copyUsedNodeModulesPlugin() {
     apply: 'build',
     async buildStart() {
       const root = process.cwd();
-      const jsRoot = path.join(root, 'js');
+      const jsRoot = path.join(root, 'src_js');
       const outRoot = path.join(root, 'web', 'dist');
       const nodeModulesRoot = path.join(root, 'node_modules');
 
@@ -199,40 +199,23 @@ function copyUsedNodeModulesPlugin() {
         try { code = await fsp.readFile(file, 'utf8'); } catch { continue; }
         const specs = findImportSpecifiers(code);
         for (const s of specs) {
-          const nm = toNodeModulesPath(s);
-          if (!nm) continue;
-          const pkg = packageNameFromNodeModulesPath(nm);
-          if (pkg) pkgs.add(pkg);
-
-          // Attempt to resolve to a concrete file in node_modules
-          const absFromNm = path.join(root, nm); // starts with node_modules/...
-          const absCandidate = absFromNm; // could be file or folder
-          // If it's a file that exists, collect its relative deps within the package
-          try {
-            const st = await fsp.stat(absCandidate);
-            if (st.isFile()) {
-              const packageRootAbs = path.join(nodeModulesRoot, pkg);
-              await collectRelativeDeps(absCandidate, packageRootAbs, filesToCopy);
-              continue;
-            }
-          } catch {
-            // Try with .js if missing
-            try {
-              const withJs = absCandidate + '.js';
-              const st2 = await fsp.stat(withJs);
-              if (st2.isFile()) {
-                const packageRootAbs = path.join(nodeModulesRoot, pkg);
-                await collectRelativeDeps(withJs, packageRootAbs, filesToCopy);
-                continue;
-              }
-            } catch {}
+          // We only care about bare module imports (do not start with '.' or '/')
+          if (s.startsWith('./') || s.startsWith('../') || s.startsWith('/')) continue;
+          // Derive package name from bare specifier (handles scoped packages)
+          const parts = s.split('/');
+          let pkg = null;
+          if (parts[0]?.startsWith('@')) {
+            if (parts.length >= 2) pkg = parts[0] + '/' + parts[1];
+          } else {
+            pkg = parts[0];
           }
-          // Fallback: copy whole package later
+          if (pkg) pkgs.add(pkg);
+          // We no longer attempt to resolve individual files; copy whole package later.
         }
       }
 
       if (pkgs.size === 0) {
-        this.warn('[ovum] No /node_modules/ imports found in ./js');
+        this.warn('[ovum] No bare module imports (non-relative, non-absolute) found in ./src_js');
         return;
       }
 
@@ -292,12 +275,12 @@ function copyUsedNodeModulesPlugin() {
 const baseConfig = {
   // Make sure vite doesn’t delete or interfere with your existing output.
   build: {
-    outDir: 'js/.vite-tmp',
+    outDir: 'src_js/.vite-tmp',
     emptyOutDir: false,
     rollupOptions: {
       // Provide a minimal dummy input so Vite runs; it won’t be used for output you care about.
       // You can point this at any small JS file in your repo.
-      input: 'js/05/assert-ovum.js',
+      input: 'src_js/05/assert-ovum.js',
       output: {
         // Avoid clutter; single file name for the dummy chunk.
         entryFileNames: 'noop.js',
@@ -341,16 +324,27 @@ function vendorBuildConfig() {
     build: {
       outDir: 'web/dist/vendor',
       emptyOutDir: false,
+      // Use library mode so Rollup preserves exports in the output file
+      lib: {
+        entry: 'src_js/vendor/tippy-bundle.js',
+        formats: ['es'],
+        fileName: () => 'tippy-bundle.js',
+        name: 'tippyBundle',
+      },
       rollupOptions: {
-        input: 'js/vendor/tippy-bundle.js',
         output: {
-          format: 'es',
-          entryFileNames: 'tippy-bundle.js',
           assetFileNames: 'assets/[name][extname]'
         },
+        // Disable treeshaking so the bundle is never optimized away as empty
+        treeshake: false,
         // Do not externalize dependencies so @popperjs/core is bundled into the output
         external: []
       }
+    },
+    // Replace Node-only env checks in dependencies so the output has no `process` references
+    define: {
+      'process.env.NODE_ENV': '"production"',
+      'process.env': '{}'
     }
   };
 }

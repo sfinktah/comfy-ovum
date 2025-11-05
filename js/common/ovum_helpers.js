@@ -3,8 +3,8 @@
 // This utility inspects the workflow _prompt to discover metadata about the upstream
 // connection for a given node input.
 /**
- * @typedef {import('@comfyorg/comfyui-frontend-types').ISerialisedGraph} ISerialisedGraph
- * @typedef {import('@comfyorg/comfyui-frontend-types').ComfyApiWorkflow} ComfyApiWorkflow
+ * @typedef {import('/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js').ISerialisedGraph} ISerialisedGraph
+ * @typedef {import('/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js').ComfyApiWorkflow} ComfyApiWorkflow
  */
 
 

@@ -1,13 +1,13 @@
-/** @typedef {import('@comfyorg/comfyui-frontend-types').ComfyApp} ComfyApp */
-/** @typedef {import('@comfyorg/litegraph').LiteGraph} LiteGraph */
-/** @typedef {import("@comfyorg/comfyui-frontend-types").INodeInputSlot} INodeInputSlot */
-/** @typedef {import("@comfyorg/comfyui-frontend-types").LGraphNode} LGraphNode */
-/** @typedef {import("../../typings/ComfyNode").ComfyNode} ComfyNode */
+/** @typedef {import('/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js').ComfyApp} ComfyApp */
+/** @typedef {import('/ovum/web/dist/node_modules/@comfyorg/litegraph.js').LiteGraph} LiteGraph */
+/** @typedef {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").INodeInputSlot} INodeInputSlot */
+/** @typedef {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").LGraphNode} LGraphNode */
+/** @typedef {import("../../typings/ComfyNode.js").ComfyNode} ComfyNode */
 
 import { app } from "../../../scripts/app.js";
 import { chainCallback } from "../01/utility.js";
 import { ensureDynamicInputsImpl } from "../01/dynamicInputHelpers.js";
-import get from "/ovum/node_modules/lodash-es/get.js";
+import get from "/ovum/web/dist/node_modules/lodash-es/get.js";
 import { inspectUpstream } from "../common/ovum_helpers.js";
 
 // This extension adapts the generic argN dynamic-input helper to MakeFlatImageList,
@@ -15,9 +15,9 @@ import { inspectUpstream } from "../common/ovum_helpers.js";
 app.registerExtension({
     name: "ovum.image_list.dynamic_inputs",
     /**
-     * @param {import("../../typings/ComfyNode").ComfyNode} nodeType
-     * @param {import("@comfyorg/comfyui-frontend-types").ComfyNodeDef} nodeData
-     * @param {import("@comfyorg/comfyui-frontend-types").ComfyApp} app
+     * @param {import("../../typings/ComfyNode.js").ComfyNode} nodeType
+     * @param {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").ComfyNodeDef} nodeData
+     * @param {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").ComfyApp} app
      */
     async beforeRegisterNodeDef (nodeType, nodeData, app) {
 

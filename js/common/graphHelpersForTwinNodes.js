@@ -1,5 +1,5 @@
-/** @typedef {import("@comfyorg/comfyui-frontend-types").LGraph} LGraph */
-/** @typedef {import("@comfyorg/comfyui-frontend-types").Subgraph} Subgraph */
+/** @typedef {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").LGraph} LGraph */
+/** @typedef {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").Subgraph} Subgraph */
 import { log } from "./logger.js";
 
 export const GraphHelpers = {

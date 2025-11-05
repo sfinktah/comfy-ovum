@@ -1,4 +1,4 @@
-/** @typedef {import("../../typings/ComfyNode").ComfyNode} ComfyNode */
+/** @typedef {import("../../typings/ComfyNode.js").ComfyNode} ComfyNode */
 /** @typedef {import('../common/logger.js').Logger} Logger */
 
 /**

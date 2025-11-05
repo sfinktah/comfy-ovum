@@ -1,19 +1,19 @@
 /// <reference lib="es2015.collection" />
-/** @typedef {import("@comfyorg/comfyui-frontend-types").LGraphNode} LGraphNode */
-/** @typedef {import("@comfyorg/comfyui-frontend-types").LiteGraph} LiteGraph */
-/** @typedef {import('@comfyorg/comfyui-frontend-types').LGraphCanvas} LGraphCanvas */
-/** @typedef {import('@comfyorg/comfyui-frontend-types').LGraph} LGraph */
-/** @typedef {import("@comfyorg/comfyui-frontend-types").LLink} LLink */
-/** @typedef {import("@comfyorg/comfyui-frontend-types").INodeInputSlot} INodeInputSlot */
-/** @typedef {import("@comfyorg/comfyui-frontend-types").INodeOutputSlot} INodeOutputSlot */
-/** @typedef {import("@comfyorg/comfyui-frontend-types").ISlotType} ISlotType */
-/** @typedef {import("@comfyorg/comfyui-frontend-types").SubgraphIO} SubgraphIO */
-/** @typedef {import('@comfyorg/comfyui-frontend-types').ComfyApp} ComfyApp */
-/** @typedef {import("@comfyorg/comfyui-frontend-types").IWidget} IWidget */
-/** @typedef {import("@comfyorg/comfyui-frontend-types").ContextMenuItem} ContextMenuItem */
-/** @typedef {import("@comfyorg/comfyui-frontend-types").ComfyNode} ComfyNode */
-/** @typedef {import("@comfyorg/comfyui-frontend-types").Subgraph} Subgraph */
-/** @typedef {import("@comfyorg/comfyui-frontend-types").Point} Point */
+/** @typedef {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").LGraphNode} LGraphNode */
+/** @typedef {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").LiteGraph} LiteGraph */
+/** @typedef {import('/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js').LGraphCanvas} LGraphCanvas */
+/** @typedef {import('/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js').LGraph} LGraph */
+/** @typedef {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").LLink} LLink */
+/** @typedef {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").INodeInputSlot} INodeInputSlot */
+/** @typedef {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").INodeOutputSlot} INodeOutputSlot */
+/** @typedef {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").ISlotType} ISlotType */
+/** @typedef {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").SubgraphIO} SubgraphIO */
+/** @typedef {import('/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js').ComfyApp} ComfyApp */
+/** @typedef {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").IWidget} IWidget */
+/** @typedef {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").ContextMenuItem} ContextMenuItem */
+/** @typedef {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").ComfyNode} ComfyNode */
+/** @typedef {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").Subgraph} Subgraph */
+/** @typedef {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").Point} Point */
 // 1. **Removed potentially invalid types**: `NodeInputSlot`, `NodeOutputSlot`, and `Subgraph` - these don't appear to be standard exports from the comfyui-frontend-types package
 /** @typedef {import("../common/graphHelpersForTwinNodes.js").GraphHelpers} GraphHelpers */
 

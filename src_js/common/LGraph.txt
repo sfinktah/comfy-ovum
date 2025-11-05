@@ -1,0 +1,334 @@
+=== Analysis of LGraph ===
+
+Inheritance Chain:
+LGraph (instance)
+  |- LGraph (prototype)
+    |- Object (base)
+
+Functions:
+_configureBase(data) [LGraph (prototype)]
+add(node2, skip_compute_order) [LGraph (prototype)]
+addFloatingLink(link2) [LGraph (prototype)]
+afterChange(info) [LGraph (prototype)]
+    afterChange(info) {
+        this.onAfterChange?.(this, info);
+        this.canvasAction((c2) => c2.onAfterChange?.(this));
+      }
+arrange(margin, layout) [LGraph (prototype)]
+asSerialisable(options2) [LGraph (prototype)]
+attachCanvas(canvas2) [LGraph (prototype)]
+beforeChange(info) [LGraph (prototype)]
+    beforeChange(info) {
+        this.onBeforeChange?.(this, info);
+        this.canvasAction((c2) => c2.onBeforeChange?.(this));
+      }
+canvasAction(action) [LGraph (prototype)]
+    canvasAction(action) {
+        const canvases = this.list_of_graphcanvas;
+        if (!canvases) return;
+        for (const canvas2 of canvases) action(canvas2);
+      }
+change() [LGraph (prototype)]
+    change() {
+        if (LiteGraph.debug) {
+          console.log("Graph changed");
+        }
+        this.canvasAction((c2) => c2.setDirty(true, true));
+        this.on_change?.(this);
+      }
+checkNodeTypes() [LGraph (prototype)]
+clear()
+    function () {
+    			orig_clear.call(app.graph);
+    			load_components();
+    		}
+clearTriggeredSlots() [LGraph (prototype)]
+    clearTriggeredSlots() {
+        for (const link_info of this._links.values()) {
+          if (!link_info) continue;
+          if (link_info._last_time) link_info._last_time = 0;
+        }
+      }
+computeExecutionOrder(only_onExecute, set_level) [LGraph (prototype)]
+configure() [LGraph (prototype)]
+    function () {
+    			const r = graphConfigure.apply(this, arguments);
+    			for (const n of app.graph._nodes) {
+    				if (n.type === REROUTE_PRIMITIVE) {
+    					n.onGraphConfigured();
+    				}
+    			}
+
+    			return r;
+    		}
+constructor(this, "LGraph") (constructor) [LGraph (prototype)]
+convertToSubgraph(items) [LGraph (prototype)]
+createReroute(pos, before) [LGraph (prototype)]
+createSubgraph(data) [LGraph (prototype)]
+    createSubgraph(data) {
+        const { id: id2 } = data;
+        const subgraph = new Subgraph(this.rootGraph, data);
+        this.subgraphs.set(id2, subgraph);
+        this.rootGraph.events.dispatch("subgraph-created", { subgraph, data });
+        return subgraph;
+      }
+detachCanvas(canvas2) [LGraph (prototype)]
+    detachCanvas(canvas2) {
+        canvas2.graph = null;
+        const canvases = this.list_of_graphcanvas;
+        if (canvases) {
+          const pos = canvases.indexOf(canvas2);
+          if (pos !== -1) canvases.splice(pos, 1);
+        }
+      }
+findNodeByTitle(title) [LGraph (prototype)]
+    findNodeByTitle(title) {
+        const { _nodes } = this;
+        for (const node2 of _nodes) {
+          if (node2.title == title) return node2;
+        }
+        return null;
+      }
+findNodesByClass(classObject, result) [LGraph (prototype)]
+    findNodesByClass(classObject, result) {
+        result = result || [];
+        result.length = 0;
+        const { _nodes } = this;
+        for (const node2 of _nodes) {
+          if (node2.constructor === classObject) result.push(node2);
+        }
+        return result;
+      }
+findNodesByTitle(title) [LGraph (prototype)]
+    findNodesByTitle(title) {
+        const result = [];
+        const { _nodes } = this;
+        for (const node2 of _nodes) {
+          if (node2.title == title) result.push(node2);
+        }
+        return result;
+      }
+findNodesByType(type, result) [LGraph (prototype)]
+getElapsedTime() [LGraph (prototype)]
+    getElapsedTime() {
+        return this.elapsed_time;
+      }
+getFixedTime() [LGraph (prototype)]
+    getFixedTime() {
+        return this.fixedtime;
+      }
+getGroupOnPos(x2, y2) [LGraph (prototype)]
+    getGroupOnPos(x2, y2) {
+        for (let i2 = this._groups.length - 1; i2 >= 0; i2--) {
+          const group = this._groups[i2];
+          if (group.isPointInside(x2, y2)) {
+            return group;
+          }
+        }
+        return void 0;
+      }
+getGroupTitlebarOnPos(x2, y2) [LGraph (prototype)]
+    getGroupTitlebarOnPos(x2, y2) {
+        for (let i2 = this._groups.length - 1; i2 >= 0; i2--) {
+          const group = this._groups[i2];
+          if (group.isPointInTitlebar(x2, y2)) {
+            return group;
+          }
+        }
+        return void 0;
+      }
+getLink(id2) [LGraph (prototype)]
+    getLink(id2) {
+        return id2 == null ? void 0 : this._links.get(id2);
+      }
+getNodeById(id2) [LGraph (prototype)]
+    getNodeById(id2) {
+        return id2 != null ? this._nodes_by_id[id2] : null;
+      }
+getNodeOnPos(x, y, nodes_list) [LGraph (prototype)]
+getReroute(id2) [LGraph (prototype)]
+    getReroute(id2) {
+        return id2 == null ? void 0 : this.reroutes.get(id2);
+      }
+getRerouteOnPos(x2, y2, reroutes) [LGraph (prototype)]
+    getRerouteOnPos(x2, y2, reroutes) {
+        for (const reroute of reroutes ?? this.reroutes.values()) {
+          if (reroute.containsPoint([x2, y2])) return reroute;
+        }
+      }
+getSnapToGridSize() [LGraph (prototype)]
+    getSnapToGridSize() {
+        return LiteGraph.alwaysSnapToGrid ? LiteGraph.CANVAS_GRID_SIZE || 1 : LiteGraph.CANVAS_GRID_SIZE;
+      }
+getTime() [LGraph (prototype)]
+    getTime() {
+        return this.globaltime;
+      }
+load(url, callback) [LGraph (prototype)]
+onAfterChange()
+onConfigure(...args)
+    function(...args) {
+          fixLinkInputSlots(this);
+          triggerCallbackOnAllNodes(this, "onGraphConfigured");
+          const r2 = onConfigure?.apply(this, args);
+          triggerCallbackOnAllNodes(this, "onAfterGraphConfigured");
+          return r2;
+        }
+onConnectionChange(node2)
+    function(node2) {
+          originalCallbacks.onConnectionChange?.call(this, node2);
+          void handleGraphChanged();
+        }
+onNodeAdded(node2)
+    function(node2) {
+          originalCallbacks.onNodeAdded?.call(this, node2);
+          void handleGraphChanged();
+        }
+onNodeRemoved(node2)
+    function(node2) {
+          originalCallbacks.onNodeRemoved?.call(this, node2);
+          nodeStatesCache.delete(node2.id);
+          void handleGraphChanged();
+        }
+positionableItems() [LGraph (prototype)]
+    *positionableItems() {
+        for (const node2 of this._nodes) yield node2;
+        for (const group of this._groups) yield group;
+        for (const reroute of this.reroutes.values()) yield reroute;
+        return;
+      }
+remove(node2) [LGraph (prototype)]
+removeFloatingLink(link2) [LGraph (prototype)]
+removeLink(link_id) [LGraph (prototype)]
+    removeLink(link_id) {
+        const link2 = this._links.get(link_id);
+        if (!link2) return;
+        const node2 = this.getNodeById(link2.target_id);
+        node2?.disconnectInput(link2.target_slot, false);
+        link2.disconnect(this);
+      }
+removeReroute(id2) [LGraph (prototype)]
+resolveSubgraphIdPath(nodeIds) [LGraph (prototype)]
+runStep(num, do_not_catch_errors, limit2) [LGraph (prototype)]
+sendActionToCanvas(action, params) [LGraph (prototype)]
+    sendActionToCanvas(action, params) {
+        const { list_of_graphcanvas } = this;
+        if (!list_of_graphcanvas) return;
+        for (const c2 of list_of_graphcanvas) {
+          c2[action]?.apply(c2, params);
+        }
+      }
+sendEventToAllNodes(eventname, params, mode) [LGraph (prototype)]
+serialize() [LGraph (prototype)]
+    function () {
+                const response = graphSerialize.apply(this, [...arguments]);
+                rgthree.initialGraphToPromptSerializedWorkflowBecauseComfyUIBrokeStuff = response;
+                return response;
+            }
+setCallback(name2, func) [LGraph (prototype)]
+    setCallback(name2, func) {
+        const nodes = this.findNodesByTitle(name2);
+        for (const node2 of nodes) {
+          node2.setTrigger(func);
+        }
+      }
+setDirtyCanvas(fg, bg) [LGraph (prototype)]
+    setDirtyCanvas(fg, bg) {
+        this.canvasAction((c2) => c2.setDirty(fg, bg));
+      }
+setReroute({
+    id: id2, parentId, pos, linkIds, floating
+  }) [LGraph (prototype)]
+snapToGrid(items) [LGraph (prototype)]
+    snapToGrid(items) {
+        const snapTo = this.getSnapToGridSize();
+        if (!snapTo) return;
+        for (const item of getAllNestedItems(items)) {
+          if (!item.pinned) item.snapToGrid(snapTo);
+        }
+      }
+start(interval) [LGraph (prototype)]
+stop() [LGraph (prototype)]
+trigger(action, param) [LGraph (prototype)]
+    trigger(action, param) {
+        this.onTrigger?.(action, param);
+      }
+triggerInput(name2, value) [LGraph (prototype)]
+    triggerInput(name2, value) {
+        const nodes = this.findNodesByTitle(name2);
+        for (const node2 of nodes) {
+          node2.onTrigger(value);
+        }
+      }
+unpackSubgraph(subgraphNode) [LGraph (prototype)]
+updateExecutionOrder() [LGraph (prototype)]
+
+Getters:
+empty [LGraph (prototype)]
+    get empty() {
+        return this._nodes.length + this._groups.length + this.reroutes.size === 0;
+      }
+floatingLinks [LGraph (prototype)]
+    get floatingLinks() {
+        return this.#floatingLinks;
+      }
+groups [LGraph (prototype)]
+    get groups() {
+        return this._groups;
+      }
+isRootGraph [LGraph (prototype)]
+    get isRootGraph() {
+        return this.rootGraph === this;
+      }
+last_link_id [LGraph (prototype)]
+    get last_link_id() {
+        return this.state.lastLinkId;
+      }
+last_node_id [LGraph (prototype)]
+    get last_node_id() {
+        return this.state.lastNodeId;
+      }
+nodes [LGraph (prototype)]
+    get nodes() {
+        return this._nodes;
+      }
+primaryCanvas [LGraph (prototype)]
+    get primaryCanvas() {
+        return this.rootGraph.#canvas;
+      }
+reroutes [LGraph (prototype)]
+    get reroutes() {
+        return this.#reroutes;
+      }
+rootGraph [LGraph (prototype)]
+    get rootGraph() {
+        return this;
+      }
+subgraphs [LGraph (prototype)]
+    get subgraphs() {
+        return this.rootGraph._subgraphs;
+      }
+
+Setters:
+last_link_id [LGraph (prototype)]
+    set last_link_id(value) {
+        this.state.lastLinkId = value;
+      }
+last_node_id [LGraph (prototype)]
+    set last_node_id(value) {
+        this.state.lastNodeId = value;
+      }
+primaryCanvas [LGraph (prototype)]
+    set primaryCanvas(canvas2) {
+        this.rootGraph.#canvas = canvas2;
+      }
+
+Summary:
+  |- Total members: 87
+  |- Functions: 71
+  |- Getters: 12
+  |- Setters: 4
+  |- Own members: 6
+  |- Inherited members: 81
+  |- Async members: 0
+  |- With source code: 61

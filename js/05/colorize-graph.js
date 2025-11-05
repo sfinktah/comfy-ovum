@@ -1,8 +1,8 @@
-/** @typedef {import('@comfyorg/comfyui-frontend-types').ComfyApp} ComfyApp */
-/** @typedef {import('@comfyorg/litegraph').LiteGraph} LiteGraph */
-/** @typedef {import('@comfyorg/comfyui-frontend-types').LGraph} LGraph */
-/** @typedef {import('@comfyorg/comfyui-frontend-types').LGraphNode} LGraphNode */
-/** @typedef {import('../../typings/ComfyNode').ComfyNode} ComfyNode */
+/** @typedef {import('/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js').ComfyApp} ComfyApp */
+/** @typedef {import('/ovum/web/dist/node_modules/@comfyorg/litegraph.js').LiteGraph} LiteGraph */
+/** @typedef {import('/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js').LGraph} LGraph */
+/** @typedef {import('/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js').LGraphNode} LGraphNode */
+/** @typedef {import('../../typings/ComfyNode.js').ComfyNode} ComfyNode */
 
 import { app } from "../../../scripts/app.js";
 import { setColorAndBgColor } from "../01/twinnodeHelpers.js";

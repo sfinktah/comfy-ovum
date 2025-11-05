@@ -1,6 +1,6 @@
-/** @typedef {import("@comfyorg/comfyui-frontend-types").ComfyApp} ComfyApp */
-/** @typedef {import("@comfyorg/comfyui-frontend-types").ComfyNodeDef} ComfyNodeDef */
-/** @typedef {import("@comfyorg/comfyui-frontend-types").LGraphNode} LGraphNode */
+/** @typedef {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").ComfyApp} ComfyApp */
+/** @typedef {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").ComfyNodeDef} ComfyNodeDef */
+/** @typedef {import("/ovum/web/dist/node_modules/@comfyorg/comfyui-frontend-types.js").LGraphNode} LGraphNode */
 
 import {app} from "../../../scripts/app.js";
 import {chainCallback} from "../01/utility.js";
@@ -423,7 +423,7 @@ function propagateDownstream(node) {
 app.registerExtension({
     name: "ovum.underscore.ui",
     /**
-     * @param {import("../../typings/ComfyNode").ComfyNode} nodeType
+     * @param {import("../../typings/ComfyNode.js").ComfyNode} nodeType
      * @param {ComfyNodeDef} nodeData
      * @param {ComfyApp} app
      */

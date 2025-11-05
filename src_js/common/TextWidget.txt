@@ -1,0 +1,94 @@
+== Analysis of TextWidget ===
+
+Inheritance Chain:
+TextWidget (instance)
+  |- TextWidget (prototype)
+    |- BaseWidget (prototype)
+
+Functions:
+callback()
+  () => {
+      }
+createCopyForNode(node2) [BaseWidget (prototype)]
+  createCopyForNode(node2) {
+      const cloned = new this.constructor(this, node2);
+      cloned.value = this.value;
+      return cloned;
+    }
+drawTruncatingText({
+    ctx, width: width2, leftPadding = 5, rightPadding = 20
+  }) [BaseWidget (prototype)]
+drawWidget(ctx, { width: width2, showText = true }) [TextWidget (prototype)]
+drawWidgetShape(ctx, { width: width2, showText }) [BaseWidget (prototype)]
+onClick({ e: e2, node: node2, canvas: canvas2 }) [TextWidget (prototype)]
+setValue(value, { e: e2, node: node2, canvas: canvas2 }) [BaseWidget (prototype)]
+
+Getters:
+_displayValue [BaseWidget (prototype)]
+  get _displayValue() {
+      return this.computedDisabled ? "" : String(this.value);
+  }
+background_color [BaseWidget (prototype)]
+  get background_color() {
+      return LiteGraph.WIDGET_BGCOLOR;
+  }
+disabledTextColor [BaseWidget (prototype)]
+  get disabledTextColor() {
+      return LiteGraph.WIDGET_DISABLED_TEXT_COLOR;
+    }
+displayName [BaseWidget (prototype)]
+  get displayName() {
+      return this.label || this.name;
+  }
+height [BaseWidget (prototype)]
+  get height() {
+      return LiteGraph.NODE_WIDGET_HEIGHT;
+  }
+labelBaseline [BaseWidget (prototype)]
+  get labelBaseline() {
+      return this.y + this.height * 0.7;
+  }
+node [BaseWidget (prototype)]
+  get node() {
+      return this.#node;
+  }
+outline_color [BaseWidget (prototype)]
+  get outline_color() {
+      return this.advanced ? LiteGraph.WIDGET_ADVANCED_OUTLINE_COLOR : LiteGraph.WIDGET_OUTLINE_COLOR;
+  }
+secondary_text_color [BaseWidget (prototype)]
+  get secondary_text_color() {
+      return LiteGraph.WIDGET_SECONDARY_TEXT_COLOR;
+  }
+serializeValue
+  get() {
+      return serializeValue;
+  }
+text_color [BaseWidget (prototype)]
+  get text_color() {
+      return LiteGraph.WIDGET_TEXT_COLOR;
+  }
+value [BaseWidget (prototype)]
+  get value() {
+      return this.#value;
+  }
+
+Setters:
+serializeValue
+  set(cb) {
+      inheritedSerializeValue = cb;
+  }
+value [BaseWidget (prototype)]
+  set value(value) {
+      this.#value = value;
+  }
+
+Summary:
+  |- Total members: 21
+  |- Functions: 7
+  |- Getters: 12
+  |- Setters: 2
+  |- Own members: 3
+  |- Inherited members: 18
+  |- Async members: 0
+  |- With source code: 16

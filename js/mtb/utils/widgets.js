@@ -40,7 +40,7 @@ export function hideWidget(node, widget, suffix = '') {
 /**
  * Show widget
  *
- * @param {import("../../../../web/types/litegraph.d.ts").IWidget} widget - target widget
+ * @param {import("../../../../web/types/litegraph.d.ts.js").IWidget} widget - target widget
  */
 export function showWidget(widget) {
     widget.type = widget.origType
@@ -62,7 +62,7 @@ export function showWidget(widget) {
 /**
  * Disable widget (stays visible, but is grayed out)
  *
- * @param {import("../../../../web/types/litegraph.d.ts").IWidget} widget - target widget
+ * @param {import("../../../../web/types/litegraph.d.ts.js").IWidget} widget - target widget
  */
 export function disableWidget(widget) {
     widget.disabled = true;
@@ -71,7 +71,7 @@ export function disableWidget(widget) {
 /**
  * Enable widget (opposite of disableWidget)
  *
- * @param {import("../../../../web/types/litegraph.d.ts").IWidget} widget - target widget
+ * @param {import("../../../../web/types/litegraph.d.ts.js").IWidget} widget - target widget
  */
 export function enableWidget(widget) {
     widget.disabled = false;
