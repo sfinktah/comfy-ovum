@@ -15,6 +15,56 @@
 import { GraphHelpers } from "../common/graphHelpersForTwinNodes.js";
 import { Logger } from "../common/logger.js";
 
+const isGetTwinNode = (node) => node.type === "GetTwinNodes";
+const isSetTwinNode = (node) => node.type === "SetTwinNodes";
+const isGetSetTwinNode = (node) => isGetTwinNode(node) || isSetTwinNode(node);
+
+// Support detection for KJNodes and EasyUse Get/Set nodes
+const KJ_SET_TYPE = "SetNode";
+const EASY_USE_SET_TYPE = "easy setNode";
+const toGetType = (setType) => {
+    if (!setType || typeof setType !== "string") return setType;
+    return setType.replace(/set/i, (m) => (m[0] === "S" ? "Get" : "get"));
+};
+const isKJSetNode = (node) => node?.type === KJ_SET_TYPE;
+const isEasyUseSetNode = (node) => node?.type === EASY_USE_SET_TYPE;
+const isKJGetNode = (node) => node?.type === toGetType(KJ_SET_TYPE);
+const isEasyUseGetNode = (node) => node?.type === toGetType(EASY_USE_SET_TYPE);
+
+const isAnyGetNode = (node) => isGetTwinNode(node) || isKJGetNode(node) || isEasyUseGetNode(node);
+const isAnySetNode = (node) => isSetTwinNode(node) || isKJSetNode(node) || isEasyUseSetNode(node);
+const isAnyGetSetNode = (node) => isAnyGetNode(node) || isAnySetNode(node);
+// Internal small helpers to DRY link resolution logic used by multiple checks
+function resolveGraph(a, b) {
+    return a?.graph || a?._graph || b?.graph || b?._graph || null;
+}
+/**
+ * Find the upstream link connecting outputNode -> node, optionally starting from a slotIndex hint.
+ * Returns an object with the found link (or null) and the effective slotIndex where it was found.
+ * @param {LGraphNode|ComfyNode} node
+ * @param {number} [slotIndex=0]
+ * @param {LGraphNode|ComfyNode|null} [outputNode=null]
+ * @returns {{link: LLink|null, slotIndex: number, graph: any}}
+ */
+function findLinkBetween(node, slotIndex = 0, outputNode = null) {
+    if (!node || !outputNode) return { link: null, slotIndex, graph: null };
+    const graph = resolveGraph(node, outputNode);
+    let linkId = node.inputs?.[slotIndex]?.link ?? null;
+    let link = linkId != null ? GraphHelpers.getLink(graph, linkId) : null;
+    if (!link || link.origin_id !== outputNode.id || link.target_id !== node.id) {
+        for (let i = 0; i < (node.inputs?.length ?? 0); i++) {
+            const lId = node.inputs?.[i]?.link;
+            if (lId == null) continue;
+            const l = GraphHelpers.getLink(graph, lId);
+            if (l && l.origin_id === outputNode.id && l.target_id === node.id) {
+                return { link: l, slotIndex: i, graph };
+            }
+        }
+        return { link: null, slotIndex, graph };
+    }
+    return { link, slotIndex, graph };
+}
+
 /**
  * Generalized traversal: walk upstream through input links while any check remains true.
  * Returns nodes that passed checks (excluding the final failure).
@@ -80,11 +130,11 @@ export function traverseInputsWhile(graph, startNode, slotIndex = 0, checks = nu
             }
             let res = false;
             const checkName = check?.name || '<anonymous>';
-            Logger.log(
-                { class: 'NodeTraversal', method: 'traverseInputsWhile', severity: 'debug', tag: 'check_run' },
-                'Running check',
-                { iter, checkName, nodeId: node?.id, nodeType: node?.type, slot, outputNodeId: outputNode?.id }
-            );
+            // Logger.log(
+            //     { class: 'NodeTraversal', method: 'traverseInputsWhile', severity: 'debug', tag: 'check_run' },
+            //     'Running check',
+            //     { iter, checkName, nodeId: node?.id, nodeType: node?.type, slot, outputNodeId: outputNode?.id }
+            // );
             try {
                 res = check(node, slot, outputNode);
             } catch (err) {
@@ -92,11 +142,11 @@ export function traverseInputsWhile(graph, startNode, slotIndex = 0, checks = nu
                 res = false;
             }
             if (res === false) {
-                Logger.log(
-                    { class: 'NodeTraversal', method: 'traverseInputsWhile', severity: 'debug', tag: 'check_false' },
-                    'Check returned false',
-                    { iter, checkName }
-                );
+                // Logger.log(
+                //     { class: 'NodeTraversal', method: 'traverseInputsWhile', severity: 'debug', tag: 'check_false' },
+                //     'Check returned false',
+                //     { iter, checkName }
+                // );
                 continue;
             }
             anyTruthy = true;
@@ -245,12 +295,13 @@ export function checkIsReroute(node) {
 export function checkIsGetNode(node, slotIndex = 0) {
     try {
         if (!node || typeof node.getInputLink !== 'function') return false;
+        if (!isAnyGetNode(node)) return false;
         const link = node.getInputLink(slotIndex);
         const ok = link && typeof link === 'object';
         if (!ok) {
             Logger.log({ class: 'NodeTraversal', method: 'checkIsGetNode', severity: 'warn', tag: 'non_object' }, 'getInputLink did not return object', link, 'on node', node?.type);
+            return false;
         }
-        Logger.log({ class: 'NodeTraversal', method: 'checkIsGetNode', severity: 'warn', tag: 'non_object' }, 'getInputLink returned', link, 'on node', node?.type);
         return link;
     } catch (err) {
         Logger.log({ class: 'NodeTraversal', method: 'checkIsGetNode', severity: 'warn', tag: 'exception' }, 'Exception in getInputLink', err);
@@ -265,25 +316,6 @@ export function checkIsGetNode(node, slotIndex = 0) {
  * @returns {boolean|object|LLink|ComfyNode|LGraphNode}
  */
 export function checkIsSetNode(node, slotIndex = 0) {
-    const isGetTwinNode = (node) => node.type === "GetTwinNodes";
-    const isSetTwinNode = (node) => node.type === "SetTwinNodes";
-    const isGetSetTwinNode = (node) => isGetTwinNode(node) || isSetTwinNode(node);
-
-    // Support detection for KJNodes and EasyUse Get/Set nodes
-    const KJ_SET_TYPE = "SetNode";
-    const EASY_USE_SET_TYPE = "easy setNode";
-    const toGetType = (setType) => {
-        if (!setType || typeof setType !== "string") return setType;
-        return setType.replace(/set/i, (m) => (m[0] === "S" ? "Get" : "get"));
-    };
-    const isKJSetNode = (node) => node?.type === KJ_SET_TYPE;
-    const isEasyUseSetNode = (node) => node?.type === EASY_USE_SET_TYPE;
-    const isKJGetNode = (node) => node?.type === toGetType(KJ_SET_TYPE);
-    const isEasyUseGetNode = (node) => node?.type === toGetType(EASY_USE_SET_TYPE);
-
-    const isAnyGetNode = (node) => node?.type === isGetTwinNode(node) || isKJGetNode(node) || isEasyUseGetNode(node);
-    const isAnySetNode = (node) => isGetTwinNode(node) || isKJSetNode(node) || isEasyUseSetNode(node);
-    const isAnyGetSetNode = (node) => isAnyGetNode(node) || isAnySetNode(node);
 
     if (isAnySetNode(node)) {
         return true;
@@ -305,26 +337,11 @@ export function checkIsStringToString(node, slotIndex = 0, outputNode = null) {
     const isStringish = (t) => t === 'STRING' || (t && String(t).includes('*'));
     if (!node || !outputNode) return false;
 
-    // Try to find the link connecting outputNode -> node
-    let linkId = node.inputs?.[slotIndex]?.link ?? null;
-    let graph = node.graph || node._graph || outputNode.graph || outputNode._graph;
-    let link = linkId != null ? GraphHelpers.getLink(graph, linkId) : null;
-    if (!link || link.origin_id !== outputNode.id) {
-        for (let i = 0; i < (node.inputs?.length ?? 0); i++) {
-            const lId = node.inputs?.[i]?.link;
-            if (lId == null) continue;
-            const l = GraphHelpers.getLink(graph, lId);
-            if (l && l.origin_id === outputNode.id && l.target_id === node.id) {
-                link = l;
-                slotIndex = i;
-                break;
-            }
-        }
-    }
+    const { link, slotIndex: effSlot } = findLinkBetween(node, slotIndex, outputNode);
     if (!link) return false;
 
     const originOutType = outputNode?.outputs?.[link.origin_slot ?? 0]?.type;
-    const targetInType = node?.inputs?.[link.target_slot ?? slotIndex]?.type;
+    const targetInType = node?.inputs?.[link.target_slot ?? effSlot]?.type;
     if (!isStringish(originOutType) || !isStringish(targetInType)) return false;
 
     let stringishInputs = 0;
@@ -334,7 +351,6 @@ export function checkIsStringToString(node, slotIndex = 0, outputNode = null) {
         const t = inp?.type;
         if (isStringish(t)) stringishInputs++;
     }
-    // noinspection RedundantIfStatementJS
     if (stringishInputs > 1) return false;
     return true;
 }
@@ -351,26 +367,11 @@ export function checkIsConditioningToConditioning(node, slotIndex = 0, outputNod
     const isConditioningish = (t) => (t && String(t).includes('*')) || (t && String(t).toUpperCase().includes('CONDITIONING'));
     if (!node || !outputNode) return false;
 
-    // Try to find the link connecting outputNode -> node
-    let linkId = node.inputs?.[slotIndex]?.link ?? null;
-    let graph = node.graph || node._graph || outputNode.graph || outputNode._graph;
-    let link = linkId != null ? GraphHelpers.getLink(graph, linkId) : null;
-    if (!link || link.origin_id !== outputNode.id) {
-        for (let i = 0; i < (node.inputs?.length ?? 0); i++) {
-            const lId = node.inputs?.[i]?.link;
-            if (lId == null) continue;
-            const l = GraphHelpers.getLink(graph, lId);
-            if (l && l.origin_id === outputNode.id && l.target_id === node.id) {
-                link = l;
-                slotIndex = i;
-                break;
-            }
-        }
-    }
+    const { link, slotIndex: effSlot } = findLinkBetween(node, slotIndex, outputNode);
     if (!link) return false;
 
     const originOutType = outputNode?.outputs?.[link.origin_slot ?? 0]?.type;
-    const targetInType = node?.inputs?.[link.target_slot ?? slotIndex]?.type;
+    const targetInType = node?.inputs?.[link.target_slot ?? effSlot]?.type;
     if (!isConditioningish(originOutType) || !isConditioningish(targetInType)) return false;
 
     let conditioningInputs = 0;
@@ -401,26 +402,11 @@ export function checkIsClipToConditioning(node, slotIndex = 0, outputNode = null
 
     if (!node || !outputNode) return false;
 
-    // Find the link connecting outputNode -> node
-    let linkId = node.inputs?.[slotIndex]?.link ?? null;
-    let graph = node.graph || node._graph || outputNode.graph || outputNode._graph;
-    let link = linkId != null ? GraphHelpers.getLink(graph, linkId) : null;
-    if (!link || link.origin_id !== outputNode.id) {
-        for (let i = 0; i < (node.inputs?.length ?? 0); i++) {
-            const lId = node.inputs?.[i]?.link;
-            if (lId == null) continue;
-            const l = GraphHelpers.getLink(graph, lId);
-            if (l && l.origin_id === outputNode.id && l.target_id === node.id) {
-                link = l;
-                slotIndex = i;
-                break;
-            }
-        }
-    }
+    const { link, slotIndex: effSlot, graph } = findLinkBetween(node, slotIndex, outputNode);
     if (!link) return false;
 
     const originOutType = outputNode?.outputs?.[link.origin_slot ?? 0]?.type;
-    const targetInType = node?.inputs?.[link.target_slot ?? slotIndex]?.type;
+    const targetInType = node?.inputs?.[link.target_slot ?? effSlot]?.type;
     if (!isConditioningish(originOutType) || !isConditioningish(targetInType)) return false;
 
     // Accept if there are no inputs, or at least one input type is CLIPish
@@ -451,75 +437,14 @@ export function checkIsClipToConditioning(node, slotIndex = 0, outputNode = null
     return true;
 }
 
-// Named wrappers so logger can display check names instead of <anonymous>
-/**
- * Wrapper: checkReroute
- * @param {LGraphNode|ComfyNode} node
- * @param {number} slotIndex
- * @param {LGraphNode|ComfyNode|null} outputNode
- * @returns {boolean|object|LLink|ComfyNode|LGraphNode}
- */
-function checkReroute(node, slotIndex, outputNode) {
-    return checkIsReroute(node, slotIndex, outputNode) || false;
-}
-/**
- * Wrapper: checkGetNode
- * @param {LGraphNode|ComfyNode} node
- * @param {number} slotIndex
- * @param {LGraphNode|ComfyNode|null} outputNode
- * @returns {boolean|object|LLink|ComfyNode|LGraphNode}
- */
-function checkGetNode(node, slotIndex, outputNode) {
-    return checkIsGetNode(node, slotIndex, outputNode) || false;
-}
-/**
- * Wrapper: checkSetNode
- * @param {LGraphNode|ComfyNode} node
- * @param {number} slotIndex
- * @param {LGraphNode|ComfyNode|null} outputNode
- * @returns {boolean|object|LLink|ComfyNode|LGraphNode}
- */
-function checkSetNode(node, slotIndex, outputNode) {
-    return checkIsSetNode(node, slotIndex, outputNode) || false;
-}
-/**
- * Wrapper: checkStringToString
- * @param {LGraphNode|ComfyNode} node
- * @param {number} slotIndex
- * @param {LGraphNode|ComfyNode|null} outputNode
- * @returns {boolean|object|LLink|ComfyNode|LGraphNode}
- */
-function checkStringToString(node, slotIndex, outputNode) {
-    return checkIsStringToString(node, slotIndex, outputNode) || false;
-}
-/**
- * Wrapper: checkConditioningToConditioning
- * @param {LGraphNode|ComfyNode} node
- * @param {number} slotIndex
- * @param {LGraphNode|ComfyNode|null} outputNode
- * @returns {boolean|object|LLink|ComfyNode|LGraphNode}
- */
-function checkConditioningToConditioning(node, slotIndex, outputNode) {
-    return checkIsConditioningToConditioning(node, slotIndex, outputNode) || false;
-}
-/**
- * Wrapper: checkClipToConditioning
- * @param {LGraphNode|ComfyNode} node
- * @param {number} slotIndex
- * @param {LGraphNode|ComfyNode|null} outputNode
- * @returns {boolean|object|LLink|ComfyNode|LGraphNode}
- */
-function checkClipToConditioning(node, slotIndex, outputNode) {
-    return checkIsClipToConditioning(node, slotIndex, outputNode) || false;
-}
 
 export const defaultInputTraversalChecks = [
-    checkReroute,
-    checkGetNode,
-    checkSetNode,
-    checkStringToString,
-    checkConditioningToConditioning,
-    checkClipToConditioning,
+    checkIsReroute,
+    checkIsGetNode,
+    checkIsSetNode,
+    checkIsStringToString,
+    checkIsConditioningToConditioning,
+    checkIsClipToConditioning,
 ];
 
 const NodeTraversal = {
