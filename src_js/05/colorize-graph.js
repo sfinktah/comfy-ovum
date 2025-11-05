@@ -8,6 +8,7 @@ import { app } from "../../../scripts/app.js";
 import { setColorAndBgColor } from "../01/twinnodeHelpers.js";
 import { chainCallback } from "../01/utility.js";
 import { Logger } from "../common/logger.js";
+import { traverseInputsWhile, defaultInputTraversalChecks } from "../04/node-traversal.js";
 
 // Registry of ColorizeGraph instances with auto-color enabled
 const __autoColorEnabledNodes = new Set();
@@ -143,6 +144,27 @@ class ColorizeGraphNode extends LGraphNode {
                 // ignore per-node errors and continue
                 console.warn("[ovum.colorize-graph] Failed to colorize node", n?.type || n?.title || n?.id, e);
             }
+        }
+
+        // After default coloring, additionally color upstream nodes connected to
+        // the 'positive' input of any KSamplerAdvanced node in green so it sticks
+        try {
+            const green = (globalThis?.LGraphCanvas?.node_colors?.green) || (app?.canvas?.constructor?.node_colors?.green);
+            if (green) {
+                for (const ks of graph._nodes) {
+                    if (!ks || ks === this) continue;
+                    if (ks.comfyClass !== 'KSamplerAdvanced') continue;
+                    const posIndex = Array.isArray(ks.inputs) ? ks.inputs.findIndex(inp => inp && inp.name === 'positive') : -1;
+                    if (posIndex < 0) continue;
+                    const upstream = traverseInputsWhile(graph, ks, posIndex, defaultInputTraversalChecks) || [];
+                    for (const m of upstream) {
+                        if (!m || m === ks) continue;
+                        try { m.color = green; } catch (_) {}
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn('[ovum.colorize-graph] Failed to apply KSamplerAdvanced positive-chain coloring', e);
         }
 
         // Refresh canvas

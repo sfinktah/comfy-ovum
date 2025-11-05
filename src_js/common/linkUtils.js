@@ -64,6 +64,7 @@ export const LinkUtils = {
         return this.traverseOutputReroute(graph, downstream);
     },
 
+
     /**
      * Compute a name from link info similar to convertLinkToGetSetNode.
      * @param {LGraph|Subgraph} graph
@@ -99,5 +100,5 @@ export const LinkUtils = {
         let i = 2;
         while (existing.has(`${base} (${i})`)) i++;
         return `${base} (${i})`;
-    }
+    },
 };

@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import Any, Dict, Tuple
 
 import json
+import os
 
 import torch
 
@@ -28,7 +29,14 @@ class LoadImageWithWorkflowOvum(LoadImage):
 
     @classmethod
     def INPUT_TYPES(s):  # keep the same UI as base LoadImage
-        return super().INPUT_TYPES()
+        base = dict(super().INPUT_TYPES())
+        # Ensure we have a 'hidden' section and add loaded_path
+        hidden = dict(base.get("hidden", {}))
+        hidden.update({
+            "loaded_path": ("STRING", {}),
+        })
+        base["hidden"] = hidden
+        return base
 
     def load_image_ex(self, image):
         # Largely mirrors LoadImage.load_image and augments with metadata and path
@@ -84,7 +92,11 @@ class LoadImageWithWorkflowOvum(LoadImage):
             "workflow": prompt_workflow.get("workflow", {}),
         }
 
-        return output_image, output_mask, file_path_str.replace('\\', '/'), prompt_workflow, image_ex
+        ui = {
+            "loaded_path": [file_path_str.replace('\\', '/')],
+            "loaded_basename": [os.path.basename(file_path_str).replace('\\', '/')],
+        }
+        return {"ui": ui, "result": (output_image, output_mask, file_path_str.replace('\\', '/'), prompt_workflow, image_ex)}
 
 
 class LoadImageFromOutputWithWorkflowOvum(LoadImageWithWorkflowOvum):
@@ -94,7 +106,7 @@ class LoadImageFromOutputWithWorkflowOvum(LoadImageWithWorkflowOvum):
     @classmethod
     def INPUT_TYPES(cls):
         # Mirror nodes.LoadImageOutput INPUT_TYPES but we still want to keep LoadImage behavior
-        return {
+        base = {
             "required": {
                 "image": ("COMBO", {
                     "image_upload": True,
@@ -107,6 +119,9 @@ class LoadImageFromOutputWithWorkflowOvum(LoadImageWithWorkflowOvum):
                 }),
             }
         }
+        # Add the same hidden loaded_path as base class
+        base["hidden"] = {"loaded_path": ("STRING", {})}
+        return base
 
 
 # The concept is that the context (in our case, the IMAGE_EX muxed data) is allowed to input
