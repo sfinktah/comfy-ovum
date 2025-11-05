@@ -6,6 +6,7 @@
 import {app} from "../../../scripts/app.js";
 import {GraphHelpers} from "../common/graphHelpersForTwinNodes.js";
 import {LinkUtils} from "../common/linkUtils.js";
+import { isGetTwinNode, isSetTwinNode, isGetSetTwinNode, isKJSetNode, isEasyUseSetNode, isKJGetNode, isEasyUseGetNode, isAnyGetNode, isAnySetNode, isAnyGetSetNode } from "../common/twinNodeTypes.js";
 
 // Installs canvas context menu enhancements and link conversion handler
 export function installLinkMenuEnhancements() {
@@ -39,25 +40,6 @@ export function installLinkMenuEnhancements() {
     const getAllNodes = () => graph._nodes ?? [];
     const formatVariables = (text) => LinkUtils.formatVariables(text);
 
-    const isGetTwinNode = (node) => node.type === "GetTwinNodes";
-    const isSetTwinNode = (node) => node.type === "SetTwinNodes";
-    const isGetSetTwinNode = (node) => isGetTwinNode(node) || isSetTwinNode(node);
-
-    // Support detection for KJNodes and EasyUse Get/Set nodes
-    const KJ_SET_TYPE = "SetNode";
-    const EASY_USE_SET_TYPE = "easy setNode";
-    const toGetType = (setType) => {
-        if (!setType || typeof setType !== "string") return setType;
-        return setType.replace(/set/i, (m) => (m[0] === "S" ? "Get" : "get"));
-    };
-    const isKJSetNode = (node) => node?.type === KJ_SET_TYPE;
-    const isEasyUseSetNode = (node) => node?.type === EASY_USE_SET_TYPE;
-    const isKJGetNode = (node) => node?.type === toGetType(KJ_SET_TYPE);
-    const isEasyUseGetNode = (node) => node?.type === toGetType(EASY_USE_SET_TYPE);
-
-    const isAnyGetNode = (node) => node?.type === isGetTwinNode(node) || isKJGetNode(node) || isEasyUseGetNode(node);
-    const isAnySetNode = (node) => isGetTwinNode(node) || isKJSetNode(node) || isEasyUseSetNode(node);
-    const isAnyGetSetNode = (node) => isAnyGetNode(node) || isAnySetNode(node);
     const getAnyGetSetNodes = (nodes = getAllNodes()) => nodes.filter(n => isAnyGetSetNode(n))
         .sort((a, b) => {
             if (isGetSetTwinNode(a) && !isGetSetTwinNode(b)) return -1;

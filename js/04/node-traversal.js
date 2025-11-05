@@ -14,26 +14,8 @@
 
 import { GraphHelpers } from "../common/graphHelpersForTwinNodes.js";
 import { Logger } from "../common/logger.js";
+import { isAnyGetNode, isAnySetNode } from "../common/twinNodeTypes.js";
 
-const isGetTwinNode = (node) => node.type === "GetTwinNodes";
-const isSetTwinNode = (node) => node.type === "SetTwinNodes";
-const isGetSetTwinNode = (node) => isGetTwinNode(node) || isSetTwinNode(node);
-
-// Support detection for KJNodes and EasyUse Get/Set nodes
-const KJ_SET_TYPE = "SetNode";
-const EASY_USE_SET_TYPE = "easy setNode";
-const toGetType = (setType) => {
-    if (!setType || typeof setType !== "string") return setType;
-    return setType.replace(/set/i, (m) => (m[0] === "S" ? "Get" : "get"));
-};
-const isKJSetNode = (node) => node?.type === KJ_SET_TYPE;
-const isEasyUseSetNode = (node) => node?.type === EASY_USE_SET_TYPE;
-const isKJGetNode = (node) => node?.type === toGetType(KJ_SET_TYPE);
-const isEasyUseGetNode = (node) => node?.type === toGetType(EASY_USE_SET_TYPE);
-
-const isAnyGetNode = (node) => isGetTwinNode(node) || isKJGetNode(node) || isEasyUseGetNode(node);
-const isAnySetNode = (node) => isSetTwinNode(node) || isKJSetNode(node) || isEasyUseSetNode(node);
-const isAnyGetSetNode = (node) => isAnyGetNode(node) || isAnySetNode(node);
 // Internal small helpers to DRY link resolution logic used by multiple checks
 function resolveGraph(a, b) {
     return a?.graph || a?._graph || b?.graph || b?._graph || null;
@@ -326,6 +308,107 @@ export function checkIsSetNode(node, slotIndex = 0) {
 }
 
 /**
+ * @typedef {Object} CheckTypeToTypeOptions
+ * @property {(t:any)=>boolean} [isEndType] - Predicate to test both origin (output) and target (input) types when specific originType/targetType are not provided.
+ * @property {(t:any)=>boolean} [originType] - Predicate to test the origin (upstream output) slot's type. Overrides isEndType for the origin side when provided.
+ * @property {(t:any)=>boolean} [targetType] - Predicate to test the target (current node input) slot's type. Overrides isEndType for the target side when provided.
+ * @property {number|null} [maxInputsOfType=null] - Maximum number of connected inputs on the current node that may match countType. If the count exceeds this value, the check fails. When null, no max check is performed.
+ * @property {(t:any)=>boolean|null} [countType=null] - Predicate used to count matching connected inputs when enforcing maxInputsOfType. Defaults to isEndType if present; when null, falls back to isEndType.
+ * @property {(t:any)=>boolean|null} [requireAnyInputType=null] - If provided, at least one input on the current node must have a type for which this predicate returns true. See allowZeroInputsForRequire for zero-input behavior.
+ * @property {boolean} [allowZeroInputsForRequire=true] - When true and the node has zero inputs, the requireAnyInputType requirement passes automatically.
+ * @property {(t:any)=>boolean|null} [returnLinkedInputWhenType=null] - If provided and any connected input's type matches this predicate, the function returns that input's LLink object instead of a boolean.
+ */
+
+/**
+ * Common helper to implement type-to-type checks between connected nodes.
+ * Options allow customizing:
+ *  - end type predicates (origin/target)
+ *  - counting constraint for inputs of a given type
+ *  - requiring presence of any input of a given type (optionally allow zero inputs)
+ *  - returning a linked input when its type matches a predicate
+ * @param {LGraphNode|ComfyNode} node
+ * @param {number} [slotIndex=0]
+ * @param {LGraphNode|ComfyNode|null} [outputNode=null]
+ * @param {CheckTypeToTypeOptions} [opts]
+ * @returns {boolean|object|LLink|ComfyNode|LGraphNode}
+ */
+function checkTypeToType(node, slotIndex = 0, outputNode = null, opts = {}) {
+    if (!node || !outputNode) return false;
+    const {
+        isEndType,                // predicate(t) used for both ends unless originType/targetType provided
+        originType,               // predicate(t) for origin output type
+        targetType,               // predicate(t) for target input type
+        maxInputsOfType = null,   // number | null - maximum connected inputs matching countType
+        countType = null,         // predicate(t) to count, defaults to isEndType if provided
+        requireAnyInputType = null, // predicate(t) that must exist on any input type (or zero allowed)
+        allowZeroInputsForRequire = true, // if true and node has zero inputs, requirement passes
+        returnLinkedInputWhenType = null, // predicate(t) whose connected input link should be returned
+    } = opts || {};
+
+    const { link, slotIndex: effSlot, graph } = findLinkBetween(node, slotIndex, outputNode);
+    if (!link) return false;
+
+    const originOutType = outputNode?.outputs?.[link.origin_slot ?? 0]?.type;
+    const targetInType = node?.inputs?.[link.target_slot ?? effSlot]?.type;
+
+    const originPred = originType || isEndType;
+    const targetPred = targetType || isEndType;
+    if (typeof originPred === 'function' && !originPred(originOutType)) return false;
+    if (typeof targetPred === 'function' && !targetPred(targetInType)) return false;
+
+    const inputsLen = node.inputs?.length ?? 0;
+
+    if (requireAnyInputType) {
+        let ok = allowZeroInputsForRequire && inputsLen === 0;
+        if (!ok) {
+            for (let i = 0; i < inputsLen; i++) {
+                const t = node.inputs?.[i]?.type;
+                if (requireAnyInputType(t)) { ok = true; break; }
+            }
+        }
+        if (!ok) return false;
+    }
+
+    if (maxInputsOfType != null) {
+        const counterPred = countType || isEndType;
+        let count = 0;
+        for (let i = 0; i < inputsLen; i++) {
+            const inp = node.inputs?.[i];
+            if (!inp?.link) continue;
+            const t = inp?.type;
+            if (counterPred && counterPred(t)) count++;
+        }
+        if (count > maxInputsOfType) return false;
+    }
+
+    if (returnLinkedInputWhenType) {
+        for (let i = 0; i < inputsLen; i++) {
+            const inp = node.inputs?.[i];
+            if (!inp?.link) continue;
+            const t = inp?.type;
+            if (returnLinkedInputWhenType(t)) {
+                const l = GraphHelpers.getLink(graph, inp.link);
+                if (l) return l;
+            }
+        }
+    }
+
+    return true;
+}
+
+// Reusable type predicate helpers
+// Note: keep minimal surface; export not required as these are internal to this module.
+function isConditioningish(t) {
+    return (t && String(t).includes('*')) || (t && String(t).toUpperCase().includes('CONDITIONING'));
+}
+function isStringish(t) {
+    return t === 'STRING' || (t && String(t).includes('*'));
+}
+function isClipish(t) {
+    return t === '*' || (t && String(t).toUpperCase().includes('CLIP'));
+}
+
+/**
  * Check 3: isStringToString => node is connected to outputNode and both ends are type STRING or *,
  * and there are 0..1 connected input links of type STRING or * on the node.
  * @param {LGraphNode|ComfyNode} node
@@ -334,25 +417,11 @@ export function checkIsSetNode(node, slotIndex = 0) {
  * @returns {boolean|object|LLink|ComfyNode|LGraphNode}
  */
 export function checkIsStringToString(node, slotIndex = 0, outputNode = null) {
-    const isStringish = (t) => t === 'STRING' || (t && String(t).includes('*'));
-    if (!node || !outputNode) return false;
-
-    const { link, slotIndex: effSlot } = findLinkBetween(node, slotIndex, outputNode);
-    if (!link) return false;
-
-    const originOutType = outputNode?.outputs?.[link.origin_slot ?? 0]?.type;
-    const targetInType = node?.inputs?.[link.target_slot ?? effSlot]?.type;
-    if (!isStringish(originOutType) || !isStringish(targetInType)) return false;
-
-    let stringishInputs = 0;
-    for (let i = 0; i < (node.inputs?.length ?? 0); i++) {
-        const inp = node.inputs[i];
-        if (!inp?.link) continue;
-        const t = inp?.type;
-        if (isStringish(t)) stringishInputs++;
-    }
-    if (stringishInputs > 1) return false;
-    return true;
+    return checkTypeToType(node, slotIndex, outputNode, {
+        isEndType: isStringish,
+        maxInputsOfType: 1,
+        countType: isStringish,
+    });
 }
 
 /**
@@ -364,25 +433,11 @@ export function checkIsStringToString(node, slotIndex = 0, outputNode = null) {
  * @returns {boolean|object|LLink|ComfyNode|LGraphNode}
  */
 export function checkIsConditioningToConditioning(node, slotIndex = 0, outputNode = null) {
-    const isConditioningish = (t) => (t && String(t).includes('*')) || (t && String(t).toUpperCase().includes('CONDITIONING'));
-    if (!node || !outputNode) return false;
-
-    const { link, slotIndex: effSlot } = findLinkBetween(node, slotIndex, outputNode);
-    if (!link) return false;
-
-    const originOutType = outputNode?.outputs?.[link.origin_slot ?? 0]?.type;
-    const targetInType = node?.inputs?.[link.target_slot ?? effSlot]?.type;
-    if (!isConditioningish(originOutType) || !isConditioningish(targetInType)) return false;
-
-    let conditioningInputs = 0;
-    for (let i = 0; i < (node.inputs?.length ?? 0); i++) {
-        const inp = node.inputs[i];
-        if (!inp?.link) continue;
-        const t = inp?.type;
-        if (isConditioningish(t)) conditioningInputs++;
-    }
-    if (conditioningInputs > 1) return false;
-    return true;
+    return checkTypeToType(node, slotIndex, outputNode, {
+        isEndType: isConditioningish,
+        maxInputsOfType: 1,
+        countType: isConditioningish,
+    });
 }
 
 /**
@@ -396,45 +451,12 @@ export function checkIsConditioningToConditioning(node, slotIndex = 0, outputNod
  * @returns {boolean|object|LLink|ComfyNode|LGraphNode}
  */
 export function checkIsClipToConditioning(node, slotIndex = 0, outputNode = null) {
-    const isConditioningish = (t) => (t && String(t).includes('*')) || (t && String(t).toUpperCase().includes('CONDITIONING'));
-    const isClipish = (t) => t === '*' || (t && String(t).toUpperCase().includes('CLIP'));
-    const isStringish = (t) => t === 'STRING' || t === '*';
-
-    if (!node || !outputNode) return false;
-
-    const { link, slotIndex: effSlot, graph } = findLinkBetween(node, slotIndex, outputNode);
-    if (!link) return false;
-
-    const originOutType = outputNode?.outputs?.[link.origin_slot ?? 0]?.type;
-    const targetInType = node?.inputs?.[link.target_slot ?? effSlot]?.type;
-    if (!isConditioningish(originOutType) || !isConditioningish(targetInType)) return false;
-
-    // Accept if there are no inputs, or at least one input type is CLIPish
-    const inputsLen = node.inputs?.length ?? 0;
-    let hasClipishInputType = inputsLen === 0;
-    if (!hasClipishInputType) {
-        for (let i = 0; i < inputsLen; i++) {
-            const t = node.inputs?.[i]?.type;
-            if (isClipish(t)) {
-                hasClipishInputType = true;
-                break;
-            }
-        }
-    }
-    if (!hasClipishInputType) return false;
-
-    // If there is a connected STRINGish input link, return its LLink object
-    for (let i = 0; i < inputsLen; i++) {
-        const inp = node.inputs?.[i];
-        if (!inp?.link) continue;
-        const t = inp?.type;
-        if (isStringish(t)) {
-            const stringLink = GraphHelpers.getLink(graph, inp.link);
-            if (stringLink) return stringLink;
-        }
-    }
-
-    return true;
+    return checkTypeToType(node, slotIndex, outputNode, {
+        isEndType: isConditioningish,
+        requireAnyInputType: isClipish,
+        allowZeroInputsForRequire: true,
+        returnLinkedInputWhenType: isStringish,
+    });
 }
 
 
