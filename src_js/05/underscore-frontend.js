@@ -599,7 +599,21 @@ app.registerExtension({
                         // applyVis(node._usInfoVisible);
                         // Add an info button to the titlebar only if metadata exists and button not yet added
                         if (!node._usInfoTitleBtn && typeof node.addTitleButton === "function") {
-                            try { node._usInfoTitleBtn = node.addTitleButton({ text: "🛈", xOffset: -8, iconOptions: { unicode: "🛈" } }); } catch(_) {}
+                            try {
+                                // button options stolen from a Subgraph LGraphNode, defaults omitted
+                                node._usInfoTitleBtn = node.addTitleButton({
+                                    text: "\ue924",
+                                    // fgColor: "white",
+                                    // bgColor: "#0F1F0F",
+                                    fontSize: 16,
+                                    // padding: 6,
+                                    // height: 20,
+                                    // cornerRadius: 5,
+                                    xOffset: -10,
+                                    yOffset: 0,
+                                    name: "examples",
+                                });
+                            } catch(_) {}
                         }
                     // } catch(_) {}
                 };
