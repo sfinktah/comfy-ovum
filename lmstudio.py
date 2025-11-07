@@ -76,10 +76,10 @@ class LMStudioPromptOvum:
                 },
                 "hidden": {"unique_id": "UNIQUE_ID", "extra_pnginfo": "EXTRA_PNGINFO", "prompt": "PROMPT"}}
 
-    RETURN_TYPES = ('STRING',)
-    RETURN_NAMES = ('text',)
+    RETURN_TYPES = ('STRING', 'LLM_CONTEXT')
+    RETURN_NAMES = ('text', 'context')
     FUNCTION = 'process'
-    OUTPUT_NODE = True
+    # OUTPUT_NODE = True
     CATEGORY = 'Ovum/LLM'
     DESCRIPTION = """
 LM Studio Prompt Node with Dynamic Model Management
@@ -312,30 +312,41 @@ Requirements:
             return False
 
     def schedule_automatic_unload(self, server_address, server_port, timeout_seconds):
-        """Schedule automatic model unloading after timeout"""
+        """Schedule automatic model unloading after a period of inactivity.
+        The timer counts from the last completed request. If new activity occurs
+        before the timer elapses, it will be rescheduled to ensure the timeout
+        does not begin until all context queries complete."""
         with LMStudioPromptOvum._timer_lock:
             # Cancel any existing timer
             if LMStudioPromptOvum._unload_timer is not None:
                 LMStudioPromptOvum._unload_timer.cancel()
                 LMStudioPromptOvum._unload_timer = None
 
-            # Only schedule if timeout > 0
-            if timeout_seconds > 0:
-                def auto_unload():
-                    current_time = time.time()
-                    # Check if enough time has passed since last request
-                    if current_time - LMStudioPromptOvum._last_request_time >= timeout_seconds:
-                        print(f"Auto-unloading model after {timeout_seconds} seconds of inactivity")
-                        self.unload_model(server_address, server_port)
-                        with LMStudioPromptOvum._timer_lock:
-                            LMStudioPromptOvum._unload_timer = None
+            if timeout_seconds <= 0:
+                return
 
-                LMStudioPromptOvum._unload_timer = threading.Timer(timeout_seconds, auto_unload)
-                LMStudioPromptOvum._unload_timer.start()
+            def auto_unload():
+                now = time.time()
+                elapsed = now - LMStudioPromptOvum._last_request_time
+                if elapsed >= timeout_seconds:
+                    print(f"Auto-unloading model after {timeout_seconds} seconds of inactivity")
+                    self.unload_model(server_address, server_port)
+                    with LMStudioPromptOvum._timer_lock:
+                        LMStudioPromptOvum._unload_timer = None
+                else:
+                    # Not enough idle time yet; reschedule for the remaining duration
+                    remaining = max(0.01, timeout_seconds - elapsed)
+                    with LMStudioPromptOvum._timer_lock:
+                        LMStudioPromptOvum._unload_timer = threading.Timer(remaining, auto_unload)
+                        LMStudioPromptOvum._unload_timer.start()
 
-    def api_request(self, prompt, server_address, server_port, seed, mode, custom_history, image=None, selected_model=None, unload_timeout_seconds=0):
-        # check if json file in root comfy directory called oooba.json
-        history = self.history(mode, custom_history)
+            # Start the first check based on the timeout (will reschedule if needed)
+            LMStudioPromptOvum._unload_timer = threading.Timer(timeout_seconds, auto_unload)
+            LMStudioPromptOvum._unload_timer.start()
+
+    def api_request(self, prompt, server_address, server_port, seed, mode, custom_history, image=None, selected_model=None, unload_timeout_seconds=0, existing_history=None):
+        # Prepare history: use existing if provided (for context chaining), otherwise load based on mode
+        history = existing_history if existing_history is not None else self.history(mode, custom_history)
         if mode == 'prompt':
             prompt = f'{prompt}'
         if mode == 'descriptor':
@@ -371,10 +382,6 @@ Requirements:
         "stream": false
         }'
         """
-        #prompt_prefix = "\\n<|user|>\\n"
-        #prompt_suffix = "\\n<|assistant|>\\n"
-        #prompt = prompt_prefix + prompt + prompt_suffix
-
         # Create user message content
         if image is not None:
             # Encode image to base64
@@ -405,14 +412,6 @@ Requirements:
         # Only include model field if a concrete model is selected
         if selected_model and selected_model != 'No models available':
             request['model'] = selected_model
-        # Handle dynamic model loading if enabled
-        # if dynamic_loading and selected_model and selected_model != 'No models available':
-        #     print(f"Dynamic loading enabled, loading model: {selected_model}")
-        #     if not self.load_model(selected_model, server_address, server_port):
-        #         print(f"Warning: Failed to load model {selected_model}, proceeding with current model")
-
-        # Update last request time for automatic unloading
-        LMStudioPromptOvum._last_request_time = time.time()
 
         HOST = f'{server_address}:{server_port}'
         URI = f'http://{HOST}/v1/chat/completions'
@@ -420,26 +419,19 @@ Requirements:
         try:
             response = requests.post(URI, json=request, timeout=180)
         except requests.exceptions.ConnectionError:
-            # Schedule automatic unloading after timeout seconds following error if timeout is set
-            if unload_timeout_seconds > 0:
-                def delayed_schedule():
-                    time.sleep(unload_timeout_seconds)
-                    self.schedule_automatic_unload(server_address, server_port, unload_timeout_seconds)
-                threading.Thread(target=delayed_schedule, daemon=True).start()
             raise Exception('Are you running LM Studio with server running?')
-
-        # Schedule automatic unloading after timeout seconds following response if timeout is set
-        if unload_timeout_seconds > 0:
-            def delayed_schedule():
-                time.sleep(unload_timeout_seconds)
-                self.schedule_automatic_unload(server_address, server_port, unload_timeout_seconds)
-            threading.Thread(target=delayed_schedule, daemon=True).start()
 
         if response.status_code == 200:
             # response is in openai format
             result = response.json()['choices'][0]['message']['content']
             result = html.unescape(result)  # decode URL encoded special characters
-            return result
+            # Append assistant reply to history for continuity
+            history['messages'].append({'role': 'assistant', 'content': result})
+            # Mark completion time and (re)schedule unload from now so it starts after this request completes
+            LMStudioPromptOvum._last_request_time = time.time()
+            if unload_timeout_seconds > 0:
+                self.schedule_automatic_unload(server_address, server_port, unload_timeout_seconds)
+            return result, history
         else:
             # On API error, attempt to refresh the models list from the current server
             try:
@@ -448,7 +440,7 @@ Requirements:
                     self.save_cached_models(latest_models)
             except Exception:
                 pass
-            return 'Error'
+            return 'Error', history
 
     def process(self, input_prompt, mode, custom_history, server_address, server_port, selected_model, unload_timeout_seconds, seed, image=None, prompt=None, unique_id=None, extra_pnginfo=None):
         # Always refresh models from the currently selected server (host:port)
@@ -490,7 +482,86 @@ Requirements:
             return random.choice(m.group(1).split('|'))
         for m in wc_re.finditer(input_prompt):
             input_prompt = input_prompt.replace(m.group(0), repl(m))
-        result = self.api_request(input_prompt, server_address, server_port, seed, mode, custom_history, image, selected_model, unload_timeout_seconds)
-        prompt.get(str(unique_id))['inputs']['output_text'] = result
-        return (result,)
-CLAZZES = [LMStudioPromptOvum]
+        text, history = self.api_request(input_prompt, server_address, server_port, seed, mode, custom_history, image, selected_model, unload_timeout_seconds)
+        # Build context object to propagate through the graph
+        context = {
+            'server_address': server_address,
+            'server_port': server_port,
+            'selected_model': selected_model,
+            'unload_timeout_seconds': unload_timeout_seconds,
+            'seed': seed,
+            'mode': mode,
+            'custom_history': custom_history,
+            'history': history,
+        }
+        if prompt is not None and unique_id is not None:
+            try:
+                prompt.get(str(unique_id))['inputs']['output_text'] = text
+            except Exception:
+                pass
+        return (text, context)
+
+class LMStudioPromptChainOvum(LMStudioPromptOvum):
+    @classmethod
+    def INPUT_TYPES(s):
+        available_modes = s.get_available_modes()
+        # Add a special option to use the incoming context's mode
+        available_modes_with_context = ['use_context'] + available_modes
+        return {
+            'required': {
+                'context': ('LLM_CONTEXT', {'tooltip': 'LLM context from LMStudioPromptOvum or previous chain node'}),
+                'input_prompt': ('STRING', {
+                    'multiline': True,
+                    'default': 'Next prompt here',
+                    'dynamicPrompts': False,
+                    'tooltip': 'Additional prompt to ask within the same chat context.'
+                }),
+                'mode': (available_modes_with_context, {
+                    'default': 'use_context',
+                    'tooltip': 'Prompt mode for this step. Choose "use_context" to reuse the mode from the incoming context.'
+                }),
+            },
+            'optional': {},
+            'hidden': {}
+        }
+
+    RETURN_TYPES = ('LLM_CONTEXT','STRING')
+    RETURN_NAMES = ('context','text')
+    FUNCTION = 'process'
+    OUTPUT_NODE = False
+    CATEGORY = 'Ovum/LLM'
+
+    def process(self, context, input_prompt, mode):
+        # Extract settings from context
+        server_address = context.get('server_address', 'localhost')
+        server_port = context.get('server_port', 1234)
+        selected_model = context.get('selected_model')
+        unload_timeout_seconds = context.get('unload_timeout_seconds', 0)
+        seed = context.get('seed', 0)
+        base_mode = context.get('mode', 'prompt')
+        custom_history = context.get('custom_history', None)
+        existing_history = context.get('history')
+        # Determine mode to use
+        mode_to_use = base_mode if mode == 'use_context' else mode
+        # Wildcards replacement similar to base node
+        input_prompt = find_and_replace_wildcards(input_prompt, seed, debug=True)
+        # Execute request with existing history to maintain context
+        text, updated_history = self.api_request(
+            input_prompt,
+            server_address,
+            server_port,
+            seed,
+            mode_to_use,
+            custom_history,
+            image=None,
+            selected_model=selected_model,
+            unload_timeout_seconds=unload_timeout_seconds,
+            existing_history=existing_history,
+        )
+        # Update and return context
+        new_context = dict(context)
+        new_context['history'] = updated_history
+        new_context['mode'] = mode_to_use
+        return (new_context, text)
+
+CLAZZES = [LMStudioPromptOvum, LMStudioPromptChainOvum]
