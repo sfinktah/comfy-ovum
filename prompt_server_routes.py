@@ -36,6 +36,7 @@ except AttributeError:
 
 API_BASE = '/ovum/image-list'
 LMSTUDIO_API_BASE = '/ovum/lmstudio'
+FILES_BASE = '/ovum/files'
 
 
 def _is_subpath(child: Path, parent: Path) -> bool:
@@ -287,3 +288,46 @@ async def refresh_lmstudio_models(request: web.Request):
     except Exception as e:
         logger.exception("[ovum] Failed to refresh LM Studio models")
         return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+@PromptServer.instance.routes.get(f"{FILES_BASE}/{{directory_type}}")
+@PromptServer.instance.routes.get(f"{FILES_BASE}/{{directory_type}}/{{subpath:.*}}")
+async def get_files(request: web.Request) -> web.Response:
+    directory_type = request.match_info['directory_type']
+    if directory_type not in ("output", "input", "temp"):
+        return web.json_response({"error": "Invalid directory type"}, status=400)
+
+    base_directory = get_directory_by_type(directory_type)
+    if not base_directory:
+        return web.json_response({"error": "Directory not configured"}, status=500)
+
+    subpath = request.match_info.get('subpath') or ''
+    base_path = Path(base_directory).resolve()
+    target_path = base_path
+    if subpath:
+        # Resolve the target path and ensure it's within the base directory
+        try:
+            target_path = (base_path / subpath).resolve()
+        except Exception:
+            return web.json_response({"error": "Invalid subpath"}, status=400)
+        if not _is_subpath(target_path, base_path):
+            return web.json_response({"error": "forbidden"}, status=403)
+
+    if not target_path.exists() or not target_path.is_dir():
+        return web.json_response({"error": "not found"}, status=404)
+
+    sorted_files = sorted(
+        (entry for entry in os.scandir(target_path) if entry.is_file()),
+        key=lambda entry: -entry.stat().st_mtime
+    )
+    return web.json_response([entry.name for entry in sorted_files], status=200)
+
+#NOTE: used in http server so don't put folders that should not be accessed remotely
+def get_directory_by_type(type_name: str) -> str | None:
+    if type_name == "output":
+        return folder_paths.get_output_directory()
+    if type_name == "temp":
+        return folder_paths.get_temp_directory()
+    if type_name == "input":
+        return folder_paths.get_input_directory()
+    return None
+

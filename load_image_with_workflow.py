@@ -96,7 +96,8 @@ class LoadImageWithWorkflowOvum(LoadImage):
             "loaded_path": [file_path_str.replace('\\', '/')],
             "loaded_basename": [os.path.basename(file_path_str).replace('\\', '/')],
         }
-        return {"ui": ui, "result": (output_image, output_mask, file_path_str.replace('\\', '/'), prompt_workflow, image_ex)}
+        return {"ui": ui,
+                "result": (output_image, output_mask, file_path_str.replace('\\', '/'), prompt_workflow, image_ex)}
 
 
 class LoadImageFromOutputWithWorkflowOvum(LoadImageWithWorkflowOvum):
@@ -112,7 +113,7 @@ class LoadImageFromOutputWithWorkflowOvum(LoadImageWithWorkflowOvum):
                     "image_upload": True,
                     "image_folder": "output",
                     "remote": {
-                        "route": "/internal/files/output",
+                        "route": "/ovum/files/output",
                         "refresh_button": True,
                         "control_after_refresh": "first",
                     },
@@ -136,7 +137,7 @@ class LoadImageFromOutputSubdirectoryWithWorkflowOvum(LoadImageWithWorkflowOvum)
                     "image_upload": True,
                     "image_folder": "output",
                     "remote": {
-                        "route": "/internal/files/output",
+                        "route": "/ovum/files/output",
                         "refresh_button": True,
                         "control_after_refresh": "first",
                     },
@@ -219,7 +220,8 @@ class LoadImageFromOutputSubdirectoryWithWorkflowOvum(LoadImageWithWorkflowOvum)
             "loaded_path": [file_path_str.replace('\\', '/')],
             "loaded_basename": [os.path.basename(file_path_str).replace('\\', '/')],
         }
-        return {"ui": ui, "result": (output_image, output_mask, file_path_str.replace('\\', '/'), prompt_workflow, image_ex)}
+        return {"ui": ui,
+                "result": (output_image, output_mask, file_path_str.replace('\\', '/'), prompt_workflow, image_ex)}
 
 
 # The concept is that the context (in our case, the IMAGE_EX muxed data) is allowed to input
@@ -283,7 +285,7 @@ ALL_CTX_OPTIONAL_INPUTS = {
     "workflow": ("DICT",),
     "edit_list": ("LIST",),
 }
-ALL_CTX_RETURN_TYPES = ("DICT",     "IMAGE", "MASK", "STRING",   "DICT",   "DICT",     "LIST")
+ALL_CTX_RETURN_TYPES = ("DICT", "IMAGE", "MASK", "STRING", "DICT", "DICT", "LIST")
 ALL_CTX_RETURN_NAMES = ("IMAGE_EX", "IMAGE", "MASK", "FILEPATH", "PROMPT", "WORKFLOW", "EDIT_LIST")
 
 
