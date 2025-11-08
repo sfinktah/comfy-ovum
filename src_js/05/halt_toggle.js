@@ -123,10 +123,10 @@ app.registerExtension({
                 let cx = (this.flags.collapsed ? cWidth : this.size[0]) - buttonWidth - 6;
 
                 // Draw the button background rectangle in the title bar
-                ctx.fillStyle = this.color || LiteGraph.NODE_DEFAULT_COLOR;
-                ctx.beginPath();
-                ctx.rect(cx, 2 - titleHeight, buttonWidth, titleHeight - 4);
-                ctx.fill();
+                // ctx.fillStyle = this.color || LiteGraph.NODE_DEFAULT_COLOR;
+                // ctx.beginPath();
+                // ctx.rect(cx, 2 - titleHeight, buttonWidth, titleHeight - 4);
+                // ctx.fill();
 
                 // Move to center of button for drawing the symbol
                 cx += buttonWidth / 2;
