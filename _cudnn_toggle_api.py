@@ -84,15 +84,37 @@ def _toggle_cudnn_setting(attribute: str, value: bool) -> dict:
     Returns:
         Dictionary with previous and current values
     """
-    prev_enabled = torch.backends.cudnn.enabled
-    prev_benchmark = torch.backends.cudnn.benchmark
+    prev_enabled = None
+    prev_benchmark = None
 
     if attribute == "enabled":
+        prev_enabled = torch.backends.cudnn.enabled
         torch.backends.cudnn.enabled = value
     elif attribute == "benchmark":
+        prev_benchmark = torch.backends.cudnn.benchmark
         torch.backends.cudnn.benchmark = value
     else:
         raise ValueError(f"Unknown attribute: {attribute}")
+
+    if attribute == "enabled":
+        if value != prev_enabled:
+            print(f"[OVUM_CUDDN_TOGGLE] torch.backends.cudnn.enabled set to {value} (was {prev_enabled})")
+        else:
+            print(f"[OVUM_CUDDN_TOGGLE] torch.backends.cudnn.enabled still set to {value}")
+        return {
+            "previous.torch.backends.cudnn.enabled": prev_enabled,
+            "torch.backends.cudnn.enabled": torch.backends.cudnn.enabled,
+        }
+
+    elif attribute == "benchmark":
+        if value != prev_benchmark:
+            print(f"[OVUM_CUDDN_TOGGLE] torch.backends.cudnn.benchmark set to {value} (was {prev_benchmark})")
+        else:
+            print(f"[OVUM_CUDDN_TOGGLE] torch.backends.cudnn.benchmark still set to {value}")
+        return {
+            "previous.torch.backends.cudnn.benchmark": prev_benchmark,
+            "torch.backends.cudnn.benchmark": torch.backends.cudnn.benchmark
+        }
 
     return {
         "previous.torch.backends.cudnn.enabled": prev_enabled,
