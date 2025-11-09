@@ -30,13 +30,15 @@ import sys
 from typing import Callable, Tuple
 
 
-def transform_content(content: str, verbose: bool, log: Callable[[str], None]) -> Tuple[str, int]:
-    """Return transformed content and number of replacements.
+def transform_content(content: str, verbose: bool, log: Callable[[str], None], remove_private: bool = False) -> Tuple[str, int, int]:
+    """Return transformed content and counts of changes: (exported_count, removed_private_count).
 
-    Each line that begins with optional whitespace then 'declare ' is prefixed with 'export '.
-    When verbose=True, prints one line per replacement like __build__.py: exporting 'declare …'
+    - Each line that begins with optional whitespace then 'declare ' is prefixed with 'export '.
+    - When remove_private=True, removes only the substrings matching the regexes: ^\s*private\b and ^\s*#private; at the start of lines (does not delete the entire line), preserving the original indentation.
+    - When verbose=True, prints one line per change similar to __build__.py output.
     """
-    def repl(m: re.Match) -> str:
+    # Export 'declare' lines
+    def repl_export(m: re.Match) -> str:
         indent = m.group(1)
         rest = m.group(2)
         if verbose:
@@ -44,8 +46,35 @@ def transform_content(content: str, verbose: bool, log: Callable[[str], None]) -
             log(f"exporting '{rest}'")
         return f"{indent}export {rest}"
 
-    new_content, n = re.subn(r'^(\s*)(declare .*)', repl, content, flags=re.MULTILINE)
-    return new_content, n
+    new_content, exported_n = re.subn(r'^(\s*)(declare .*)', repl_export, content, flags=re.MULTILINE)
+
+    removed_n = 0
+    if remove_private:
+        # Remove only the matched prefix (not the entire line) for 'private' keyword at line start
+        def repl_private_kw(m: re.Match) -> str:
+            nonlocal removed_n
+            if verbose:
+                removed = m.group(0)
+                log(f"removing '{removed.strip()}'")
+            removed_n += 1
+            # Keep original indentation (group 1), remove the 'private' marker and following spaces
+            return m.group(1)
+
+        # Remove only the matched prefix for lines starting with '#private;'
+        def repl_hash_private(m: re.Match) -> str:
+            nonlocal removed_n
+            if verbose:
+                removed = m.group(0)
+                log(f"removing '{removed.strip()}'")
+            removed_n += 1
+            # Keep original indentation (group 1), remove the '#private;' marker and following spaces
+            return m.group(1)
+
+        # Apply prefix removals at start of each line while preserving leading indentation
+        new_content = re.sub(r'^(\s*)private\b\s*', repl_private_kw, new_content, flags=re.MULTILINE)
+        new_content = re.sub(r'^(\s*)#private;\s*', repl_hash_private, new_content, flags=re.MULTILINE)
+
+    return new_content, exported_n, removed_n
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -62,6 +91,7 @@ def main(argv: list[str] | None = None) -> int:
     mx = parser.add_mutually_exclusive_group(required=False)
     mx.add_argument("-i", "--inplace", action="store_true", help="Overwrite the types-file in place")
     mx.add_argument("-o", "--output", default=None, help="Write transformed output to this file, or '-' for stdout")
+    parser.add_argument("-p", "--remove-private", action="store_true", help="Remove prefixes matching '^\\s*private\\b' and '^\\s*#private;' at start of lines (do not delete the entire line), preserving indentation, before exporting")
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose: print a line for every replacement made")
     parser.add_argument("-q", "--quiet", action="store_true", help="Quiet: print nothing; failures signaled by exit code only")
 
@@ -108,7 +138,12 @@ def main(argv: list[str] | None = None) -> int:
         return 3
 
     # Transform
-    new_content, count = transform_content(content, verbose=args.verbose and not args.quiet, log=log)
+    new_content, exported_count, removed_private_count = transform_content(
+        content,
+        verbose=args.verbose and not args.quiet,
+        log=log,
+        remove_private=args.remove_private,
+    )
 
     # Output writing
     try:
@@ -136,10 +171,15 @@ def main(argv: list[str] | None = None) -> int:
 
     # Summary messages (stderr), unless quiet or stdout content where we still can log to stderr
     if not args.quiet:
-        if count == 0:
+        if exported_count == 0:
             log("No 'declare' lines found to export (file may already be exported or has a different format).")
         else:
-            log(f"Exported {count} declaration line(s).")
+            log(f"Exported {exported_count} declaration line(s).")
+        if args.remove_private:
+            if removed_private_count == 0:
+                log("No private lines matched for removal.")
+            else:
+                log(f"Removed {removed_private_count} private line(s).")
 
     return 0
 
