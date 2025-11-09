@@ -174,7 +174,7 @@ What they do:
 
 Why it’s special:
 - Global scope within the process: values are visible to all workflows running in the same Comfy session.
-- “Virtual wires” without clutter: connect distant parts of a large graph through names, not cables.
+- “Virtual wires” without clutter: connect distant parts of a large graph through names, not links.
 - Change detection: readers can refresh only when a variable’s value or existence actually changes, keeping runs fast and deterministic.
 - Execution ordering: use the passthrough to place setting/getting in precise positions of your pipeline without affecting the payload being processed.
 
@@ -600,7 +600,7 @@ What they do:
 
 Why it’s special:
 - Global scope within the process: values are visible to all workflows running in the same Comfy session.
-- “Virtual wires” without clutter: connect distant parts of a large graph through names, not cables.
+- “Virtual wires” without clutter: connect distant parts of a large graph through names, not links.
 - Change detection: readers can refresh only when a variable’s value or existence actually changes, keeping runs fast and deterministic.
 - Execution ordering: use the passthrough to place setting/getting in precise positions of your pipeline without affecting the payload being processed.
 
@@ -1028,6 +1028,69 @@ Notes
 
 ---
 
+## Get Setting (Ovum/Utils)
+
+A lightweight utility node that reads a value from the workflow "settings" snapshot shared by the frontend. It lets you reference run-time settings (like user preferences or UI-level parameters) inside your graph without extra wiring.
+
+- Category: ovum/utils
+- Display name: "Get Setting"
+- Python class: GetSettingOvum
+
+What it does
+- Exposes a COMBO selector of available setting keys (populated by the frontend).
+- Returns the current value for the selected key (type is "*" to allow any type).
+- Mirrors the resolved value into a read-only STRING field (value_out) for quick inspection.
+
+Inputs
+- setting (COMBO, required): The setting key to read. The options are populated by the frontend.
+
+Optional/Hidden
+- value_out (STRING, optional, readonly): Text view of the resolved value.
+- extra_pnginfo (hidden): Provided by Comfy; used to obtain the workflow settings snapshot.
+
+Output
+- value (*): The actual setting value from the workflow settings object. If the key doesn’t exist, the node returns None.  The type of this output will change to match the type of the setting key.
+
+Notes
+- Prefers workflow.settings when present; otherwise falls back to workflow.extra.settings in the PNG workflow blob.
+- The node does not mutate any data; it only reads.
+
+---
+
+## New Multi-type Dictionary
+
+![New Multi-type Dictionary example](resources/new-multitype-dict.png)
+
+Build a Python DICT from multiple dynamic inputs whose keys come from the input labels you set in the graph. Each input can accept any type, so you can mix simple scalars and complex objects in a single dictionary.
+
+What it does
+- Creates inputs named key-value-1, key-value-2, ... as you connect them. You can rename the visible label of each input; that label becomes the dictionary key.
+- Supports any ComfyUI type on the value side (images, lists, dicts, numbers, strings, etc.). The node returns a single DICT containing one entry per connected input.
+- Preserves your custom labels: once you change an input label away from its default, it won’t be auto‑overwritten by dynamic input maintenance.
+- Works reliably with API runs: the frontend stores a mapping of input names to labels in the workflow extras so the Python backend knows your chosen keys at execution time.
+
+How it works
+- UI side (JS): The node manages dynamic inputs with the pattern key-value-n. When the last input becomes linked, a new empty input is added; when you disconnect, extra trailing empty inputs are trimmed. During graphToPrompt, the UI writes an array of [inputName, label] pairs into workflow.extra under the key `ovum.multi.dict:(<nodeId>)`.
+- Backend (Python): At run time, the node reads that mapping from extra_pnginfo and builds the dictionary using the labels as keys and the connected input values as values. If a label is missing, it falls back to the input name.
+
+Example (screenshot above)
+- The top-left Get Setting outputs a complex DICT (type: HIDDEN in settings, displayed as JSON). Its link goes into the New Multi‑type Dictionary input whose label is set to disabledExtensions. That key stores the entire dict object under "disabledExtensions".
+- The bottom-left Get Setting outputs a COMBO value (effectively an INT with value 2). Its link goes into the input labeled linkRenderMode. That key stores the integer 2 under "linkRenderMode".
+- The resulting dictionary has two entries: {"disabledExtensions": <DICT>, "linkRenderMode": 2}.
+
+Inputs
+- key-value-n (*): Dynamic inputs that accept any type. Change the input label to set the dictionary key. The default label matches the input name (e.g., key-value-1) until you customize it.
+- unique_id, extra_pnginfo, prompt (hidden): Standard Comfy plumbing; extra_pnginfo carries the label mapping from the UI.
+
+Output
+- dict (DICT): A dictionary with one entry per connected input using your labels as keys.
+
+Tips
+- Use meaningful labels like seed, strength, disabledExtensions to make the resulting dict self‑documenting.
+- You can wire in non‑scalar values (lists, dicts, images); the node keeps their native types.
+
+---
+
 ## Index of Node Classes
 
 Below is an index of Python class names for nodes in this repository. Each entry links to the section in this README where the node or its family is documented; entries marked as "undocumented" currently have no dedicated section.
@@ -1060,6 +1123,7 @@ Below is an index of Python class names for nodes in this repository. Each entry
 - GetEnvVar — see Environment Bridge: #environment-bridge-set-environment-variable-and-get-environment-variable
 - GetListLength — undocumented
 - GetLocalStorage — see Browser Local Storage: #browser-local-storage-set-localstorage-and-get-localstorage
+- GetSettingOvum — see Get Setting: #get-setting-ovumutils
 - Ground — undocumented
 - IfElseOvum — see Logic helpers: #logic-helpers-ovumloop
 - ImageExContextListOvum — see Load Image with Workflow + IMAGE_EX Context: #load-image-with-workflow--image_ex-context
@@ -1086,6 +1150,7 @@ Below is an index of Python class names for nodes in this repository. Each entry
 - MapEndOvum — see Loop/Logic nodes: #looplogic-nodes-ovumloop
 - MapStartOvum — see Loop/Logic nodes: #looplogic-nodes-ovumloop
 - MinusOne — see Logic helpers: #logic-helpers-ovumloop
+- NewMultiDictionaryOvum — see New Multi‑type Dictionary: #new-multi‑type-dictionary
 - NextVideoFilenameOvum — see VHS Helper: Next Video Filename: #vhs-helper-next-video-filename
 - OpenOutputViaShell — see Open Output via Shell (secure): #open-output-via-shell-secure
 - OvumCombinePaths — see OS Path Utilities: #os-path-utilities-ovumpath-and-ovumpathospath

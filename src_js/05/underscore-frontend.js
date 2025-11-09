@@ -602,7 +602,7 @@ app.registerExtension({
                             try {
                                 // button options stolen from a Subgraph LGraphNode, defaults omitted
                                 node._usInfoTitleBtn = node.addTitleButton({
-                                    text: "\ue924",
+                                    text: "\ue924", // (i) info-circle-icon,
                                     // fgColor: "white",
                                     // bgColor: "#0F1F0F",
                                     fontSize: 16,

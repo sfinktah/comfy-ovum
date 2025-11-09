@@ -49,6 +49,7 @@ export function ensureDynamicInputsImpl(node, isConnecting) {
         const labelFmt = cfg?.dynamicInputs?.labelFormat; // optional
         const labelIndexBase = Number.isFinite(cfg?.dynamicInputs?.labelIndex) ? cfg.dynamicInputs.labelIndex : undefined;
         const defaultType = cfg?.dynamicInputs?.type || "*";
+        const preserveUserLabels = cfg?.dynamicInputs?.preserveUserLabels === true;
 
         let dynamicInputs = getDynamicInputs(node, cfg);
 
@@ -65,7 +66,8 @@ export function ensureDynamicInputsImpl(node, isConnecting) {
             if (input.name !== desiredName) {
                 log({class: "ensureDynamicInputsImpl", method: "ensureDynamicInputsImpl", severity: "warn", tag: "input_mismatch"},
                     `node #${node.id} input index mismatch, renaming input ${input.name} to ${desiredName}`);
-                if (input.label && (input.label.startsWith(input.name))) {
+                // If label looked auto-generated from the old name, clear it so we'll regenerate off the new name
+                if (input.label && (input.label === input.name || input.label.startsWith(input.name + " "))) {
                     input.label = undefined;
                 }
                 input.name = desiredName;
@@ -73,12 +75,29 @@ export function ensureDynamicInputsImpl(node, isConnecting) {
             const wantLabel = labelFmt && (labelIndexBase !== undefined)
                 ? labelFmt.replaceAll("${index}", String(labelIndexBase + logicalIndex))
                 : undefined;
-            if (wantLabel) {
-                input.label = wantLabel;
-            } else if (!input.label || input.label === input.name || input.label.split(' ')[0] === input.name) {
-                const inputType = input.type || defaultType;
-                input.label = `${input.name} ${inputType}`;
+
+            // Decide whether to overwrite label
+            let shouldSetLabel = true;
+            if (preserveUserLabels) {
+                // If user has customized the label away from defaults, keep it
+                const current = input.label ?? "";
+                const isEmpty = !current || current.trim() === "";
+                const looksAutoFromName = current === input.name || current.startsWith(input.name + " ");
+                const matchesWant = wantLabel && current === wantLabel;
+                if (!isEmpty && !looksAutoFromName && !matchesWant) {
+                    shouldSetLabel = false;
+                }
             }
+
+            if (shouldSetLabel) {
+                if (wantLabel) {
+                    input.label = wantLabel;
+                } else if (!input.label || input.label === input.name || input.label.split(' ')[0] === input.name) {
+                    const inputType = input.type || defaultType;
+                    input.label = `${input.name} ${inputType}`;
+                }
+            }
+
             // Ensure input.type aligns with defaultType when it was wildcarded
             if (!input.type) input.type = defaultType;
         }

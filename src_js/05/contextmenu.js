@@ -46,6 +46,7 @@ app.registerExtension({
                     callback: () => insertPassthruBetweenOutputs(this)
                 });
 
+
                 if (hasPassthruOutputs(this)) {
                     options.push({
                         content: "🥚 Remove PassthruOvums from outputs",

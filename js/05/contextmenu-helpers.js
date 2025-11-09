@@ -89,8 +89,8 @@ export const insertPassthruBetweenOutputs = (sourceNode) => {
 
     const getOutputName = (node, index = 0) => {
         if (!node) return undefined;
-        return node.outputs?.[0].name;
-    }
+        return node.outputs?.[index]?.name;
+    };
 
     const isValidTitleValue = (val) => {
         const t = typeof val;
@@ -107,7 +107,12 @@ export const insertPassthruBetweenOutputs = (sourceNode) => {
         const outputName = getOutputName(sourceNode, outputIndex);
         baseTitle = isValidTitleValue(outputName) ? String(outputName) : `${sourceNode.title}_${outputIndex}`;
 
-        for (const linkId of [...links]) {
+        const linkIds = [...links];
+        /** a single passthru per output slot */
+        let passthruNode = null;
+        let passthruTitle = null;
+
+        for (const linkId of linkIds) {
             /** @type {LLink} */
             const link = allLinks[linkId];
             if (!link) continue;
@@ -135,22 +140,33 @@ export const insertPassthruBetweenOutputs = (sourceNode) => {
             if (!originNode || !targetNode) continue;
             if (typeof targetNode.type === 'string' && targetNode.type.startsWith('Passthru')) continue;
 
+            // Create the passthru once per output slot, using the first eligible link for placement
+            if (!passthruNode) {
+                try { GraphHelpers.removeLink(graph, linkId); } catch (_) {}
+
+                const candidate = LiteGraph.createNode('PassthruOvum');
+                const [ox, oy] = originNode.getConnectionPos(false, originSlot);
+                const [tx, ty] = targetNode.getConnectionPos(true, targetSlot);
+                const px = Math.round((ox + tx) / 2) - 40;
+                const py = Math.round((oy + ty) / 2) - 10;
+                candidate.pos = [px, py];
+
+                const safeBase = LinkUtils.formatVariables(String(baseTitle));
+                passthruTitle = LinkUtils.uniqueTitle(graph, safeBase);
+                candidate.title = passthruTitle;
+
+                graph.add(candidate);
+
+                try { originNode.connect(originSlot, candidate, 0); } catch (_) {}
+                try { candidate.connect(0, targetNode, targetSlot); } catch (_) {}
+
+                passthruNode = candidate;
+                continue;
+            }
+
+            // For remaining eligible links on the same slot, rewire through the same passthru
             try { GraphHelpers.removeLink(graph, linkId); } catch (_) {}
-
-            const passthru = LiteGraph.createNode('PassthruOvum');
-            const [ox, oy] = originNode.getConnectionPos(false, originSlot);
-            const [tx, ty] = targetNode.getConnectionPos(true, targetSlot);
-            const px = Math.round((ox + tx) / 2) - 40;
-            const py = Math.round((oy + ty) / 2) - 10;
-            passthru.pos = [px, py];
-
-            const safeBase = LinkUtils.formatVariables(String(baseTitle));
-            passthru.title = LinkUtils.uniqueTitle(graph, safeBase);
-
-            graph.add(passthru);
-
-            try { originNode.connect(originSlot, passthru, 0); } catch (_) {}
-            try { passthru.connect(0, targetNode, targetSlot); } catch (_) {}
+            try { passthruNode.connect(0, targetNode, targetSlot); } catch (_) {}
         }
     }
 };
