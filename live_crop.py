@@ -583,12 +583,12 @@ class LiveCrop:
             pass
 
         if ui:
-            print("[LiveCrop] outputting UI\n")
+            # print("[LiveCrop] outputting UI\n")
             return {
                 "ui": ui,
                 "result": (img_ex_out, image_out, mask_out, bbox_px, bbox_pct)
             }
-        print("[LiveCrop] not outputting UI\n")
+        # print("[LiveCrop] not outputting UI\n")
         return img_ex_out, image_out, mask_out, bbox_px, bbox_pct
 
 

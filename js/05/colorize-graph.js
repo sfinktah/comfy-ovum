@@ -149,7 +149,7 @@ class ColorizeGraphNode extends LGraphNode {
 
         // After default coloring, additionally color upstream nodes connected to
         // the 'positive' input of any KSamplerAdvanced node in green so it sticks
-        console.log("afterDefaultColoring:");
+        // console.log("afterDefaultColoring:");
         try {
             const green = (globalThis?.LGraphCanvas?.node_colors?.green) || (app?.canvas?.constructor?.node_colors?.green);
             if (green?.color && green?.bgcolor) {

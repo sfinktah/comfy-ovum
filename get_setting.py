@@ -37,7 +37,7 @@ class GetSettingOvum:
             except Exception:
                 fp_val = repr(value)
             hash = f"{setting}|{fp_val}"
-            print("[GetSettingOvum] hash:", hash)
+            # print("[GetSettingOvum] hash:", hash)
             return hash
         except Exception as e:
             # Fallback forces recompute if we can't determine a stable value
@@ -84,7 +84,7 @@ class GetSettingOvum:
         settings = self._extract_settings(extra_pnginfo)
         # Prefer the value from settings object (snapshot sent from frontend).
         value = settings.get(setting)
-        print("[GetSettingOvum] setting value:", value, "type:", type(value))
+        # print("[GetSettingOvum] setting value:", value, "type:", type(value))
         # If not found, return None explicitly to make it clear.
         return (value,)
 

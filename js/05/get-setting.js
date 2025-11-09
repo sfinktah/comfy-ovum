@@ -93,7 +93,6 @@ app.registerExtension({
             } catch {
                 console.log('ovum.get-setting: graphToPrompt hook error');
             }
-            console.log('ovum.get-setting: graphToPrompt hook result', res.workflow.extra.settings['Comfy.LinkRenderMode']);
 
             return res;
         }
@@ -142,7 +141,6 @@ app.registerExtension({
                 if (valueWidget) {
                     valueWidget.options = { ...(valueWidget.options||{}), multiline: true, disabled: true };
                     valueWidget.beforeQueued = (value) => {
-                        console.log('ovum.get-setting: valueWidget.beforeQueued', value);
                         updateValueOut(node, settingWidget.value);
                     }
                     if (valueWidget.inputEl) {
