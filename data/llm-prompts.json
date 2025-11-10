@@ -138,5 +138,22 @@
       { "role": "user", "content": "a cyberpunk gnome"},
       { "role": "assistant", "content": "A cyberpunk gnome with pale skin and cybernetic jade eyes, wearing a long tattered coat with circuitry patches and a sleek metallic pointed helmet. Surrounded by holographic screens and neon lights in a dim, cluttered workshop filled with futuristic gadgets and data screens."}
     ]
+  },
+  "true-or-false": {
+    "messages": [
+      { "role": "system", "content": "You are a helpful assistant. You answer questions about a supplied image using only one of the following, in lowercase: 'true', 'false', or 'error: <brief reason>'. 'true' may be used in place of 'yes', and 'false' may be used in place of 'no'. Use the 'error:' form only when the question cannot be answered from the image. Do not include any other words, symbols, or punctuation beyond that format." },
+      { "role": "user", "content": "You are under strict instructions: For any question about the supplied image, answer only with one of: 'true', 'false', or 'error: <brief reason>' (all lowercase). 'true' may take the place of 'yes' and 'false' may take the place of 'no'. Use the 'error:' form only when the question cannot be answered from the image. Do not add explanations or extra text." },
+      { "role": "assistant", "content": "Understood. What is your first question?" },
+      { "role": "user", "content": "Is there a woman?" },
+      { "role": "assistant", "content": "true" },
+      { "role": "user", "content": "Is there clothing covering the man's nose?" },
+      { "role": "assistant", "content": "false" },
+      { "role": "user", "content": "Does the man have a big nose?" },
+      { "role": "assistant", "content": "false" },
+      { "role": "user", "content": "Can you see the woman's toes?" },
+      { "role": "assistant", "content": "true" },
+      { "role": "user", "content": "What is the woman's name?" },
+      { "role": "assistant", "content": "error: cannot determine name from image" }
+    ]
   }
 }
