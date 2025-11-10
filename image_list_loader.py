@@ -252,7 +252,7 @@ class LoadImagesListWithCallback:
                     start_index: int = 0, recurse: bool = False, invoke_callback: bool = False, load_always: bool = False, sort_method: str = "None",
                     callback_message: str = "ovum.image_list.info"):
         # Choose source of files: explicit filenames list (if provided) or scan directory
-        if filenames:
+        if filenames is not None:
             files = self._collect_from_list(filenames, regex, custom_filter_class)
         else:
             files = self._collect_files(directory, regex, custom_filter_class, recurse, load_always, sort_method)
