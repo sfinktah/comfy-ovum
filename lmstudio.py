@@ -18,6 +18,10 @@ class LMStudioPromptOvum:
     _last_request_time = 0
     _unload_timer = None
     _timer_lock = threading.Lock()
+    # Ensure only one request is in-flight at a time across all LMStudioPrompt nodes
+    _request_lock = threading.Lock()
+    _active_requests = 0
+    _current_timeout_seconds = 0
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -417,37 +421,45 @@ Requirements:
         HOST = f'{server_address}:{server_port}'
         URI = f'http://{HOST}/v1/chat/completions'
 
-        # Mark activity at the start to delay any existing auto-unload timer
-        LMStudioPromptOvum._last_request_time = time.time()
-        try:
-            response = requests.post(URI, json=request, timeout=180)
-        except requests.exceptions.ConnectionError:
-            raise Exception('Are you running LM Studio with server running?')
+        # Serialize all LM Studio requests to avoid concurrent requests from multiple nodes
+        with LMStudioPromptOvum._request_lock:
+            # Suspend any existing auto-unload timer while a request is in-flight
+            with LMStudioPromptOvum._timer_lock:
+                if LMStudioPromptOvum._unload_timer is not None:
+                    LMStudioPromptOvum._unload_timer.cancel()
+                    LMStudioPromptOvum._unload_timer = None
+            # If this node specifies a non-zero timeout, it becomes the new effective timeout
+            if unload_timeout_seconds and unload_timeout_seconds > 0:
+                LMStudioPromptOvum._current_timeout_seconds = unload_timeout_seconds
 
-        if response.status_code == 200:
-            # response is in openai format
-            result = response.json()['choices'][0]['message']['content']
-            result = html.unescape(result)  # decode URL encoded special characters
-            # Append assistant reply to history for continuity
-            history['messages'].append({'role': 'assistant', 'content': result})
-            # Mark completion time and (re)schedule unload from now so it starts after this request completes
-            LMStudioPromptOvum._last_request_time = time.time()
-            if unload_timeout_seconds > 0:
-                self.schedule_automatic_unload(server_address, server_port, unload_timeout_seconds)
-            return result, history
-        else:
-            # On API error, attempt to refresh the models list from the current server
             try:
-                latest_models = self.fetch_models_from_server(server_address, server_port)
-                if latest_models:
-                    self.save_cached_models(latest_models)
-            except Exception:
-                pass
-            # Even on error, mark activity and (re)schedule unload if configured
-            LMStudioPromptOvum._last_request_time = time.time()
-            if unload_timeout_seconds > 0:
-                self.schedule_automatic_unload(server_address, server_port, unload_timeout_seconds)
-            return 'Error', history
+                response = requests.post(URI, json=request, timeout=180)
+            except requests.exceptions.ConnectionError:
+                # On connection errors, still restart the timer logic after handling
+                raise Exception('Are you running LM Studio with server running?')
+            finally:
+                # After the HTTP call attempt (success or failure), restart the global inactivity timer from now
+                LMStudioPromptOvum._last_request_time = time.time()
+                eff_timeout = LMStudioPromptOvum._current_timeout_seconds
+                if eff_timeout and eff_timeout > 0:
+                    self.schedule_automatic_unload(server_address, server_port, eff_timeout)
+
+            if response.status_code == 200:
+                # response is in openai format
+                result = response.json()['choices'][0]['message']['content']
+                result = html.unescape(result)  # decode URL encoded special characters
+                # Append assistant reply to history for continuity
+                history['messages'].append({'role': 'assistant', 'content': result})
+                return result, history
+            else:
+                # On API error, attempt to refresh the models list from the current server
+                try:
+                    latest_models = self.fetch_models_from_server(server_address, server_port)
+                    if latest_models:
+                        self.save_cached_models(latest_models)
+                except Exception:
+                    pass
+                return 'Error', history
 
     def process(self, input_prompt, mode, custom_history, server_address, server_port, selected_model, unload_timeout_seconds, seed, image=None, prompt=None, unique_id=None, extra_pnginfo=None):
         # Always refresh models from the currently selected server (host:port)
