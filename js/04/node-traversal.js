@@ -397,18 +397,44 @@ function checkTypeToType(node, slotIndex = 0, outputNode = null, opts = {}) {
 }
 
 // Reusable type predicate helpers
-// Note: keep minimal surface; export not required as these are internal to this module.
-function isConditioningish(t) {
-    return (t && String(t).includes('*')) || (t && String(t).toUpperCase().includes('CONDITIONING'));
+function isAnytypeish(t) {
+    return t && t.toUpperCase().split(",").includes("*");
 }
-function isStringish(t) {
-    return t === 'STRING' || (t && String(t).includes('*'));
-}
-function isClipish(t) {
-    return t === '*' || (t && String(t).toUpperCase().includes('CLIP'));
-}
+export const isPromptish = isTypeishFactory(['STRING', 'TEXT', 'PROMPT', 'WANVIDEOTEXTEMBEDS']);
+export const isClipish = isTypeishFactory('CLIP');
+export const isStringish = isTypeishFactory('STRING');
+export const isConditioningish = isTypeishFactory('CONDITIONING');
 
-/**
+// enhance isTypeishFactory to optionally accept an array of targetTypes, all of which would use the same checkFunction, or an object of targetTypes and checkFunctions in {targetType: checkFunction} format.
+function isTypeishFactory (targetType, checkFunction, noAnytype) {
+    return function (t) {
+        if (t && typeof (t) === 'string') {
+            if (!noAnytype && isAnytypeish(t)) {
+                return true;
+            }
+            const split = t.toUpperCase().split(",");
+            const types = Array.isArray(targetType) ? targetType :
+                typeof targetType === 'object' ? targetType :
+                    [targetType];
+
+            if (typeof targetType !== 'object' || Array.isArray(targetType)) {
+                if (!checkFunction) {
+                    return types.some(type => split.includes(type));
+                }
+                return types.some(type => split.some(s => s?.[checkFunction]?.(type)));
+            } else {
+                return Object.entries(types).some(([type, check]) => {
+                    if (typeof check === 'function') {
+                        return split.some(s => s?.[check]?.(type));
+                    }
+                    return split.includes(type);
+                });
+            }
+        }
+        return false;
+    };
+}
+/*
  * Check 3: isStringToString => node is connected to outputNode and both ends are type STRING or *,
  * and there are 0..1 connected input links of type STRING or * on the node.
  * @param {LGraphNode|ComfyNode} node
@@ -421,6 +447,22 @@ export function checkIsStringToString(node, slotIndex = 0, outputNode = null) {
         isEndType: isStringish,
         maxInputsOfType: 1,
         countType: isStringish,
+    });
+}
+
+/**
+ * Check 3: isStringToString => node is connected to outputNode and both ends are type STRING or *,
+ * and there are 0..1 connected input links of type STRING or * on the node.
+ * @param {LGraphNode|ComfyNode} node
+ * @param {number} [slotIndex=0]
+ * @param {LGraphNode|ComfyNode|null} [outputNode=null]
+ * @returns {boolean|object|LLink|ComfyNode|LGraphNode}
+ */
+export function checkIsAnytypeToAnytype(node, slotIndex = 0, outputNode = null) {
+    return checkTypeToType(node, slotIndex, outputNode, {
+        isEndType: isAnytypeish,
+        maxInputsOfType: 1,
+        countType: isAnytypeish,
     });
 }
 
@@ -458,7 +500,6 @@ export function checkIsClipToConditioning(node, slotIndex = 0, outputNode = null
         returnLinkedInputWhenType: isStringish,
     });
 }
-
 
 export const defaultInputTraversalChecks = [
     checkIsReroute,
