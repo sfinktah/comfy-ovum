@@ -20,11 +20,11 @@ class LMStudioPromptOvum:
     _timer_lock = threading.Lock()
 
     @classmethod
-    def INPUT_TYPES(s):
+    def INPUT_TYPES(cls):
         # Get available models for the combo box
-        available_models = s.get_available_models()
+        available_models = cls.get_available_models()
         # Get available modes dynamically from JSON file
-        available_modes = s.get_available_modes()
+        available_modes = cls.get_available_modes()
 
         return {'required': {
                     'input_prompt': ('STRING', {
@@ -129,6 +129,7 @@ Requirements:
                 modes = list(prompts_data.keys()) + ['custom']
                 return modes
             except Exception:
+                print("[ovum-lmstudio] couldn't read from prompts data file, using hardcoded modes instead.")
                 # Fallback to hardcoded modes if any error occurs
                 return ['none', 'prompt', 'pixelwave', 'style', 'descriptor', 'character', 'custom']
 
@@ -416,6 +417,8 @@ Requirements:
         HOST = f'{server_address}:{server_port}'
         URI = f'http://{HOST}/v1/chat/completions'
 
+        # Mark activity at the start to delay any existing auto-unload timer
+        LMStudioPromptOvum._last_request_time = time.time()
         try:
             response = requests.post(URI, json=request, timeout=180)
         except requests.exceptions.ConnectionError:
@@ -440,6 +443,10 @@ Requirements:
                     self.save_cached_models(latest_models)
             except Exception:
                 pass
+            # Even on error, mark activity and (re)schedule unload if configured
+            LMStudioPromptOvum._last_request_time = time.time()
+            if unload_timeout_seconds > 0:
+                self.schedule_automatic_unload(server_address, server_port, unload_timeout_seconds)
             return 'Error', history
 
     def process(self, input_prompt, mode, custom_history, server_address, server_port, selected_model, unload_timeout_seconds, seed, image=None, prompt=None, unique_id=None, extra_pnginfo=None):
@@ -503,8 +510,8 @@ Requirements:
 
 class LMStudioPromptChainOvum(LMStudioPromptOvum):
     @classmethod
-    def INPUT_TYPES(s):
-        available_modes = s.get_available_modes()
+    def INPUT_TYPES(cls):
+        available_modes = cls.get_available_modes()
         # Add a special option to use the incoming context's mode
         available_modes_with_context = ['use_context'] + available_modes
         return {
@@ -543,9 +550,11 @@ class LMStudioPromptChainOvum(LMStudioPromptOvum):
         existing_history = context.get('history')
         # Determine mode to use
         mode_to_use = base_mode if mode == 'use_context' else mode
+        # If the user chose a new mode, start a fresh history so the new system prompt applies
+        history_to_use = existing_history if mode == 'use_context' else None
         # Wildcards replacement similar to base node
         input_prompt = find_and_replace_wildcards(input_prompt, seed, debug=True)
-        # Execute request with existing history to maintain context
+        # Execute request, optionally reusing existing history to maintain context
         text, updated_history = self.api_request(
             input_prompt,
             server_address,
@@ -556,7 +565,7 @@ class LMStudioPromptChainOvum(LMStudioPromptOvum):
             image=None,
             selected_model=selected_model,
             unload_timeout_seconds=unload_timeout_seconds,
-            existing_history=existing_history,
+            existing_history=history_to_use,
         )
         # Update and return context
         new_context = dict(context)
