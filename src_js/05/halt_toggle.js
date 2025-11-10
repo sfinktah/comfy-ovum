@@ -1,6 +1,7 @@
 import { app } from "../../../scripts/app.js";
 import { api } from "../../../scripts/api.js";
 import {chainCallback} from "../01/utility.js";
+import { applyAnytypeInput0Mixin } from "./mixins/anytype-propagation.js";
 
 app.registerExtension({
     name: "ovum.halt_toggle",
@@ -12,6 +13,8 @@ app.registerExtension({
      */
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
         if (nodeData.name === "HaltToggle") {
+                    // Apply mixin to adjust input[0]/output[0] types on connection changes
+                    applyAnytypeInput0Mixin(nodeType);
             const onExecuted = nodeType.prototype.onExecuted;
             nodeType.prototype.onExecuted = function(message) {
                 if (onExecuted) {
