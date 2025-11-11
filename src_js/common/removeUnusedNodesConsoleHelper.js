@@ -46,8 +46,17 @@ function countIncomingLinks(node) {
     } catch (_e) { return 0; }
 }
 
+// Count declared input/output slots on a node (not the number of connected links)
+function countInputs(node) {
+    try { return Array.isArray(node?.inputs) ? node.inputs.length : 0; } catch (_e) { return 0; }
+}
+function countOutputs(node) {
+    try { return Array.isArray(node?.outputs) ? node.outputs.length : 0; } catch (_e) { return 0; }
+}
+
 function isLeaf(node) { return countOutgoingLinks(node) === 0; }
 function isOrphan(node) { return countOutgoingLinks(node) === 0 && countIncomingLinks(node) === 0; }
+function hasNoInputsOrOutputs(node) { return countInputs(node) === 0 && countOutputs(node) === 0; }
 
 function removeNode(node) {
     const g = getGraph();
@@ -93,6 +102,7 @@ export async function removeOrphanNodes(opts = {}) {
 
     for (const node of nodes) {
         if (!isOrphan(node)) continue;
+        if (hasNoInputsOrOutputs(node)) continue;
         if (!dryRun) removeNode(node);
         removed.push({ id: node.id, class_name: nodeClassName(node) });
     }
