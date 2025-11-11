@@ -1,6 +1,8 @@
 import logging
 from typing import Any
 from nodes import PreviewImage, SaveImage
+from server import PromptServer
+import comfy
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +80,20 @@ class HaltToggle:
             logger.warning(msg)
             print(msg)
 
-            # Return with .ui values telling frontend to halt and whether to reset toggle
+            # Immediate halt path: send UI event via PromptServer to reset toggle, then raise to stop
+            if int(delay) == 0:
+                try:
+                    PromptServer.instance.send_sync("/ovum/halt_toggle", {
+                        "node_id": unique_id,
+                        "should_reset_toggle": bool(reset_after_stop),
+                        "delay": 0,
+                    })
+                except Exception as e:
+                    logger.exception("[HaltToggle] Failed to send PromptServer event: %s", e)
+                # Raise ComfyUI interrupt to stop execution now
+                raise comfy.model_management.InterruptProcessingException()
+
+            # Delayed halt path: return .ui values telling frontend to halt and whether to reset toggle
             return {
                 "ui": {
                     "should_halt": [True],

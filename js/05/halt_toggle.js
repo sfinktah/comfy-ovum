@@ -3,6 +3,8 @@ import { api } from "../../../scripts/api.js";
 import {chainCallback} from "../01/utility.js";
 import { applyAnytypeInput0Mixin } from "./mixins/anytype-propagation.js";
 
+const haltToggleNodes = new Set();
+
 app.registerExtension({
     name: "ovum.halt_toggle",
 
@@ -35,8 +37,7 @@ app.registerExtension({
                         }
                     }
 
-                    // Use setTimeout to delay the halt if specified
-                    setTimeout(() => {
+                    const performHalt = () => {
                         // Set state to halting when we actually send the interrupt
                         this.haltState = 'halting';
 
@@ -45,8 +46,6 @@ app.registerExtension({
                             app.canvas.setDirty(true, true);
                         }
 
-                        // Call ComfyUI API interrupt (this will halt the workflow)
-                        api.interrupt(null);  // null for current running prompt
                         // if (this.properties.interruptQueue) api.interrupt();
                         // if (this.properties.autorunQueue) app.queuePrompt(0);
 
@@ -72,7 +71,16 @@ app.registerExtension({
                                 }
                             }
                         }
-                    }, delay);
+                        // Call ComfyUI API interrupt (this will halt the workflow)
+                        api.interrupt(null);  // null for current running prompt
+                    }
+                    // Use setTimeout to delay the halt if specified
+                    if (delay > 0) {
+                        setTimeout(performHalt, delay);
+                    } else {
+                        performHalt();
+                    }
+
                 }
             };
             chainCallback(nodeType.prototype, 'onAdded', function () {
@@ -80,40 +88,13 @@ app.registerExtension({
                 this.history = ["sfinktah", "made", "this", "for", "u"];
                 this.haltState = 'normal'; // 'normal', 'waiting', 'halting'
 
-                // Set up event listeners for workflow termination
-                const self = this;
-
-                function executionErrorHandler(event) {
-                    self.haltState = 'normal';
-                    if (app.canvas?.setDirty) {
-                        app.canvas.setDirty(true, true);
-                    }
-                }
-
-                function executionInterruptedHandler(event) {
-                    self.haltState = 'normal';
-                    if (app.canvas?.setDirty) {
-                        app.canvas.setDirty(true, true);
-                    }
-                }
-
-                // Store references for cleanup
-                this.executionErrorHandler = executionErrorHandler;
-                this.executionInterruptedHandler = executionInterruptedHandler;
-
-                // Listen for API events that signal workflow termination
-                api.addEventListener('execution_error', executionErrorHandler);
-                api.addEventListener('execution_interrupted', executionInterruptedHandler);
+                // Register this node instance so global listeners can update it
+                try { haltToggleNodes.add(this); } catch {}
             })
 
             chainCallback(nodeType.prototype, 'onRemoved', function () {
-                // Clean up event listeners when node is removed
-                if (this.executionErrorHandler) {
-                    api.removeEventListener('execution_error', this.executionErrorHandler);
-                }
-                if (this.executionInterruptedHandler) {
-                    api.removeEventListener('execution_interrupted', this.executionInterruptedHandler);
-                }
+                // Remove this node from the tracked set
+                try { haltToggleNodes.delete(this); } catch {}
             })
             chainCallback(nodeType.prototype, 'onDrawForeground', function (ctx) {
                 // Get standard LiteGraph dimensions and font settings
@@ -193,5 +174,44 @@ app.registerExtension({
                 }
             });
         }
+    },
+
+    // Set up global event listeners similar to image-list-callback.js
+    async setup() {
+        // When execution finishes with error or is interrupted, reset halt state on all nodes
+        const resetAll = () => {
+            for (const node of haltToggleNodes) {
+                try {
+                    node.haltState = 'normal';
+                    if (app.canvas?.setDirty) app.canvas.setDirty(true, true);
+                } catch {}
+            }
+        };
+
+        api.addEventListener('execution_error', () => resetAll());
+        api.addEventListener('execution_interrupted', () => resetAll());
+
+        // Listen for backend-triggered immediate halt events to reset toggle on matching nodes
+        api.addEventListener('/ovum/halt_toggle', (ev) => {
+            try {
+                const detail = ev?.detail ?? ev;
+                if (!detail) return;
+                for (const node of haltToggleNodes) {
+                    if (detail.node_id != null && node.id != null && String(detail.node_id) !== String(node.id)) continue;
+                    if (detail.should_reset_toggle === true) {
+                        const stopWidget = node.widgets?.find(w => w.name === 'stop_now');
+                        if (stopWidget) {
+                            stopWidget.value = false;
+                            if (app.canvas?.setDirty) app.canvas.setDirty(true, true);
+                            if (stopWidget.callback) {
+                                stopWidget.callback(stopWidget.value, app.canvas, node, null, stopWidget);
+                            }
+                        }
+                    }
+                }
+            } catch (e) {
+                console.warn('[ovum.halt_toggle] Error handling /ovum/halt_toggle event', e);
+            }
+        });
     }
 });
