@@ -829,6 +829,29 @@ Connect to an LM Studio server to generate text (optionally with an image for vi
 **NOTE:** Since LM Studio does not actually support unloading models on request, this node requires you install the 
 the LM Studio model "liquid/lfm2-1.2b" and set your automatic model unloading to the shortest possible period (60 seconds).
 
+## LM Studio Unload (Ovum/LLM)
+
+Force an immediate unload of the LM Studio model when an auto-unload timer is pending. This node cancels the repository’s shared unload timer (scheduled by LM Studio Prompt nodes) and triggers a tiny model switch on the LM Studio server to free VRAM sooner.
+
+What it does:
+- Cancels any pending auto-unload timer shared by all LM Studio nodes in this package.
+- If a timer was active, it sends a minimal request to switch to the tiny model "liquid/lfm2-1.2b" so VRAM is released quickly.
+- If no timer was active, it does nothing (and tells you so).
+- Always passes its first input through unchanged so you can wire it inline without breaking your graph.
+
+Inputs:
+- any_input (ANY, passthrough)
+- server_address (STRING, default: localhost)
+- server_port (INT, default: 1234)
+
+Outputs:
+- any_output (ANY, passthrough of any_input)
+- status (STRING) — human-readable summary: unloaded now, attempted but failed, or nothing to do.
+
+Notes:
+- Install the LM Studio model "liquid/lfm2-1.2b" for unloading to work as designed.
+- All LM Studio requests from these nodes are serialized; the unload timer is suspended during requests and restarted after completion.
+
 ## Workflow Helpers (Widgets to values)
 
 - Widget To String (KJNodes): Read a widget from any node in your workflow (works inside subgraphs, unlike KJNODE) and returns its value as a STRING
@@ -1135,6 +1158,7 @@ Below is an index of Python class names for nodes in this repository. Each entry
 - JoinList — see Pystructure Data Nodes: #pystructure-data-nodes-complementary-to-comfyui-logicutils
 - JoinListOvum — see More List utilities (Data): #more-list-utilities-data
 - LMStudioPromptOvum — see LM Studio Prompt (Ovum/LLM): #lm-studio-prompt-ovumllm
+- LMStudioUnloadOvum — see LM Studio Unload (Ovum/LLM): #lm-studio-unload-ovumllm
 - ListExtend — see Pystructure Data Nodes: #pystructure-data-nodes-complementary-to-comfyui-logicutils
 - ListExtendOvum — see More List utilities (Data): #more-list-utilities-data
 - ListSlice — see Pystructure Data Nodes: #pystructure-data-nodes-complementary-to-comfyui-logicutils

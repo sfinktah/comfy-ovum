@@ -10,6 +10,7 @@ import time
 import threading
 import base64
 from wildcard_processor import find_and_replace_wildcards, search_and_replace
+from comfy.comfy_types.node_typing import IO
 
 
 # same function as oobaprompt but using the LM Studio API
@@ -236,6 +237,30 @@ Requirements:
 
         # Return default if nothing else works
         return [placeholder]
+
+    def _expand_prompt(self, input_prompt, seed, *, do_search_and_replace=False, extra_pnginfo=None, prompt_obj=None, do_brace_expansion=True):
+        """Expand prompt with wildcards and optional replacements in a consistent way.
+        - Always runs find_and_replace_wildcards (uses seed)
+        - Optionally runs search_and_replace when extra workflow info is provided
+        - Optionally expands simple brace choices of the form {a|b|c}
+        """
+        # wildcard replacement via helper (may also expand some patterns)
+        expanded = find_and_replace_wildcards(input_prompt, seed, debug=True)
+        # optional workflow-driven replacement
+        if do_search_and_replace and extra_pnginfo is not None and prompt_obj is not None:
+            try:
+                expanded = search_and_replace(expanded, extra_pnginfo, prompt_obj)
+            except Exception:
+                # Don't fail the whole prompt on replace errors; return best-effort
+                pass
+        # simple {a|b|c} expansion
+        if do_brace_expansion:
+            wc_re = re.compile(r'{([^}]+)}')
+            def repl(m):
+                return random.choice(m.group(1).split('|'))
+            for m in wc_re.finditer(expanded):
+                expanded = expanded.replace(m.group(0), repl(m))
+        return expanded
 
     def encode_image_to_base64(self, image):
         """Convert image tensor to base64 encoded string"""
@@ -491,16 +516,15 @@ Requirements:
                     "In developer settings, JIT Model Loading and Auto unload JIT models should be enabled with 1 minute TTL."
                 )
 
-        # search and replace
-        input_prompt = find_and_replace_wildcards(input_prompt, seed, debug=True)
-        input_prompt = search_and_replace(input_prompt, extra_pnginfo, prompt)
-        # wildcard sytax is {like|this}
-        # select a random word from the | separated list
-        wc_re = re.compile(r'{([^}]+)}')
-        def repl(m):
-            return random.choice(m.group(1).split('|'))
-        for m in wc_re.finditer(input_prompt):
-            input_prompt = input_prompt.replace(m.group(0), repl(m))
+        # Consistent prompt expansion
+        input_prompt = self._expand_prompt(
+            input_prompt,
+            seed,
+            do_search_and_replace=True,
+            extra_pnginfo=extra_pnginfo,
+            prompt_obj=prompt,
+            do_brace_expansion=True,
+        )
         text, history = self.api_request(input_prompt, server_address, server_port, seed, mode, custom_history, image, selected_model, unload_timeout_seconds)
         # Build context object to propagate through the graph
         context = {
@@ -564,8 +588,8 @@ class LMStudioPromptChainOvum(LMStudioPromptOvum):
         mode_to_use = base_mode if mode == 'use_context' else mode
         # If the user chose a new mode, start a fresh history so the new system prompt applies
         history_to_use = existing_history if mode == 'use_context' else None
-        # Wildcards replacement similar to base node
-        input_prompt = find_and_replace_wildcards(input_prompt, seed, debug=True)
+        # Consistent prompt expansion (same as base node, but without workflow search/replace)
+        input_prompt = self._expand_prompt(input_prompt, seed, do_search_and_replace=False, do_brace_expansion=True)
         # Execute request, optionally reusing existing history to maintain context
         text, updated_history = self.api_request(
             input_prompt,
@@ -584,5 +608,43 @@ class LMStudioPromptChainOvum(LMStudioPromptOvum):
         new_context['history'] = updated_history
         new_context['mode'] = mode_to_use
         return (new_context, text)
+    
+class LMStudioUnloadOvum(LMStudioPromptOvum):
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            'required': {
+                'any_input': (IO.ANY, {}),
+                'server_address': ('STRING', {'default': 'localhost', 'tooltip': 'LM Studio server address'}),
+                'server_port': ('INT', {'default': 1234, 'min': 0, 'max': 65535, 'tooltip': 'LM Studio server port'}),
+            },
+            'optional': {},
+            'hidden': {}
+        }
 
-CLAZZES = [LMStudioPromptOvum, LMStudioPromptChainOvum]
+    RETURN_TYPES = (IO.ANY, 'STRING')
+    RETURN_NAMES = ('any_output', 'status')
+    FUNCTION = 'process'
+    CATEGORY = 'Ovum/LLM'
+    DESCRIPTION = 'Immediately unloads the LM Studio model by canceling any pending unload timer and switching to a tiny model to free VRAM. Passes its first input through unchanged.'
+
+    def process(self, any_input, server_address, server_port):
+        did_cancel = False
+        with LMStudioPromptOvum._timer_lock:
+            if LMStudioPromptOvum._unload_timer is not None:
+                try:
+                    LMStudioPromptOvum._unload_timer.cancel()
+                except Exception:
+                    pass
+                LMStudioPromptOvum._unload_timer = None
+                did_cancel = True
+        if did_cancel:
+            ok = self.unload_model(server_address, server_port)
+            if ok:
+                return (any_input, 'Unloaded immediately (pending timer was active).')
+            else:
+                return (any_input, 'Attempted immediate unload, but the unload request failed.')
+        else:
+            return (any_input, 'No pending unload timer; nothing to do.')
+    
+CLAZZES = [LMStudioPromptOvum, LMStudioPromptChainOvum, LMStudioUnloadOvum]
