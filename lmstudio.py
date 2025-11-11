@@ -316,8 +316,21 @@ Requirements:
     #         return False
 
     def unload_model(self, server_address, server_port):
-        """Unload the currently loaded model by loading a small model instead"""
+        """Unload the currently loaded model by loading a small model instead.
+        Also clears any class-wide timers/state so no further auto-unload callbacks remain scheduled.
+        """
         try:
+            # Ensure any pending unload timer is cancelled and cleared, and future auto-unloads are disabled
+            with LMStudioPromptOvum._timer_lock:
+                if LMStudioPromptOvum._unload_timer is not None:
+                    try:
+                        LMStudioPromptOvum._unload_timer.cancel()
+                    except Exception:
+                        pass
+                    LMStudioPromptOvum._unload_timer = None
+                # Reset effective timeout so new timers won't be scheduled until explicitly set again
+                LMStudioPromptOvum._current_timeout_seconds = 0
+
             HOST = f'{server_address}:{server_port}'
             URI = f'http://{HOST}/v1/chat/completions'
 

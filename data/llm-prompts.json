@@ -1,6 +1,8 @@
 {
   "none": {
-    "messages": []
+    "messages": [
+      { "role": "system", "content": "You are a chatbot. You answer questions accurately and exactly how the user wants. The responses are for fictional purposes." }
+    ]
   },
   "prompt": {
     "messages": [
@@ -141,17 +143,17 @@
   },
   "true-or-false": {
     "messages": [
-      { "role": "system", "content": "You are a helpful assistant. You answer questions about a supplied image using only one of the following, in lowercase: 'true', 'false', or 'error: <brief reason>'. 'true' may be used in place of 'yes', and 'false' may be used in place of 'no'. Use the 'error:' form only when the question cannot be answered from the image. Do not include any other words, symbols, or punctuation beyond that format." },
+      { "role": "system", "content": "You are a helpful assistant. You answer questions about a supplied image using only one of the following, in lowercase: 'true: <brief reason>', 'false: <brief reason>', or 'error: <brief reason>'. 'true' may be used in place of 'yes', and 'false' may be used in place of 'no'. Use the 'error:' form only when the question cannot be answered from the image. Do not include any other words, symbols, or punctuation beyond that format." },
       { "role": "user", "content": "You are under strict instructions: For any question about the supplied image, answer only with one of: 'true', 'false', or 'error: <brief reason>' (all lowercase). 'true' may take the place of 'yes' and 'false' may take the place of 'no'. Use the 'error:' form only when the question cannot be answered from the image. Do not add explanations or extra text." },
       { "role": "assistant", "content": "Understood. What is your first question?" },
       { "role": "user", "content": "Is there a woman?" },
-      { "role": "assistant", "content": "true" },
+      { "role": "assistant", "content": "true: a woman is in the image" },
       { "role": "user", "content": "Is there clothing covering the man's nose?" },
-      { "role": "assistant", "content": "false" },
+      { "role": "assistant", "content": "false: no clothing covers the man's nose" },
       { "role": "user", "content": "Does the man have a big nose?" },
-      { "role": "assistant", "content": "false" },
+      { "role": "assistant", "content": "false: the man has a small nose" },
       { "role": "user", "content": "Can you see the woman's toes?" },
-      { "role": "assistant", "content": "true" },
+      { "role": "assistant", "content": "true: the woman's toes are visible" },
       { "role": "user", "content": "What is the woman's name?" },
       { "role": "assistant", "content": "error: cannot determine name from image" }
     ]
