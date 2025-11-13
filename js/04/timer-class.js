@@ -242,7 +242,7 @@ export class Timer {
         // Remove any incomplete previous runs (no endTime), unless there are run notes.
         const removeIds = [];
         for (const [rid, rdata] of Object.entries(Timer.run_history)) {
-            if (rdata && !rdata.endTime) {
+            if (rdata && (!rdata.endTime || rdata.endTime === 'execution-interrupted' || rdata.endTime === 'execution-error')) {
                 if (!Timer.run_notes[rid]) {
                     removeIds.push(rid);
                 } else {
@@ -396,7 +396,7 @@ export class Timer {
 
     static add_timing(id, dt) {
         // Update aggregated timing data
-        var this_node_data = Timer.all_times.find((node_data) => node_data.id === id);
+        let this_node_data = Timer.all_times.find((node_data) => node_data.id === id);
         if (!this_node_data) {
             this_node_data = {
                 id: id,
@@ -421,6 +421,9 @@ export class Timer {
                 }
                 runData.nodes[id].count += 1;
                 runData.nodes[id].totalTime += dt;
+                if (runData.nodes[id].cudnn === null) {
+                    runData.nodes[id].cudnn = Timer.cudnn_enabled;
+                }
             }
         }
     }
@@ -447,7 +450,7 @@ export class Timer {
 
             // From current graph, if available
             const g = app?.graph;
-            ids = new Set();
+            ids.clear()
             if (g && Array.isArray(g._nodes)) {
                 for (const n of g._nodes) {
                     if (n && n.id != null) ids.add(String(n.id));
@@ -522,13 +525,7 @@ export class Timer {
      * @param {ComfyTickEvent} e
      */
     static executing(e) {
-        Logger.log({
-            class: 'ovum.timer',
-            method: 'executing',
-            severity: 'debug',
-            tag: 'event executing'.split(' '),
-            nodeName: 'ovum.timer'
-        }, "arguments", arguments);
+        // Logger.log({ class: 'ovum.timer', method: 'executing', severity: 'debug', tag: 'event executing'.split(' '), nodeName: 'ovum.timer' }, "arguments", arguments);
 
         let detail = e.detail;
         const node_name = Timer.getNodeNameByIdCached(detail);
@@ -625,7 +622,7 @@ export class Timer {
                             .then(cudnn_enabled => {
                                 if (cudnn_enabled !== null) {
                                     if (Timer?.currentRunDataNode) {
-                                        Timer.currentRunDataNode.cudnn = Timer.cudnn_enabled = cudnn_enabled;
+                                        Timer.currentRunDataNode.cudnn = cudnn_enabled;
                                     }
                                 }
                             })
@@ -719,26 +716,6 @@ export class Timer {
             }
         } catch (err) {
             console.warn("[Timer] editRunNotes failed:", err);
-        }
-    }
-
-    // Edit notes for a specific runId; prompts user and persists changes
-    static editRunNotes(runId) {
-        try {
-            const existing = (Timer.run_notes && Timer.run_notes[runId]) ? String(Timer.run_notes[runId]) : "";
-            const updated = window.prompt("Edit notes for this run:", existing);
-            if (updated !== null) {
-                if (updated.trim().length) {
-                    Timer.run_notes[runId] = updated;
-                } else {
-                    // Empty input => clear notes
-                    delete Timer.run_notes[runId];
-                }
-                Timer.saveToStorage();
-                if (typeof Timer.onChange === "function") Timer.onChange();
-            }
-        } catch (err) {
-            Logger.log({class:'ovum.timer',method:'editRunNotes',severity:'warn',tag:'error', nodeName:'ovum.timer'}, "[Timer] editRunNotes failed:", err);
         }
     }
 

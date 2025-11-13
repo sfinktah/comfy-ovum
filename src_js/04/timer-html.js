@@ -144,7 +144,7 @@ export function html_impl(scope) {
             if (!isNaN(delta)) endDate = new Date(systemStartTime + delta);
         }
         const startStr = startDate ? startDate.toLocaleString() : 'Unknown';
-        const endStr = endDate ? endDate.toLocaleString() : (typeof lgEnd === 'number' ? 'Unknown' : 'In progress');
+        const endStr = typeof lgEnd === 'string' ? lgEnd : (endDate ? endDate.toLocaleString() : (typeof lgEnd === 'number' ? 'Unknown' : 'In progress'));
         const noteRaw = Timer.run_notes[runId] || "No run notes";
         function escapeHtml(s){ return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
         const noteEscaped = escapeHtml(noteRaw).replace(/\r?\n/g, "<br>");
