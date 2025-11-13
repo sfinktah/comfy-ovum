@@ -158,9 +158,9 @@ class ColorizeGraphNode extends LGraphNode {
                     if (!ks.comfyClass?.includes('KSampler')) {
                         continue;
                     }
-                    console.log("found KSampler node: ", ks.title || ks.id);
+                    // console.log("found KSampler node: ", ks.title || ks.id);
                     const posIndex = Array.isArray(ks.inputs) ? ks.inputs.findIndex(inp => inp && inp.name === 'positive') : -1;
-                    console.log('posIndex: ', posIndex);
+                    // console.log('posIndex: ', posIndex);
                     if (posIndex < 0) continue;
                     let upstream = [];
                     try {
@@ -181,7 +181,7 @@ class ColorizeGraphNode extends LGraphNode {
                     }
                     for (const m of upstream) {
                         if (!m || m === ks) continue;
-                            console.log('green', green);
+                            // console.log('green', green);
                             if (m.color && m.color.startsWith('#')) {
                                 m.color = green.color;
                             }
@@ -192,10 +192,10 @@ class ColorizeGraphNode extends LGraphNode {
                 }
             }
             else {
-                console.log("Couldn't find green");
+                console.log("Couldn't find the color green (it's not easy being...)");
             }
         } catch (e) {
-            console.warn('[ovum.colorize-graph] Failed to apply KSamplerAdvanced positive-chain coloring', e);
+            console.warn('[ovum.colorize-graph] Failed to apply KSampler positive-chain coloring', e);
         }
 
         // Refresh canvas

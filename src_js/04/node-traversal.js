@@ -371,11 +371,9 @@ export function checkIsSetNode(node, slotIndex = 0) {
  * @returns {boolean|object|LLink|ComfyNode|LGraphNode}
  */
 function checkTypeToType(node, slotIndex = 0, outputNode = null, opts = {}) {
-    if (!node || !outputNode) return false;
+    if (!node) return false;
     const {
         isEndType,                // predicate(t) used for both ends unless originType/targetType provided
-        originType,               // predicate(t) for origin output type
-        targetType,               // predicate(t) for target input type
         maxInputsOfType = null,   // number | null - maximum connected inputs matching countType
         countType = null,         // predicate(t) to count, defaults to isEndType if provided
         requireAnyInputType = null, // predicate(t) that must exist on any input type (or zero allowed)
@@ -383,19 +381,19 @@ function checkTypeToType(node, slotIndex = 0, outputNode = null, opts = {}) {
         returnLinkedInputWhenType = null, // predicate(t) whose connected input link should be returned
     } = opts || {};
 
-    const { link, slotIndex: effSlot, graph } = findLinkBetween(node, slotIndex, outputNode);
-    if (!link) {
-        console.log('checkTypeToType: no link found', node, outputNode);
-        return false;
-    }
+    // const { link, slotIndex: effSlot, graph } = findLinkBetween(node, slotIndex, outputNode);
+    // if (!link) {
+    //     console.log("[checkTypeToType] no link found between ", node, slotIndex, " and", outputNode);
+    //     return false;
+    // }
 
-    const originOutType = outputNode?.outputs?.[link.origin_slot ?? 0]?.type;
-    const targetInType = node?.inputs?.[link.target_slot ?? effSlot]?.type;
-
-    const originPred = originType || isEndType;
-    const targetPred = targetType || isEndType;
-    if (typeof originPred === 'function' && !originPred(originOutType)) return false;
-    if (typeof targetPred === 'function' && !targetPred(targetInType)) return false;
+    // const originOutType = outputNode?.outputs?.[link.origin_slot ?? 0]?.type;
+    // const targetInType = node?.inputs?.[link.target_slot ?? effSlot]?.type;
+    //
+    // const originPred = originType || isEndType;
+    // const targetPred = targetType || isEndType;
+    // if (typeof originPred === 'function' && !originPred(originOutType)) return false;
+    // if (typeof targetPred === 'function' && !targetPred(targetInType)) return false;
 
     const inputsLen = node.inputs?.length ?? 0;
 
@@ -536,13 +534,7 @@ export function checkIsConditioningToConditioning(node, slotIndex = 0, outputNod
  * @returns {boolean|object|LLink|ComfyNode|LGraphNode}
  */
 export function checkIsStringToConditioning(node, slotIndex = 0, outputNode = null) {
-    if (!node || !outputNode) return false;
-    const outputsLen = node.outputs?.length ?? 0;
-    if (outputsLen !== 1) return false;
-    const onlyOutType = node.outputs?.[0]?.type;
-    if (!isConditioningish(onlyOutType)) return false;
-
-    const res = checkTypeToType(node, slotIndex, outputNode, {
+    return checkTypeToType(node, slotIndex, outputNode, {
         isEndType: isConditioningish,
         // exactly one connected STRING-like input allowed
         maxInputsOfType: 1,
@@ -553,10 +545,6 @@ export function checkIsStringToConditioning(node, slotIndex = 0, outputNode = nu
         // and return that connected STRING-like input link
         returnLinkedInputWhenType: isStringish,
     });
-
-    // We only consider it a match if a STRING-like connected input link is returned
-    if (res && res.origin_id != null && res.target_id != null) return res;
-    return false;
 }
 
 /**
@@ -572,6 +560,7 @@ export function checkIsStringToConditioning(node, slotIndex = 0, outputNode = nu
 export function checkIsClipToConditioning(node, slotIndex = 0, outputNode = null) {
     return checkTypeToType(node, slotIndex, outputNode, {
         isEndType: isConditioningish,
+        maxInputsOfType: 1,
         requireAnyInputType: isClipish,
         allowZeroInputsForRequire: true,
         returnLinkedInputWhenType: isStringish,
@@ -586,6 +575,7 @@ export const defaultInputTraversalChecks = [
     checkIsConditioningToConditioning,
     checkIsStringToConditioning,
     checkIsClipToConditioning,
+    checkIsAnytypeToAnytype,
 ];
 
 const NodeTraversal = {
@@ -596,6 +586,7 @@ const NodeTraversal = {
     checkIsConditioningToConditioning,
     checkIsStringToConditioning,
     checkIsClipToConditioning,
+    checkIsAnytypeToAnytype,
     get defaultInputTraversalChecks() { return defaultInputTraversalChecks; }
 };
 export default NodeTraversal;
