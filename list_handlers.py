@@ -27,7 +27,7 @@ class OvumLength:
     def getLength(any, prompt=None, my_unique_id=None):
         effective_list, _is_wrapped, _meta = resolve_effective_list(any, prompt, my_unique_id, input_name='any')
         length = len(effective_list)
-        print(f"getLength: {my_unique_id} length: {length} _is_wrapped: {_is_wrapped} _meta: {_meta}")
+        # print(f"getLength: {my_unique_id} length: {length} _is_wrapped: {_is_wrapped} _meta: {_meta}")
         # Create a shallow copy for list inputs; otherwise pass through the original value
         any_out = list(any[0]) if isinstance(any[0], list) else any[0]
         return {
@@ -98,7 +98,7 @@ class MakeFlatImageList:
                 yield value
 
         for k, v in kwargs.items():
-            logger.info(f"k: {k}, v: {type(v)}")
+            # logger.info(f"k: {k}, v: {type(v)}")
             for leaf in _flatten(v):
                 # Expand batched tensors while preserving 4D shape; wrap 3D tensors to 4D
                 try:
@@ -142,7 +142,7 @@ class MakeFlatImageList:
                     logger.debug(f"MakeFlatImageList: tensor inspection failed for key {k}: {e}")
                     images.append(leaf)
 
-        logger.info(f"returned {len(images)} images")
+        # logger.info(f"returned {len(images)} images")
         return (images, images,)
 
 
@@ -204,7 +204,7 @@ class MakeFlatStringList:
                 yield value
 
         for k, v in kwargs.items():
-            logger.info(f"[{__class__.__name__}] k: {k}, v: {type(v)}")
+            # logger.info(f"[{__class__.__name__}] k: {k}, v: {type(v)}")
             for leaf in _flatten(v):
                 try:
                     if isinstance(leaf, bytes):
@@ -225,7 +225,7 @@ class MakeFlatStringList:
                         # As a last resort, append repr
                         strings.append(repr(leaf))
 
-        logger.info(f"returned {len(strings)} strings")
+        # logger.info(f"returned {len(strings)} strings")
         return (strings, strings,)
 
 
