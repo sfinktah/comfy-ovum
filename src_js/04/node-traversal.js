@@ -73,6 +73,8 @@ export function traverseInputsWhile(graph, startNode, slotIndex = 0, checks = nu
         return traversed;
     }
     const checkFns = Array.isArray(checks) && checks.length ? checks : defaultInputTraversalChecks;
+    const debugLines = [];
+    let lastTrueCheckName = null;
 
     let node = startNode;
     let slot = slotIndex;
@@ -88,6 +90,11 @@ export function traverseInputsWhile(graph, startNode, slotIndex = 0, checks = nu
                 'Cycle detected, stopping traversal',
                 { iter, key, nodeId: node?.id, nodeType: node?.type, slot }
             );
+            try {
+                const prefix = '  '.repeat(traversed.length);
+                const cychead = `${prefix}- ${node?.type ?? '<?>'}#${node?.id ?? '?'} [slot ${slot}]`;
+                debugLines.push(`${cychead} x stop: cycle detected`);
+            } catch {}
             break;
         }
         seen.add(key);
@@ -97,10 +104,15 @@ export function traverseInputsWhile(graph, startNode, slotIndex = 0, checks = nu
             { iter, key, nodeId: node?.id, nodeType: node?.type, slot, outputNodeId: outputNode?.id, outputNodeType: outputNode?.type }
         );
 
+        const prefix = '  '.repeat(traversed.length);
+        let lineHead = `${prefix}- ${node?.type ?? '<?>'}#${node?.id ?? '?'} [slot ${slot}]`;
+
         let anyTruthy = false;
         let explicitNextNode = null;
         let explicitNextSlot = undefined;
 
+        lastTrueCheckName = null;
+        let lastTrueCheckHow = null;
         for (const check of checkFns) {
             if (typeof check !== 'function') {
                 Logger.log(
@@ -133,6 +145,8 @@ export function traverseInputsWhile(graph, startNode, slotIndex = 0, checks = nu
             }
             anyTruthy = true;
             if (res?.origin_id != null && res?.target_id != null) {
+                lastTrueCheckName = checkName;
+                lastTrueCheckHow = 'link';
                 explicitNextNode = GraphHelpers.getNodeById(graph, res.origin_id);
                 explicitNextSlot = res.origin_slot ?? 0;
                 Logger.log(
@@ -153,6 +167,8 @@ export function traverseInputsWhile(graph, startNode, slotIndex = 0, checks = nu
                 );
                 break;
             } else if (Array.isArray(res) && res.length) {
+                lastTrueCheckName = checkName;
+                lastTrueCheckHow = 'array';
                 explicitNextNode = res[0] ?? null;
                 explicitNextSlot = res[1];
                 Logger.log(
@@ -162,6 +178,8 @@ export function traverseInputsWhile(graph, startNode, slotIndex = 0, checks = nu
                 );
                 break;
             } else if (res && typeof res === 'object') {
+                lastTrueCheckName = checkName;
+                lastTrueCheckHow = 'object';
                 explicitNextNode = res;
                 explicitNextSlot = undefined;
                 Logger.log(
@@ -176,6 +194,8 @@ export function traverseInputsWhile(graph, startNode, slotIndex = 0, checks = nu
                     'Check returned true (continue with default link-follow if needed)',
                     { iter, checkName }
                 );
+                lastTrueCheckName = checkName;
+                lastTrueCheckHow = 'true';
                 // noinspection UnnecessaryContinueJS
                 continue;
             }
@@ -187,6 +207,7 @@ export function traverseInputsWhile(graph, startNode, slotIndex = 0, checks = nu
                 'No checks passed, stopping traversal',
                 { nodeId: node?.id, nodeType: node?.type, slot }
             );
+            try { debugLines.push(`${lineHead} x stop: no checks passed`); } catch {}
             break;
         }
 
@@ -208,6 +229,7 @@ export function traverseInputsWhile(graph, startNode, slotIndex = 0, checks = nu
                     'No link on current slot, stopping traversal',
                     { nodeId: node?.id, nodeType: node?.type, slot }
                 );
+                try { debugLines.push(`${lineHead} x stop: no link on slot ${slot}`); } catch {}
                 break;
             }
             Logger.log(
@@ -222,6 +244,7 @@ export function traverseInputsWhile(graph, startNode, slotIndex = 0, checks = nu
                     'Link not found in graph, stopping traversal',
                     { linkId }
                 );
+                try { debugLines.push(`${lineHead} x stop: link ${linkId} not found`); } catch {}
                 break;
             }
             nextNode = GraphHelpers.getNodeById(graph, link.origin_id);
@@ -239,6 +262,11 @@ export function traverseInputsWhile(graph, startNode, slotIndex = 0, checks = nu
             );
         }
 
+        try {
+            const how = explicitNextNode ? `explicit:${lastTrueCheckName ?? '?'}(${lastTrueCheckHow ?? '?'})` : (lastTrueCheckName ? `default-link via ${lastTrueCheckName}` : 'default-link');
+            debugLines.push(`${lineHead} -> ${nextNode?.type ?? '<?>'}#${nextNode?.id ?? '?'} [slot ${nextSlot ?? 0}] by ${how}`);
+        } catch {}
+
         Logger.log(
             { class: 'NodeTraversal', method: 'traverseInputsWhile', severity: 'debug', tag: 'advance' },
             'Advancing to next node',
@@ -248,6 +276,16 @@ export function traverseInputsWhile(graph, startNode, slotIndex = 0, checks = nu
         node = nextNode;
         slot = nextSlot ?? 0;
     }
+
+    try {
+        if (debugLines.length) {
+            Logger.log(
+                { class: 'NodeTraversal', method: 'traverseInputsWhile', severity: 'debug', tag: 'debug_tree' },
+                'Traversal debug tree',
+                { tree: debugLines.join('\n') }
+            );
+        }
+    } catch {}
 
     Logger.log(
         { class: 'NodeTraversal', method: 'traverseInputsWhile', severity: 'debug', tag: 'end' },
@@ -346,7 +384,10 @@ function checkTypeToType(node, slotIndex = 0, outputNode = null, opts = {}) {
     } = opts || {};
 
     const { link, slotIndex: effSlot, graph } = findLinkBetween(node, slotIndex, outputNode);
-    if (!link) return false;
+    if (!link) {
+        console.log('checkTypeToType: no link found', node, outputNode);
+        return false;
+    }
 
     const originOutType = outputNode?.outputs?.[link.origin_slot ?? 0]?.type;
     const targetInType = node?.inputs?.[link.target_slot ?? effSlot]?.type;
@@ -483,6 +524,42 @@ export function checkIsConditioningToConditioning(node, slotIndex = 0, outputNod
 }
 
 /**
+ * Check: String to Conditioning
+ * Similar to checkIsConditioningToConditioning but matches a node with:
+ * - exactly one output and that output type is CONDITIONING-like
+ * - one or more inputs, of which only one is STRING-like
+ * Both the CONDITIONING link (outputNode -> node) and the STRING input must be connected.
+ * Returns the STRING input's LLink when matched; otherwise false.
+ * @param {LGraphNode|ComfyNode} node
+ * @param {number} [slotIndex=0]
+ * @param {LGraphNode|ComfyNode|null} [outputNode=null]
+ * @returns {boolean|object|LLink|ComfyNode|LGraphNode}
+ */
+export function checkIsStringToConditioning(node, slotIndex = 0, outputNode = null) {
+    if (!node || !outputNode) return false;
+    const outputsLen = node.outputs?.length ?? 0;
+    if (outputsLen !== 1) return false;
+    const onlyOutType = node.outputs?.[0]?.type;
+    if (!isConditioningish(onlyOutType)) return false;
+
+    const res = checkTypeToType(node, slotIndex, outputNode, {
+        isEndType: isConditioningish,
+        // exactly one connected STRING-like input allowed
+        maxInputsOfType: 1,
+        countType: isStringish,
+        // require at least one input to exist on the node
+        requireAnyInputType: () => true,
+        allowZeroInputsForRequire: false,
+        // and return that connected STRING-like input link
+        returnLinkedInputWhenType: isStringish,
+    });
+
+    // We only consider it a match if a STRING-like connected input link is returned
+    if (res && res.origin_id != null && res.target_id != null) return res;
+    return false;
+}
+
+/**
  * Check: Clip to Conditioning
  * Similar to checkIsConditioningToConditioning but:
  * - passes if there is at least one input whose type is CLIP or * (or there are no inputs at all)
@@ -507,6 +584,7 @@ export const defaultInputTraversalChecks = [
     checkIsSetNode,
     checkIsStringToString,
     checkIsConditioningToConditioning,
+    checkIsStringToConditioning,
     checkIsClipToConditioning,
 ];
 
@@ -516,7 +594,10 @@ const NodeTraversal = {
     checkIsGetNode,
     checkIsStringToString,
     checkIsConditioningToConditioning,
+    checkIsStringToConditioning,
     checkIsClipToConditioning,
     get defaultInputTraversalChecks() { return defaultInputTraversalChecks; }
 };
 export default NodeTraversal;
+
+window.NodeTraversal = NodeTraversal;

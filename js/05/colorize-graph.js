@@ -154,9 +154,11 @@ class ColorizeGraphNode extends LGraphNode {
             const green = (globalThis?.LGraphCanvas?.node_colors?.green) || (app?.canvas?.constructor?.node_colors?.green);
             if (green?.color && green?.bgcolor) {
                 for (const ks of graph._nodes) {
-                    if (!ks || ks === this) continue;
-                    if (ks.comfyClass !== 'KSamplerAdvanced') continue;
-                    console.log("found KSamplerAdvanced: ", ks.title || ks.id, "");
+                    if (!ks || ks === this || !ks.comfyClass) continue;
+                    if (!ks.comfyClass?.includes('KSampler')) {
+                        continue;
+                    }
+                    console.log("found KSampler node: ", ks.title || ks.id);
                     const posIndex = Array.isArray(ks.inputs) ? ks.inputs.findIndex(inp => inp && inp.name === 'positive') : -1;
                     console.log('posIndex: ', posIndex);
                     if (posIndex < 0) continue;
