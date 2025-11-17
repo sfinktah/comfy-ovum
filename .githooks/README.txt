@@ -8,7 +8,7 @@ This repository includes a post-commit hook that automatically increments the pa
 
 How it works
 - The hook runs three per-project scripts:
-  - custom_nodes/ovum/tools/auto_bump_version_ovum.py
+  - custom_nodes/ovum/tools/auto_bump_version.py
   - custom_nodes/ovum/tools/auto_bump_version_spotlight.py
   - custom_nodes/ovum/tools/auto_bump_version_cudnn_wrapper.py
 - Each script prints which file changed (if any). The hook stages those files and then runs: git commit --amend --no-edit

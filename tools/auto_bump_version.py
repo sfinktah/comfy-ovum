@@ -2,7 +2,9 @@ import re
 from pathlib import Path
 
 # Single target: ovum
-PROJECT_FILE = Path("pyproject.toml")
+# Resolve relative to this script's directory to be robust when run from git hooks
+SCRIPT_DIR = Path(__file__).resolve().parent
+PROJECT_FILE = (SCRIPT_DIR.parent / "pyproject.toml").resolve()
 
 VERSION_RE = re.compile(r'^(version\s*=\s*[\"\'])(\d+)\.(\d+)\.(\d+)([\"\'])\s*$', re.IGNORECASE)
 

@@ -9,13 +9,14 @@ if "%GIT_BUMPING%"=="1" (
 
 setlocal ENABLEDELAYEDEXPANSION
 
-REM Determine repository root
-for /f "tokens=*" %%i in ('git rev-parse --show-toplevel') do set REPO_ROOT=%%i
+REM Resolve ovum root (folder containing this .githooks directory)
+set "SCRIPT_DIR=%~dp0"
+for %%# in ("%SCRIPT_DIR%..") do set "OVUM_ROOT=%%~f#"
 
 REM List of per-project bump scripts (run individually)
-set S1=%REPO_ROOT%\tools\auto_bump_version.py
-set S2=%REPO_ROOT%\tools\auto_bump_version_spotlight.py
-set S3=%REPO_ROOT%\tools\auto_bump_version_cudnn_wrapper.py
+set S1=%OVUM_ROOT%\tools\auto_bump_version.py
+set S2=%OVUM_ROOT%\tools\auto_bump_version_spotlight.py
+set S3=%OVUM_ROOT%\tools\auto_bump_version_cudnn_wrapper.py
 
 set CHANGED=
 
