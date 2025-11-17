@@ -84,7 +84,7 @@ def _oget(obj, key, default=None, call=False):
     return r
 
 def _dotted(key):
-    """Convert _dotted heirachical notation into list of keys
+    r"""Convert _dotted heirachical notation into list of keys
 
     Backslash may be used to prevent dots from being interpreted as separators
 
