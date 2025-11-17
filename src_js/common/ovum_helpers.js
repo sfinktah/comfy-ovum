@@ -1,5 +1,5 @@
 // Port of Python _inspect_upstream to JavaScript (ESM)
-// See: custom_nodes/ovum/ovum_helpers.py
+// See: ovum_helpers.py
 // This utility inspects the workflow _prompt to discover metadata about the upstream
 // connection for a given node input.
 /**
