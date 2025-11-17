@@ -1,0 +1,12 @@
+/* Tailwind CSS entry for ovum */
+/* Scans JS and HTML files for class names (configured in package.json: tailwind.content) */
+@plugin "daisyui";
+
+/* Scope all generated Tailwind/DaisyUI styles to .ovum and descendants */
+:where(.ovum) { @import "tailwindcss"; }
+
+/* Project-specific CSS (you can import scoped styles here) */
+@import "./spotlight.css";
+@import "./daisyui-primevue.css";
+@import 'tippy.js/dist/tippy.css';
+/* @import 'tippy.js/themes/light-border.css'; */
